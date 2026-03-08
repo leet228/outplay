@@ -12,19 +12,11 @@
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
 }
 
-/* Header — fixed под Telegram-шапкой */
-.lb-fixed-header {
-  position: fixed;
-  top: var(--safe-top, 0px);
-  left: 0;
-  right: 0;
-  height: 52px;
+/* Header */
+.lb-header {
+  width: 100%;
   display: flex;
-  align-items: center;
   justify-content: center;
-  background: var(--bg);
-  z-index: 50;
-  border-bottom: 1px solid var(--border);
 }
 
 .lb-title {
