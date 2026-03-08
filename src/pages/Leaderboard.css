@@ -12,11 +12,19 @@
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
 }
 
-/* Header */
-.lb-header {
-  width: 100%;
+/* Header — fixed под Telegram-шапкой */
+.lb-fixed-header {
+  position: fixed;
+  top: var(--safe-top, 0px);
+  left: 0;
+  right: 0;
+  height: 52px;
   display: flex;
+  align-items: center;
   justify-content: center;
+  background: var(--bg);
+  z-index: 50;
+  border-bottom: 1px solid var(--border);
 }
 
 .lb-title {
@@ -24,6 +32,7 @@
   font-weight: 800;
   margin: 0;
   text-align: center;
+  color: var(--text);
 }
 
 /* === Podium === */
