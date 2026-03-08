@@ -1,0 +1,62 @@
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 420px;
+
+  /* Высота: padding сверху + квадрат 44px + padding снизу + home indicator */
+  height: calc(8px + 44px + 8px + var(--safe-bottom));
+  padding-top: 8px;
+  padding-bottom: calc(8px + var(--safe-bottom));
+
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  z-index: 100;
+
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(15, 15, 15, 0.88);
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s;
+}
+
+.nav-item:active {
+  transform: scale(0.85);
+}
+
+.nav-item:focus,
+.nav-item:focus-visible,
+.nav-item:focus-within {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Квадрат одинакового размера для всех иконок */
+.nav-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-icon-box.active {
+  background: var(--accent-dim);
+}

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm install react-router-dom @supabase/supabase-js zustand)",
+      "Bash(npm run build)"
+    ]
+  }
+}

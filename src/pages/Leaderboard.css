@@ -1,0 +1,266 @@
+.leaderboard {
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px 16px;
+  gap: 16px;
+}
+
+.leaderboard.page {
+  padding-top: calc(var(--safe-top) + 300px);
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
+}
+
+/* Header */
+.lb-header {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.lb-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0;
+  text-align: center;
+}
+
+/* === Podium === */
+.lb-podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 0 4px;
+}
+
+.lb-podium-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px 10px 12px;
+  flex: 1;
+  min-width: 0;
+  transition: transform 0.1s;
+}
+
+/* 1st place card taller */
+.lb-podium-card--1 {
+  padding-top: 18px;
+  padding-bottom: 16px;
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 18px 2px rgba(245, 158, 11, 0.12);
+}
+
+.lb-podium-card--2 {
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.lb-podium-card--3 {
+  border-color: rgba(205, 124, 79, 0.3);
+}
+
+.lb-podium-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+}
+
+.lb-podium-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  background: linear-gradient(135deg, #1e40af, var(--accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.lb-podium-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.lb-podium-pnl {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.lb-podium-wr {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* === Full list === */
+.lb-list {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.lb-row:last-child {
+  border-bottom: none;
+}
+
+.lb-row--mine {
+  background: var(--accent-dim);
+}
+
+.lb-rank-wrap {
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lb-rank-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.lb-rank-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.lb-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1e40af, var(--accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.lb-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lb-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-username {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.lb-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.lb-pnl {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.lb-wr {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.positive {
+  color: #22c55e;
+}
+
+.negative {
+  color: #ef4444;
+}
+
+/* === My position footer === */
+.lb-my-position {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.lb-my-position-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 8px;
+}
+
+.lb-my-position-divider::before,
+.lb-my-position-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.lb-my-position-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  white-space: nowrap;
+}
+
+.lb-row--my-card {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  opacity: 0.9;
+}
+
+.lb-rank-approx {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent);
+}

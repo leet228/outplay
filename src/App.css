@@ -1,0 +1,125 @@
+/* === Global CSS Variables === */
+:root {
+  --bg: #0f0f0f;
+  --text: #ffffff;
+  --text-muted: #888888;
+  --accent: #3B82F6;
+  --accent-hover: #2563EB;
+  --accent-dim: #3B82F618;
+  --surface: #1c1c1e;
+  --surface2: #242426;
+  --border: #2c2c2e;
+  --nav-height: 60px; /* 8px top padding + 44px icon box + 8px bottom padding */
+
+  /* Safe areas для iPhone notch + home indicator.
+     Fallback 0px — на Android и в Chrome DevTools работает без отступов.
+     На реальном iPhone Safari/Telegram подставит реальное значение (~47-59px сверху, ~34px снизу) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* === Reset === */
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  /* Растягиваем на весь экран включая зоны notch */
+  height: 100%;
+}
+
+/* === Root — на всю ширину на мобиле === */
+#root {
+  width: 100%;
+  min-height: 100svh;
+  background: var(--bg);
+  position: relative;
+}
+
+/* На десктопе — центрируем и добавляем рамку */
+@media (min-width: 520px) {
+  body {
+    background: #050505;
+    display: flex;
+    justify-content: center;
+  }
+  #root {
+    max-width: 420px;
+    min-height: 100svh;
+    box-shadow: 0 0 0 1px var(--border), 0 20px 60px rgba(0,0,0,0.6);
+  }
+}
+
+button {
+  font-family: inherit;
+  -webkit-appearance: none;
+}
+
+/* === Shared page wrapper ===
+   Отступ сверху — для челки/Dynamic Island
+   Отступ снизу — для нижней навигации + home indicator
+*/
+.page {
+  padding-top: var(--safe-top);
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 12px);
+  min-height: 100svh;
+}
+
+/* === Shared buttons === */
+.btn-primary {
+  width: 100%;
+  padding: 15px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.15s;
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+  background: var(--accent-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  width: 100%;
+  padding: 14px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.btn-secondary:active {
+  transform: scale(0.97);
+}
