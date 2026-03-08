@@ -7,7 +7,7 @@
 }
 
 .profile.page {
-  padding-top: calc(var(--safe-top) + 96px);
+  padding-top: calc(var(--safe-top) + 120px) !important;
 }
 
 .profile-header {

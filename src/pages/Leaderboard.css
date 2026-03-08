@@ -6,7 +6,7 @@
 }
 
 .leaderboard.page {
-  padding-top: calc(var(--safe-top) + 96px);
+  padding-top: calc(var(--safe-top) + 120px) !important;
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
 }
 
