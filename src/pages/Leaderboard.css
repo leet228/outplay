@@ -1,12 +1,14 @@
 .leaderboard {
   display: flex;
   flex-direction: column;
-  padding: 0 16px 16px;
+  padding-right: 16px;
+  padding-left: 16px;
+  padding-bottom: 16px;
   gap: 16px;
 }
 
 .leaderboard.page {
-  padding-top: calc(var(--safe-top) + 120px) !important;
+  padding-top: calc(var(--safe-top) + 120px);
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
 }
 
