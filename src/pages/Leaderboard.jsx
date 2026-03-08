@@ -89,8 +89,8 @@ export default function Leaderboard() {
 
   return (
     <div className="leaderboard page" style={{ paddingTop: '180px' }}>
-      <div className="lb-header">
-        <h2 className="lb-title">TEST 123</h2>
+      <div className="lb-header" style={{ background: 'red', minHeight: '60px', alignItems: 'center', display: 'flex', justifyContent: 'center' }}>
+        <h2 className="lb-title" style={{ color: 'yellow', fontSize: '30px', margin: 0 }}>TEST 123</h2>
       </div>
 
       {/* Top 3 podium */}
