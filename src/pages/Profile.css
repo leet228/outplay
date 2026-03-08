@@ -7,7 +7,7 @@
 }
 
 .profile.page {
-  padding-top: calc(var(--safe-top) + 100px);
+  padding-top: calc(var(--safe-top) + 24px);
 }
 
 .profile-header {
@@ -28,7 +28,7 @@
 .settings-btn {
   position: absolute;
   right: 0;
-  top: 0;
+  top: 52px;
   width: 36px;
   height: 36px;
   border-radius: 10px;
@@ -269,6 +269,7 @@
   font-size: 38px;
   font-weight: 700;
   color: #fff;
+  object-fit: cover;
 }
 
 .profile-name-block {

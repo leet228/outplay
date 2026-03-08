@@ -21,6 +21,7 @@ const H = 130
 export default function Profile() {
   const { user, balance, currency, setCurrency, lang, setLang, setDepositOpen } = useGameStore()
   const t = translations[lang]
+  const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
   const [tooltip, setTooltip] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
@@ -78,7 +79,10 @@ export default function Profile() {
       <div className="profile-header">
         <div className="profile-avatar-row">
           <div className="profile-avatar-wrap">
-            <div className="profile-avatar">{user?.first_name?.[0] ?? '?'}</div>
+            {photoUrl
+              ? <img className="profile-avatar" src={photoUrl} alt="" />
+              : <div className="profile-avatar">{user?.first_name?.[0] ?? '?'}</div>
+            }
           </div>
           <button className="settings-btn" onClick={openSettings} aria-label="Настройки">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

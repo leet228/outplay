@@ -5,6 +5,8 @@ export function initTelegram() {
   if (!tg) return null
   tg.ready()
   tg.expand()
+  tg.requestFullscreen?.()
+  tg.disableVerticalSwipes?.()
   return tg
 }
 
