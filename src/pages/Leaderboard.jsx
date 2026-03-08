@@ -83,6 +83,7 @@ function ListRankBadge({ rank }) {
 export default function Leaderboard() {
   const { user, currency, lang } = useGameStore()
   const t = translations[lang]
+  const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
 
   const sorted = [...mockLeaders].sort((a, b) => b.pnl - a.pnl)
   const userInTop = sorted.some(p => p.id === user?.id)
@@ -165,7 +166,10 @@ export default function Leaderboard() {
             <div className="lb-rank-wrap">
               <span className="lb-rank-num lb-rank-approx">{approxRank(mockUserRank)}</span>
             </div>
-            <div className="lb-avatar">{user.first_name?.[0] ?? '?'}</div>
+            {photoUrl
+              ? <img className="lb-avatar" src={photoUrl} alt="" style={{ objectFit: 'cover' }} />
+              : <div className="lb-avatar">{user.first_name?.[0] ?? '?'}</div>
+            }
             <div className="lb-info">
               <span className="lb-name">{user.first_name ?? '—'}</span>
               {user.username && <span className="lb-username">@{user.username}</span>}
