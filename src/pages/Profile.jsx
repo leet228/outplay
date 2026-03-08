@@ -75,7 +75,7 @@ export default function Profile() {
   }
 
   return (
-    <div className="profile page" onClick={() => setTooltip(null)}>
+    <div className="profile page" style={{ paddingTop: 'calc(var(--safe-top, 0px) + 120px)' }} onClick={() => setTooltip(null)}>
       <div className="profile-header">
         <div className="profile-avatar-row">
           <div className="profile-avatar-wrap">
