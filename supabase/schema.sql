@@ -9,6 +9,7 @@ CREATE TABLE users (
   telegram_id BIGINT UNIQUE NOT NULL,
   username    TEXT,
   first_name  TEXT NOT NULL,
+  avatar_url  TEXT,
   balance     INTEGER NOT NULL DEFAULT 0,
   wins        INTEGER NOT NULL DEFAULT 0,
   losses      INTEGER NOT NULL DEFAULT 0,
@@ -101,6 +102,11 @@ BEGIN
   WHERE id = duel_id;
 END;
 $$;
+
+-- =============================================
+-- MIGRATION: добавить avatar_url если таблица уже существует
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+-- =============================================
 
 -- Row Level Security (базовая)
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;

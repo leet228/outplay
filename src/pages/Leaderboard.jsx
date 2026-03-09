@@ -106,8 +106,10 @@ export default function Leaderboard() {
               <div className="lb-podium-icon">
                 <PodiumRankIcon rank={i + 1} />
               </div>
-              <div className="lb-podium-avatar" style={{ borderColor: RANK_COLORS[i] }}>
-                {p.first_name[0]}
+              <div className="lb-podium-avatar" style={{ borderColor: RANK_COLORS[i], padding: 0, overflow: 'hidden' }}>
+                {p.avatar_url
+                  ? <img src={p.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                  : p.first_name[0]}
               </div>
               <span className="lb-podium-name">{p.first_name}</span>
               <span className={`lb-podium-pnl ${isPos ? 'positive' : 'negative'}`}>
@@ -132,7 +134,11 @@ export default function Leaderboard() {
               <div className="lb-rank-wrap">
                 <ListRankBadge rank={i + 1} />
               </div>
-              <div className="lb-avatar">{p.first_name[0]}</div>
+              <div className="lb-avatar" style={{ padding: 0, overflow: 'hidden' }}>
+                {p.avatar_url
+                  ? <img src={p.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                  : p.first_name[0]}
+              </div>
               <div className="lb-info">
                 <span className="lb-name">{p.first_name}</span>
                 {p.username && <span className="lb-username">@{p.username}</span>}

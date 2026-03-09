@@ -13,14 +13,29 @@ export async function getOrCreateUser(telegramUser) {
     .eq('telegram_id', telegramUser.id)
     .single()
 
-  if (existing) return existing
+  if (existing) {
+    // Синхронизируем профиль — имя/username/аватар могли смениться
+    const { data: updated } = await supabase
+      .from('users')
+      .update({
+        first_name: telegramUser.first_name,
+        username: telegramUser.username ?? null,
+        avatar_url: telegramUser.photo_url ?? null,
+      })
+      .eq('telegram_id', telegramUser.id)
+      .select()
+      .single()
+    return updated
+  }
 
+  // Новый пользователь
   const { data: newUser } = await supabase
     .from('users')
     .insert({
       telegram_id: telegramUser.id,
       username: telegramUser.username ?? null,
       first_name: telegramUser.first_name,
+      avatar_url: telegramUser.photo_url ?? null,
       balance: 0,
     })
     .select()
@@ -50,7 +65,7 @@ export async function updateBalance(userId, delta) {
 export async function getLeaderboard(limit = 50) {
   const { data } = await supabase
     .from('users')
-    .select('id, first_name, username, balance, wins, losses')
+    .select('id, first_name, username, avatar_url, balance, wins, losses')
     .order('balance', { ascending: false })
     .limit(limit)
   return data ?? []
