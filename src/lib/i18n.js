@@ -113,7 +113,7 @@ export const translations = {
 
     // Referral
     refTitle: 'Реферальная программа',
-    refSubtitle: 'Приглашай друзей и получай 2% с каждой их победы — навсегда',
+    refSubtitle: 'Приглашай друзей и получай 2% с их побед',
     refLink: 'Твоя ссылка',
     refShare: 'Поделиться',
     refCopied: 'Скопировано!',
