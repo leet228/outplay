@@ -8,7 +8,7 @@
 }
 
 .leaderboard.page {
-  padding-top: calc(var(--safe-top) + 120px);
+  padding-top: calc(var(--safe-top) + 56px);
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
 }
 
