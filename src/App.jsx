@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { initTelegram, getTelegramUser } from './lib/telegram'
 import { getOrCreateUser } from './lib/supabase'
 import useGameStore from './store/useGameStore'
+import './App.css'
 import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
 import SplashScreen from './components/SplashScreen'
@@ -15,7 +16,6 @@ import Leaderboard from './pages/Leaderboard'
 import Guilds from './pages/Guilds'
 import Shop from './pages/Shop'
 import Profile from './pages/Profile'
-import './App.css'
 
 // Disable browser scroll restoration globally — SPA handles it manually
 if ('scrollRestoration' in history) {
