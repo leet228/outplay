@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
 import { getOrCreateUser } from './lib/supabase'
@@ -24,10 +24,17 @@ if ('scrollRestoration' in history) {
 
 function ScrollToTop() {
   const { pathname } = useLocation()
-  useLayoutEffect(() => {
+  useEffect(() => {
     window.scrollTo(0, 0)
     document.documentElement.scrollTop = 0
     document.body.scrollTop = 0
+    // Belt-and-suspenders: also reset after browser's async scroll restoration
+    const t = setTimeout(() => {
+      window.scrollTo(0, 0)
+      document.documentElement.scrollTop = 0
+      document.body.scrollTop = 0
+    }, 0)
+    return () => clearTimeout(t)
   }, [pathname])
   return null
 }

@@ -110,6 +110,23 @@ export const translations = {
     proFeat5: 'Уникальные скины и аватары',
     proSubscribe: 'Подключить PRO',
     proTapToSubscribe: 'Нажмите для оформления',
+
+    // Referral
+    refTitle: 'Реферальная программа',
+    refSubtitle: 'Приглашай друзей и получай 2% с каждой их победы — навсегда',
+    refLink: 'Твоя ссылка',
+    refShare: 'Поделиться',
+    refCopied: 'Скопировано!',
+    refShareText: 'Играй в Outplay и зарабатывай на знаниях! 🎯',
+    refEarnings: 'Доход с рефералов',
+    refDay: 'День',
+    refWeek: 'Неделя',
+    refMonth: 'Месяц',
+    refAll: 'Всё время',
+    refCount: 'Рефералы',
+    refEarned: 'заработано',
+    refShowMore: 'Показать ещё',
+    refEmpty: 'Пока нет рефералов',
   },
   en: {
     // Home
@@ -222,5 +239,22 @@ export const translations = {
     proFeat5: 'Unique skins and avatars',
     proSubscribe: 'Get PRO',
     proTapToSubscribe: 'Tap to subscribe',
+
+    // Referral
+    refTitle: 'Referral Program',
+    refSubtitle: 'Invite friends and earn 2% from every win — forever',
+    refLink: 'Your link',
+    refShare: 'Share',
+    refCopied: 'Copied!',
+    refShareText: 'Play Outplay and earn with your knowledge! 🎯',
+    refEarnings: 'Referral Earnings',
+    refDay: 'Day',
+    refWeek: 'Week',
+    refMonth: 'Month',
+    refAll: 'All time',
+    refCount: 'Referrals',
+    refEarned: 'earned',
+    refShowMore: 'Show more',
+    refEmpty: 'No referrals yet',
   },
 }

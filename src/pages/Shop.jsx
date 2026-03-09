@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
@@ -326,7 +326,7 @@ function ReferralSection({ t, currency, user }) {
               <button
                 className="ref-show-more"
                 tabIndex={-1}
-                onMouseDown={(e) => e.preventDefault()}
+                onPointerDown={(e) => e.preventDefault()}
                 onClick={() => { haptic('light'); setVisible(v => v + REFERRAL_PAGE_SIZE) }}
               >
                 {t.refShowMore}
@@ -348,12 +348,18 @@ export default function Shop() {
   const [sheetPlan, setSheetPlan] = useState(null)
   const trackRef = useRef(null)
 
-  // useLayoutEffect — runs synchronously BEFORE browser paint,
-  // overrides browser scroll restoration which happens after render
-  useLayoutEffect(() => {
+  useEffect(() => {
+    // Immediate reset — fires right after paint
     window.scrollTo(0, 0)
     document.documentElement.scrollTop = 0
     document.body.scrollTop = 0
+    // Deferred reset — fires after browser's async scroll restoration (if any)
+    const t = setTimeout(() => {
+      window.scrollTo(0, 0)
+      document.documentElement.scrollTop = 0
+      document.body.scrollTop = 0
+    }, 0)
+    return () => clearTimeout(t)
   }, [])
 
   useEffect(() => {
