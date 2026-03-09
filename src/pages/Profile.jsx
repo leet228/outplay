@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
@@ -40,6 +40,22 @@ export default function Profile() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
   const [rank, setRank] = useState(null)
+  const [withdrawError, setWithdrawError] = useState(false)
+  const withdrawTimer = useRef(null)
+
+  const MIN_WITHDRAW = 2000
+  const canWithdraw = balance >= MIN_WITHDRAW
+
+  function handleWithdraw() {
+    haptic('light')
+    if (!canWithdraw) {
+      clearTimeout(withdrawTimer.current)
+      setWithdrawError(true)
+      withdrawTimer.current = setTimeout(() => setWithdrawError(false), 2000)
+      return
+    }
+    // TODO: withdrawal flow
+  }
 
   useEffect(() => {
     if (balance != null) {
@@ -135,9 +151,15 @@ export default function Profile() {
           <button className="balance-btn deposit" onClick={() => { haptic('light'); setDepositOpen(true) }}>
             {t.deposit}
           </button>
-          <button className="balance-btn withdraw" disabled onClick={() => haptic('light')}>
+          <button
+            className={`balance-btn withdraw ${!canWithdraw ? 'withdraw--locked' : ''}`}
+            onClick={handleWithdraw}
+          >
             {t.withdraw}
           </button>
+        </div>
+        <div className={`withdraw-error ${withdrawError ? 'visible' : ''}`}>
+          {t.withdrawMin.replace('{sym}', currency.symbol)}
         </div>
       </div>
 

@@ -1,40 +1,374 @@
 .shop {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  padding: calc(var(--safe-top, 0px) + 48px) 16px 16px;
+  gap: 24px;
 }
 
-.shop-coming {
+/* ── PRO Header ── */
+.pro-header {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 32px 24px;
-  text-align: center;
+  gap: 8px;
+  padding-top: 8px;
 }
 
-.shop-coming-icon {
-  width: 80px;
-  height: 80px;
+.pro-crown-wrap {
+  width: 72px;
+  height: 72px;
   border-radius: 24px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: linear-gradient(145deg, #78350f, #d97706);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  box-shadow: 0 4px 24px #f59e0b50;
+  margin-bottom: 4px;
 }
 
-.shop-coming-title {
-  font-size: 22px;
-  font-weight: 800;
+.pro-crown-emoji {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.pro-title {
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
   color: var(--text);
   margin: 0;
 }
 
-.shop-coming-sub {
+.pro-title-accent {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 8px #f59e0b80);
+}
+
+.pro-subtitle {
   font-size: 14px;
   color: var(--text-muted);
   margin: 0;
-  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* ── Plans Carousel ── */
+.pro-carousel-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pro-track {
+  display: flex;
+  gap: 12px;
+  overflow-x: scroll;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding: 8px 12% 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pro-track::-webkit-scrollbar { display: none; }
+
+.pro-card {
+  min-width: 72%;
+  scroll-snap-align: center;
+  border-radius: 24px;
+  padding: 22px 20px 20px;
+  position: relative;
+  overflow: hidden;
+  border: 1.5px solid var(--plan-border, transparent);
+  cursor: pointer;
+  transition: transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease;
+  transform: scale(0.93);
+  opacity: 0.6;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.pro-card--active {
+  transform: scale(1);
+  opacity: 1;
+  box-shadow: 0 8px 36px var(--plan-glow, #6366f1)44;
+}
+
+.pro-card-orb {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.pro-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+}
+
+.pro-card-period {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 8px;
+}
+
+.pro-card-price {
+  font-size: 38px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -1px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.pro-card-per {
+  font-size: 13px;
+  color: rgba(255,255,255,0.55);
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.pro-card-savings {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.15);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 14px;
+}
+
+.pro-card-tap-hint {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  font-weight: 500;
+}
+
+/* Dots */
+.pro-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+}
+
+.pro-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: width 0.3s ease, background 0.3s ease;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Plan Sheet ── */
+.plan-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--surface);
+  border-radius: 28px 28px 0 0;
+  border-top: 1px solid var(--border);
+  z-index: 200;
+  transform: translateY(100%);
+  transition: transform 0.38s cubic-bezier(0.32, 0.72, 0, 1);
+  padding: 0 20px;
+  padding-bottom: calc(var(--safe-bottom, 0px) + var(--nav-height, 64px) + 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-height: 90svh;
+}
+
+.plan-sheet.open {
+  transform: translateY(0);
+}
+
+/* Plan sheet header */
+.plan-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.plan-sheet-crown {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  flex-shrink: 0;
+}
+
+.plan-sheet-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.plan-sheet-pro {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.plan-sheet-period {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.plan-sheet-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+
+/* Price block */
+.plan-sheet-price-block {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff06;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.plan-sheet-price-orb {
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, var(--plan-glow, #6366f1)30 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.plan-sheet-price {
+  font-size: 44px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -1.5px;
+  line-height: 1;
+}
+
+.plan-sheet-per {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.plan-sheet-savings {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #22c55e;
+  background: #22c55e18;
+  padding: 4px 12px;
+  border-radius: 10px;
+}
+
+/* Features in sheet */
+.plan-sheet-features {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.plan-sheet-features .sheet-label {
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  display: block;
+}
+
+.plan-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-feature-row:last-child {
+  border-bottom: none;
+}
+
+.plan-feature-check {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.plan-feature-emoji {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.plan-feature-text {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* Subscribe button */
+.plan-subscribe-btn {
+  width: 100%;
+  padding: 17px;
+  color: #fff;
+  border: none;
+  border-radius: 18px;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+  letter-spacing: -0.2px;
+  transition: transform 0.1s, opacity 0.15s;
+  box-shadow: 0 4px 28px var(--plan-glow, #6366f1)44;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.plan-subscribe-btn:active {
+  transform: scale(0.97);
+  opacity: 0.9;
 }

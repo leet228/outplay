@@ -507,6 +507,7 @@
 .sheet-overlay.visible {
   background: rgba(0, 0, 0, 0.65);
   pointer-events: all;
+  touch-action: none;
 }
 
 .game-sheet {
@@ -525,6 +526,8 @@
   padding: 0 20px;
   padding-bottom: calc(var(--safe-bottom, 0px) + var(--nav-height, 64px) + 24px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   max-height: 92svh;
 }
 
@@ -684,6 +687,8 @@
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .sheet-stake.active {
@@ -696,6 +701,18 @@
 .sheet-stake.locked {
   opacity: 0.28;
   cursor: not-allowed;
+}
+
+.sheet-stake:focus,
+.sheet-stake:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.sheet-stake.active:focus,
+.sheet-stake.active:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent)33;
 }
 
 .sheet-stake:active:not(.locked) {
@@ -738,6 +755,8 @@
   letter-spacing: -0.2px;
   transition: transform 0.1s, opacity 0.15s;
   box-shadow: 0 4px 28px #3B82F640;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .sheet-play-btn:active:not(:disabled) {

@@ -47,6 +47,7 @@ export const translations = {
     balance: 'Баланс',
     deposit: 'Пополнить',
     withdraw: 'Вывод',
+    withdrawMin: 'Вывод доступен от 2 000 {sym}',
     games: 'Игр',
     allTime: 'за всё время',
 
@@ -86,11 +87,29 @@ export const translations = {
     depositCryptoTitle: 'Выбери монету',
     depositCryptoSoon: 'Скоро',
 
-    // Guilds & Shop
+    // Guilds
     guilds: 'Гильдии',
     guildsSoon: 'Объединяйся с другими игроками\nи побеждай вместе — скоро',
+
+    // Shop / PRO
     shop: 'Магазин',
     shopSoon: 'Бусты, скины и подписка PRO —\nскоро здесь',
+    proSubtitle: 'Играй умнее. Зарабатывай больше.',
+    pro1Month: '1 месяц',
+    pro6Month: '6 месяцев',
+    pro12Month: '12 месяцев',
+    proPerMonth: '/ мес',
+    proPopular: '🔥 Популярный',
+    proBest: '👑 Выгоднее всего',
+    proSave: 'Экономия',
+    proWhatsIncluded: 'Что входит в PRO',
+    proFeat1: 'Детальная статистика и аналитика игр',
+    proFeat2: 'Приоритетный поиск соперника',
+    proFeat3: 'Эксклюзивный значок PRO в профиле',
+    proFeat4: '+5% к выигрышу в каждом матче',
+    proFeat5: 'Уникальные скины и аватары',
+    proSubscribe: 'Подключить PRO',
+    proTapToSubscribe: 'Нажмите для оформления',
   },
   en: {
     // Home
@@ -140,6 +159,7 @@ export const translations = {
     balance: 'Balance',
     deposit: 'Deposit',
     withdraw: 'Withdraw',
+    withdrawMin: 'Withdrawal available from {sym}2 000',
     games: 'Games',
     allTime: 'all time',
 
@@ -179,10 +199,28 @@ export const translations = {
     depositCryptoTitle: 'Choose coin',
     depositCryptoSoon: 'Coming soon',
 
-    // Guilds & Shop
+    // Guilds
     guilds: 'Guilds',
     guildsSoon: 'Team up with other players\nand win together — coming soon',
+
+    // Shop / PRO
     shop: 'Shop',
     shopSoon: 'Boosts, skins and PRO subscription —\ncoming soon',
+    proSubtitle: 'Play smarter. Earn more.',
+    pro1Month: '1 month',
+    pro6Month: '6 months',
+    pro12Month: '12 months',
+    proPerMonth: '/ mo',
+    proPopular: '🔥 Popular',
+    proBest: '👑 Best value',
+    proSave: 'Save',
+    proWhatsIncluded: "What's included in PRO",
+    proFeat1: 'Detailed stats and game analytics',
+    proFeat2: 'Priority matchmaking',
+    proFeat3: 'Exclusive PRO badge on your profile',
+    proFeat4: '+5% bonus on every match win',
+    proFeat5: 'Unique skins and avatars',
+    proSubscribe: 'Get PRO',
+    proTapToSubscribe: 'Tap to subscribe',
   },
 }

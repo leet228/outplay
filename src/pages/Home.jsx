@@ -195,6 +195,16 @@ function GameSheet({ game, t, balance, currency, onClose }) {
     setError(false)
   }, [game?.id])
 
+  // Lock body scroll when sheet is open
+  useEffect(() => {
+    if (game) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [game])
+
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return

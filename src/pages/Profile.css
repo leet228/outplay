@@ -373,8 +373,31 @@
   background: var(--surface2);
   color: var(--text-muted);
   border: 1px solid var(--border);
-  cursor: not-allowed;
-  opacity: 0.5;
+  cursor: pointer;
+}
+
+.balance-btn.withdraw--locked {
+  opacity: 0.45;
+  cursor: pointer;
+}
+
+.withdraw-error {
+  width: 100%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ef4444;
+  margin-top: -8px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+  min-height: 18px;
+}
+
+.withdraw-error.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /* === Stats grid === */
