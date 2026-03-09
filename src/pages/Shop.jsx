@@ -52,18 +52,18 @@ const PRO_FEATURES = [
 const REFERRAL_PAGE_SIZE = 10
 
 const mockReferrals = [
-  { id: 1,  first_name: 'Александр', username: 'alex_trade',  pnl: 4850, earned: 485 },
-  { id: 2,  first_name: 'Мария',     username: 'masha_win',   pnl: 2130, earned: 213 },
-  { id: 3,  first_name: 'Дмитрий',   username: 'dmitry_x',    pnl: 1740, earned: 174 },
-  { id: 4,  first_name: 'Кирилл',    username: 'kirill_up',   pnl: 1220, earned: 122 },
-  { id: 5,  first_name: 'Анна',      username: 'anna_pro',    pnl: 980,  earned: 98  },
-  { id: 6,  first_name: 'Сергей',    username: 'serg_bet',    pnl: 760,  earned: 76  },
-  { id: 7,  first_name: 'Оля',       username: 'olya_q',      pnl: 530,  earned: 53  },
-  { id: 8,  first_name: 'Максим',    username: 'max_mm',      pnl: 390,  earned: 39  },
-  { id: 9,  first_name: 'Лера',      username: 'lera_win',    pnl: 210,  earned: 21  },
-  { id: 10, first_name: 'Паша',      username: 'pasha_ok',    pnl: 95,   earned: 9   },
-  { id: 11, first_name: 'Игорь',     username: 'igor_game',   pnl: 450,  earned: 45  },
-  { id: 12, first_name: 'Татьяна',   username: 'tanya_t',     pnl: 320,  earned: 32  },
+  { id: 1,  first_name: 'Александр', username: 'alex_trade',  pnl: 4850, earned: { day: 12, week: 68, month: 210, all: 485 } },
+  { id: 2,  first_name: 'Мария',     username: 'masha_win',   pnl: 2130, earned: { day: 8,  week: 45, month: 130, all: 213 } },
+  { id: 3,  first_name: 'Дмитрий',   username: 'dmitry_x',    pnl: 1740, earned: { day: 6,  week: 32, month: 95,  all: 174 } },
+  { id: 4,  first_name: 'Кирилл',    username: 'kirill_up',   pnl: 1220, earned: { day: 4,  week: 24, month: 72,  all: 122 } },
+  { id: 5,  first_name: 'Анна',      username: 'anna_pro',    pnl: 980,  earned: { day: 3,  week: 18, month: 55,  all: 98  } },
+  { id: 6,  first_name: 'Сергей',    username: 'serg_bet',    pnl: 760,  earned: { day: 2,  week: 14, month: 42,  all: 76  } },
+  { id: 7,  first_name: 'Оля',       username: 'olya_q',      pnl: 530,  earned: { day: 0,  week: 9,  month: 28,  all: 53  } },
+  { id: 8,  first_name: 'Максим',    username: 'max_mm',      pnl: 390,  earned: { day: 0,  week: 7,  month: 21,  all: 39  } },
+  { id: 9,  first_name: 'Лера',      username: 'lera_win',    pnl: 210,  earned: { day: 0,  week: 5,  month: 12,  all: 21  } },
+  { id: 10, first_name: 'Паша',      username: 'pasha_ok',    pnl: 95,   earned: { day: 0,  week: 2,  month: 5,   all: 9   } },
+  { id: 11, first_name: 'Игорь',     username: 'igor_game',   pnl: 450,  earned: { day: 0,  week: 6,  month: 18,  all: 45  } },
+  { id: 12, first_name: 'Татьяна',   username: 'tanya_t',     pnl: 320,  earned: { day: 0,  week: 4,  month: 14,  all: 32  } },
 ]
 
 const mockEarnings = { day: 35, week: 210, month: 780, all: 1367 }
@@ -211,8 +211,9 @@ function ReferralSection({ t, currency, user }) {
   ]
 
   const earnings = mockEarnings[period]
-  const displayed = mockReferrals.slice(0, visible)
-  const hasMore = visible < mockReferrals.length
+  const sorted = [...mockReferrals].sort((a, b) => b.earned[period] - a.earned[period])
+  const displayed = sorted.slice(0, visible)
+  const hasMore = visible < sorted.length
 
   return (
     <div className="ref-section">
@@ -315,7 +316,7 @@ function ReferralSection({ t, currency, user }) {
                       <span className="ref-username">@{r.username}</span>
                     </div>
                     <div className="ref-earned">
-                      <span className="ref-earned-value">+{currency.symbol}{r.earned.toLocaleString('ru-RU')}</span>
+                      <span className="ref-earned-value">+{currency.symbol}{r.earned[period].toLocaleString('ru-RU')}</span>
                       <span className="ref-earned-label">{t.refEarned}</span>
                     </div>
                   </div>

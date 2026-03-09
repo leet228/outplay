@@ -20,7 +20,7 @@ export const translations = {
     banner3Title: 'Выигрыши без задержек',
     banner3Sub: 'Мгновенный вывод',
     banner4Title: 'Дружба приносит доход',
-    banner4Sub: '2% с побед друга — навсегда',
+    banner4Sub: '2% от побед друга — навсегда',
 
     // Game sheet
     sheetStatQ: 'вопросов',
@@ -113,7 +113,7 @@ export const translations = {
 
     // Referral
     refTitle: 'Реферальная программа',
-    refSubtitle: 'Приглашай друзей и получай 2% с их побед',
+    refSubtitle: 'Приглашай друзей и получай 2% от их побед',
     refLink: 'Твоя ссылка',
     refShare: 'Поделиться',
     refCopied: 'Скопировано!',
@@ -149,7 +149,7 @@ export const translations = {
     banner3Title: 'Instant withdrawals',
     banner3Sub: 'No delays · No fees',
     banner4Title: 'Friendship pays off',
-    banner4Sub: '2% from every win your friend makes — forever',
+    banner4Sub: '2% from friend\'s wins — forever',
 
     // Game sheet
     sheetStatQ: 'questions',
