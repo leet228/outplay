@@ -141,7 +141,6 @@ export default function Leaderboard() {
               </div>
               <div className="lb-info">
                 <span className="lb-name">{p.first_name}</span>
-                {p.username && <span className="lb-username">@{p.username}</span>}
               </div>
               <div className="lb-right">
                 <span className={`lb-pnl ${isPos ? 'positive' : 'negative'}`}>
@@ -170,7 +169,6 @@ export default function Leaderboard() {
             }
             <div className="lb-info">
               <span className="lb-name">{user.first_name ?? '—'}</span>
-              {user.username && <span className="lb-username">@{user.username}</span>}
             </div>
             <div className="lb-right">
               <span className="lb-pnl positive">+{currency.symbol}0</span>
