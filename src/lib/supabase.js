@@ -61,6 +61,15 @@ export async function updateBalance(userId, delta) {
   return data
 }
 
+// Rank — считаем сколько юзеров с балансом выше
+export async function getUserRank(balance) {
+  const { count } = await supabase
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+    .gt('balance', balance)
+  return (count ?? 0) + 1
+}
+
 // Leaderboard
 export async function getLeaderboard(limit = 50) {
   const { data } = await supabase

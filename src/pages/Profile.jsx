@@ -2,7 +2,21 @@ import { useState, useEffect, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
+import { getUserRank } from '../lib/supabase'
 import './Profile.css'
+
+function getRankDisplay(rank) {
+  if (rank === 1) return { label: '#1', color: '#F59E0B', bg: '#F59E0B18' }
+  if (rank === 2) return { label: '#2', color: '#9CA3AF', bg: '#9CA3AF18' }
+  if (rank === 3) return { label: '#3', color: '#CD7F32', bg: '#CD7F3218' }
+  if (rank <= 10) return { label: `#${rank}`, color: '#3B82F6', bg: '#3B82F618' }
+  if (rank <= 25) return { label: '10+', color: '#8B5CF6', bg: '#8B5CF618' }
+  if (rank <= 50) return { label: '25+', color: '#8B5CF6', bg: '#8B5CF618' }
+  if (rank <= 100) return { label: '50+', color: '#6B7280', bg: '#6B728018' }
+  if (rank <= 250) return { label: '100+', color: '#6B7280', bg: '#6B728018' }
+  if (rank <= 500) return { label: '250+', color: '#4B5563', bg: '#4B556318' }
+  return { label: '500+', color: '#4B5563', bg: '#4B556318' }
+}
 
 // Заглушка — заменить на реальные данные из Supabase
 const mockPnlData = [
@@ -25,6 +39,13 @@ export default function Profile() {
   const [tooltip, setTooltip] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
+  const [rank, setRank] = useState(null)
+
+  useEffect(() => {
+    if (balance != null) {
+      getUserRank(balance).then(setRank)
+    }
+  }, [balance])
 
   const closeSettings = useCallback(() => {
     haptic('light')
@@ -92,7 +113,17 @@ export default function Profile() {
           </button>
         </div>
         <div className="profile-name-block">
-          <h2 className="profile-name">{user?.first_name ?? 'Игрок'}</h2>
+          <div className="profile-name-row">
+            <h2 className="profile-name">{user?.first_name ?? 'Игрок'}</h2>
+            {rank != null && (() => {
+              const rd = getRankDisplay(rank)
+              return (
+                <span className="rank-badge" style={{ color: rd.color, background: rd.bg, borderColor: rd.color }}>
+                  {rd.label}
+                </span>
+              )
+            })()}
+          </div>
           {user?.username && <span className="profile-username">@{user.username}</span>}
         </div>
       </div>
