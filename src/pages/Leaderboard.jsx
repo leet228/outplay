@@ -89,7 +89,7 @@ export default function Leaderboard() {
   const userInTop = sorted.some(p => p.id === user?.id)
 
   return (
-    <div className="leaderboard page" style={{ paddingTop: '380px' }}>
+    <div className="leaderboard page">
       <div className="lb-header">
         <h2 className="lb-title">{t.leaderboard}</h2>
       </div>
