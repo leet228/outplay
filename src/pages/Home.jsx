@@ -128,11 +128,29 @@ function BannerCarousel({ t }) {
   }
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      const next = (activeRef.current + 1) % BANNERS.length
-      goTo(next)
-    }, 7000)
-    return () => clearInterval(timer)
+    const timerRef = { id: null }
+
+    function start() {
+      timerRef.id = setInterval(() => {
+        const next = (activeRef.current + 1) % BANNERS.length
+        goTo(next)
+      }, 7000)
+    }
+
+    function stop() {
+      clearInterval(timerRef.id)
+    }
+
+    function onVisibility() {
+      document.hidden ? stop() : start()
+    }
+
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
   function handleScroll() {
