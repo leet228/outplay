@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
@@ -47,6 +47,31 @@ const PRO_FEATURES = [
   { emoji: '💰', key: 'proFeat4' },
   { emoji: '🎨', key: 'proFeat5' },
 ]
+
+/* ── Referral mock data ── */
+const REFERRAL_PAGE_SIZE = 10
+
+const mockReferrals = [
+  { id: 1,  first_name: 'Александр', username: 'alex_trade',  pnl: 4850, earned: 485 },
+  { id: 2,  first_name: 'Мария',     username: 'masha_win',   pnl: 2130, earned: 213 },
+  { id: 3,  first_name: 'Дмитрий',   username: 'dmitry_x',    pnl: 1740, earned: 174 },
+  { id: 4,  first_name: 'Кирилл',    username: 'kirill_up',   pnl: 1220, earned: 122 },
+  { id: 5,  first_name: 'Анна',      username: 'anna_pro',    pnl: 980,  earned: 98  },
+  { id: 6,  first_name: 'Сергей',    username: 'serg_bet',    pnl: 760,  earned: 76  },
+  { id: 7,  first_name: 'Оля',       username: 'olya_q',      pnl: 530,  earned: 53  },
+  { id: 8,  first_name: 'Максим',    username: 'max_mm',      pnl: 390,  earned: 39  },
+  { id: 9,  first_name: 'Лера',      username: 'lera_win',    pnl: 210,  earned: 21  },
+  { id: 10, first_name: 'Паша',      username: 'pasha_ok',    pnl: 95,   earned: 9   },
+  { id: 11, first_name: 'Игорь',     username: 'igor_game',   pnl: 450,  earned: 45  },
+  { id: 12, first_name: 'Татьяна',   username: 'tanya_t',     pnl: 320,  earned: 32  },
+]
+
+const mockEarnings = { day: 35, week: 210, month: 780, all: 1367 }
+
+const AVATAR_COLORS = ['#6366f1', '#a855f7', '#f97316', '#22c55e', '#3b82f6', '#ec4899', '#f59e0b', '#14b8a6']
+function avatarColor(name) {
+  return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]
+}
 
 /* ── Plan Sheet ── */
 function PlanSheet({ plan, t, currency, onClose }) {
@@ -148,18 +173,195 @@ function PlanSheet({ plan, t, currency, onClose }) {
   )
 }
 
+/* ── Referral Section ── */
+function ReferralSection({ t, currency, user }) {
+  const [copied, setCopied] = useState(false)
+  const [period, setPeriod] = useState('all')
+  const [visible, setVisible] = useState(REFERRAL_PAGE_SIZE)
+  const copyTimer = useRef(null)
+
+  const refLink = `https://t.me/outplay_bot?start=ref_${user?.id ?? 'dev'}`
+  const shortLink = `t.me/outplay_bot?start=ref_${user?.id ?? 'dev'}`
+
+  function handleCopyLink() {
+    haptic('light')
+    navigator.clipboard?.writeText(refLink).catch(() => {})
+    clearTimeout(copyTimer.current)
+    setCopied(true)
+    copyTimer.current = setTimeout(() => setCopied(false), 2000)
+  }
+
+  function handleShare() {
+    haptic('medium')
+    const tg = window.Telegram?.WebApp
+    if (tg) {
+      tg.openTelegramLink(
+        `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(t.refShareText)}`
+      )
+    } else if (navigator.share) {
+      navigator.share({ title: 'Outplay', text: t.refShareText, url: refLink })
+    }
+  }
+
+  const periods = [
+    { key: 'day',   label: t.refDay },
+    { key: 'week',  label: t.refWeek },
+    { key: 'month', label: t.refMonth },
+    { key: 'all',   label: t.refAll },
+  ]
+
+  const earnings = mockEarnings[period]
+  const displayed = mockReferrals.slice(0, visible)
+  const hasMore = visible < mockReferrals.length
+
+  return (
+    <div className="ref-section">
+
+      {/* Divider */}
+      <div className="ref-divider" />
+
+      {/* Header */}
+      <div className="ref-header">
+        <h2 className="ref-title">{t.refTitle}</h2>
+        <p className="ref-subtitle">{t.refSubtitle}</p>
+      </div>
+
+      {/* Link card */}
+      <div className="ref-link-card">
+        <span className="ref-link-label">{t.refLink}</span>
+        <div className="ref-link-row">
+          <button
+            className={`ref-link-btn ${copied ? 'ref-link-btn--copied' : ''}`}
+            onClick={handleCopyLink}
+          >
+            {copied ? (
+              <span className="ref-copied-text">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M20 6L9 17l-5-5" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {t.refCopied}
+              </span>
+            ) : (
+              <>
+                <span className="ref-link-text">{shortLink}</span>
+                <span className="ref-link-copy-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                    <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
+                </span>
+              </>
+            )}
+          </button>
+          <button className="ref-share-btn" onClick={handleShare}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+              <polyline points="16 6 12 2 8 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+              <line x1="12" y1="2" x2="12" y2="15" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            {t.refShare}
+          </button>
+        </div>
+      </div>
+
+      {/* Earnings card */}
+      <div className="ref-earnings-card">
+        <div className="ref-earnings-top">
+          <span className="ref-earnings-label">{t.refEarnings}</span>
+        </div>
+        <div className="ref-earnings-periods">
+          {periods.map(p => (
+            <button
+              key={p.key}
+              className={`ref-period-btn ${period === p.key ? 'active' : ''}`}
+              onClick={() => { haptic('light'); setPeriod(p.key) }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="ref-earnings-amount">
+          <span className="ref-earnings-value">
+            {currency.symbol}{earnings.toLocaleString('ru-RU')}
+          </span>
+          <span className="ref-earnings-period-label">
+            {periods.find(p => p.key === period)?.label.toLowerCase()}
+          </span>
+        </div>
+      </div>
+
+      {/* Referrals list */}
+      <div className="ref-list-card">
+        <div className="ref-list-header">
+          <span className="ref-list-title">{t.refCount}</span>
+          <span className="ref-list-count">{mockReferrals.length}</span>
+        </div>
+
+        {mockReferrals.length === 0 ? (
+          <div className="ref-empty">{t.refEmpty}</div>
+        ) : (
+          <>
+            <div className="ref-rows-wrap">
+              {displayed.map(r => {
+                const isPos = r.pnl >= 0
+                const color = avatarColor(r.first_name)
+                return (
+                  <div key={r.id} className="ref-row">
+                    <div className="ref-avatar" style={{ background: `${color}22`, color }}>
+                      {r.first_name[0]}
+                    </div>
+                    <div className="ref-info">
+                      <span className="ref-name">{r.first_name}</span>
+                      <span className="ref-username">@{r.username}</span>
+                    </div>
+                    <div className="ref-earned">
+                      <span className="ref-earned-value">+{currency.symbol}{r.earned.toLocaleString('ru-RU')}</span>
+                      <span className="ref-earned-label">{t.refEarned}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {hasMore && (
+              <button
+                className="ref-show-more"
+                tabIndex={-1}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { haptic('light'); setVisible(v => v + REFERRAL_PAGE_SIZE) }}
+              >
+                {t.refShowMore}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+    </div>
+  )
+}
+
 /* ── Shop ── */
 export default function Shop() {
-  const { lang, currency } = useGameStore()
+  const { lang, currency, user } = useGameStore()
   const t = translations[lang]
   const [active, setActive] = useState(1)
   const [sheetPlan, setSheetPlan] = useState(null)
   const trackRef = useRef(null)
 
+  // useLayoutEffect — runs synchronously BEFORE browser paint,
+  // overrides browser scroll restoration which happens after render
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [])
+
   useEffect(() => {
     if (!trackRef.current) return
-    const card = trackRef.current.children[1]
-    if (card) card.scrollIntoView({ block: 'nearest', inline: 'center' })
+    const track = trackRef.current
+    const card = track.children[1]
+    if (!card) return
+    track.scrollLeft = card.offsetLeft - (track.offsetWidth - card.offsetWidth) / 2
   }, [])
 
   function handleScroll() {
@@ -176,8 +378,11 @@ export default function Shop() {
 
   function goTo(i) {
     if (!trackRef.current) return
-    const card = trackRef.current.children[i]
-    card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    const track = trackRef.current
+    const card = track.children[i]
+    if (!card) return
+    const target = card.offsetLeft - (track.offsetWidth - card.offsetWidth) / 2
+    track.scrollTo({ left: target, behavior: 'smooth' })
     setActive(i)
   }
 
@@ -253,6 +458,9 @@ export default function Shop() {
           ))}
         </div>
       </div>
+
+      {/* Referral Section */}
+      <ReferralSection t={t} currency={currency} user={user} />
 
       {/* Plan Sheet */}
       <PlanSheet

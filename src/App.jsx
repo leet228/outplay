@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
 import { getOrCreateUser } from './lib/supabase'
@@ -17,9 +17,15 @@ import Shop from './pages/Shop'
 import Profile from './pages/Profile'
 import './App.css'
 
+// Disable browser scroll restoration globally — SPA handles it manually
+if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual'
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation()
-  useEffect(() => {
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
     document.documentElement.scrollTop = 0
     document.body.scrollTop = 0
   }, [pathname])
