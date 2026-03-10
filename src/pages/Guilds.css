@@ -1,40 +1,119 @@
 .guilds {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  padding: 0 16px 16px;
+  padding-top: calc(var(--safe-top, 0px) + 56px);
+  gap: 20px;
 }
 
-.guilds-coming {
+/* ── Season timer ── */
+.guilds-timer {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 32px 24px;
-  text-align: center;
-}
-
-.guilds-coming-icon {
-  width: 80px;
-  height: 80px;
-  border-radius: 24px;
   background: var(--surface);
   border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px 20px;
+}
+
+.guilds-timer-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.guilds-timer-digits {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guilds-timer-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.guilds-timer-num {
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -1px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.guilds-timer-unit {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.guilds-timer-sep {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+/* ── Prize pool ── */
+.guilds-prize {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 24px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, #1a1500 0%, #2d1f00 40%, #1a1500 100%);
+  border: 1px solid #f59e0b33;
+  overflow: hidden;
+}
+
+.guilds-prize-glow {
+  position: absolute;
+  top: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.guilds-prize-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
 }
 
-.guilds-coming-title {
-  font-size: 22px;
-  font-weight: 800;
+.guilds-prize-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f59e0b;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.guilds-prize-amount {
+  font-size: 44px;
+  font-weight: 900;
   color: var(--text);
-  margin: 0;
-}
-
-.guilds-coming-sub {
-  font-size: 14px;
-  color: var(--text-muted);
-  margin: 0;
-  line-height: 1.5;
+  letter-spacing: -1.5px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }

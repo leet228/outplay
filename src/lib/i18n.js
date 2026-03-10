@@ -90,6 +90,11 @@ export const translations = {
     // Guilds
     guilds: 'Гильдии',
     guildsSoon: 'Объединяйся с другими игроками\nи побеждай вместе — скоро',
+    guildsSeasonEnd: 'До конца сезона',
+    guildsDays: 'дней',
+    guildsHours: 'часов',
+    guildsMinutes: 'минут',
+    guildsPrizePool: 'Призовой фонд',
 
     // Shop / PRO
     shop: 'Магазин',
@@ -219,6 +224,11 @@ export const translations = {
     // Guilds
     guilds: 'Guilds',
     guildsSoon: 'Team up with other players\nand win together — coming soon',
+    guildsSeasonEnd: 'Season ends in',
+    guildsDays: 'days',
+    guildsHours: 'hours',
+    guildsMinutes: 'minutes',
+    guildsPrizePool: 'Prize pool',
 
     // Shop / PRO
     shop: 'Shop',
