@@ -4,7 +4,8 @@
   align-items: center;
   padding: 0 16px 16px;
   padding-top: calc(var(--safe-top, 0px) + 56px);
-  gap: 20px;
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 16px);
+  gap: 16px;
 }
 
 /* ── Season timer ── */
@@ -71,49 +72,1084 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 32px 24px;
+  padding: 32px 24px 36px;
   border-radius: 24px;
-  background: linear-gradient(145deg, #1a1500 0%, #2d1f00 40%, #1a1500 100%);
-  border: 1px solid #f59e0b33;
+  background: linear-gradient(145deg, #312000 0%, #4a2800 30%, #3d1f00 60%, #2a1600 100%);
+  border: 1px solid #f59e0b55;
   overflow: hidden;
+  box-shadow:
+    0 0 40px rgba(245, 158, 11, 0.15),
+    0 0 80px rgba(245, 158, 11, 0.08),
+    inset 0 1px 0 rgba(251, 191, 36, 0.2);
 }
 
 .guilds-prize-glow {
   position: absolute;
-  top: -40%;
+  top: -60%;
   left: 50%;
   transform: translateX(-50%);
-  width: 200px;
-  height: 200px;
+  width: 300px;
+  height: 300px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.25) 0%, rgba(245, 158, 11, 0.08) 40%, transparent 70%);
   pointer-events: none;
 }
 
+.guilds-prize-glow--bottom {
+  top: auto;
+  bottom: -70%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, transparent 65%);
+}
+
+/* Sparkle particles */
+.guilds-prize-sparkle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fbbf24;
+  pointer-events: none;
+  animation: sparkle-float 3s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.guilds-prize--visible .guilds-prize-sparkle {
+  animation-play-state: running;
+}
+
+.guilds-prize-sparkle--1 {
+  top: 20%;
+  left: 15%;
+  animation-delay: 0s;
+  box-shadow: 0 0 6px #fbbf24;
+}
+
+.guilds-prize-sparkle--2 {
+  top: 35%;
+  right: 12%;
+  animation-delay: 1s;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.guilds-prize-sparkle--3 {
+  bottom: 25%;
+  left: 25%;
+  animation-delay: 2s;
+  width: 3px;
+  height: 3px;
+  box-shadow: 0 0 5px #fde68a;
+}
+
+@keyframes sparkle-float {
+  0%, 100% { opacity: 0.3; transform: translateY(0) scale(1); }
+  50% { opacity: 1; transform: translateY(-8px) scale(1.5); }
+}
+
 .guilds-prize-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 22px;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.18) 0%, rgba(245, 158, 11, 0.08) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 0 24px rgba(251, 191, 36, 0.12);
 }
 
 .guilds-prize-label {
   font-size: 13px;
   font-weight: 700;
-  color: #f59e0b;
+  color: #fbbf24;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 1.2px;
 }
 
 .guilds-prize-amount {
-  font-size: 44px;
+  font-size: 48px;
   font-weight: 900;
-  color: var(--text);
-  letter-spacing: -1.5px;
+  letter-spacing: -2px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #fef3c7 0%, #fbbf24 50%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 2px 8px rgba(251, 191, 36, 0.3));
+}
+
+/* ── Action buttons ── */
+.guilds-actions {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+}
+
+.guilds-create,
+.guilds-find {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 12px;
+  border-radius: 16px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.guilds-create:active,
+.guilds-find:active {
+  transform: scale(0.97);
+  border-color: var(--text-muted);
+}
+
+.guilds-find svg {
+  color: var(--text-muted);
+}
+
+/* ── Guild leaderboard ── */
+.guilds-list-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.guilds-list-header {
+  padding: 0 4px 10px;
+}
+
+.guilds-list-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.guilds-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.guild-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.guild-row:first-child {
+  border-top: none;
+}
+
+.guild-rank {
+  width: 22px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.guild-row:nth-child(1) .guild-rank { color: #fbbf24; }
+.guild-row:nth-child(2) .guild-rank { color: #94a3b8; }
+.guild-row:nth-child(3) .guild-rank { color: #cd7f32; }
+
+.guild-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.guild-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guild-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guild-members {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.guild-pnl {
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.guild-pnl.positive { color: #22c55e; }
+.guild-pnl.negative { color: #ef4444; }
+
+/* ── Create Guild Sheet ── */
+.guilds-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  z-index: 150;
+  pointer-events: none;
+  transition: background 0.3s ease;
+}
+
+.guilds-sheet-overlay.visible {
+  background: rgba(0, 0, 0, 0.65);
+  pointer-events: all;
+  touch-action: none;
+}
+
+.guilds-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--surface);
+  border-radius: 28px 28px 0 0;
+  border-top: 1px solid var(--border);
+  z-index: 200;
+  transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  padding: 0 20px;
+  padding-bottom: calc(var(--safe-bottom, 0px) + 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-height: 90svh;
+}
+
+.guilds-sheet.open {
+  transform: translateY(0);
+}
+
+.guilds-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 14px auto 24px;
+}
+
+.guilds-sheet-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 24px;
+  text-align: center;
+  letter-spacing: -0.3px;
+}
+
+/* Avatar upload */
+.guilds-sheet-avatar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  margin: 0 auto 20px;
+  padding: 0;
+}
+
+.guilds-sheet-avatar-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  background: var(--bg);
+  border: 2px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: border-color 0.15s;
+}
+
+.guilds-sheet-avatar:active .guilds-sheet-avatar-placeholder {
+  border-color: var(--text-muted);
+}
+
+.guilds-sheet-avatar-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  object-fit: cover;
+}
+
+.guilds-sheet-avatar-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Input fields */
+.guilds-sheet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.guilds-sheet-field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.guilds-sheet-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+
+.guilds-sheet-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.guilds-sheet-input:focus {
+  border-color: var(--accent);
+}
+
+.guilds-sheet-textarea {
+  resize: none;
+  line-height: 1.4;
+}
+
+/* Footer */
+.guilds-sheet-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.guilds-sheet-cost {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.guilds-sheet-cost-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.guilds-sheet-cost-amount {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.guilds-sheet-submit {
+  width: 100%;
+  padding: 16px;
+  border-radius: 16px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.guilds-sheet-submit:active {
+  transform: scale(0.97);
+}
+
+.guilds-sheet-submit.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ── Guild Detail Sheet ── */
+.guild-row {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.1s;
+}
+
+.guild-row:active {
+  opacity: 0.7;
+}
+
+.gd-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.gd-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.gd-header-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gd-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -0.3px;
+}
+
+.gd-meta {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.gd-pnl {
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.gd-pnl.positive { color: #22c55e; }
+.gd-pnl.negative { color: #ef4444; }
+
+.gd-desc {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.gd-join {
+  width: 100%;
+  padding: 15px;
+  border-radius: 16px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+  margin-bottom: 20px;
+}
+
+.gd-join:active {
+  transform: scale(0.97);
+}
+
+.gd-full {
+  width: 100%;
+  padding: 15px;
+  border-radius: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* Creator row */
+.gd-creator {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(245, 158, 11, 0.03) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.18);
+  margin-bottom: 16px;
+}
+
+.gd-creator-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gd-creator-crown {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.4));
+}
+
+.gd-creator-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gd-creator-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.gd-creator-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.gd-members-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.gd-members-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.gd-members-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+.gd-members {
+  display: flex;
+  flex-direction: column;
+}
+
+.gd-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.gd-member:first-child {
+  border-top: none;
+}
+
+.gd-member-rank {
+  width: 20px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.gd-member:nth-child(1) .gd-member-rank { color: #fbbf24; }
+.gd-member:nth-child(2) .gd-member-rank { color: #94a3b8; }
+.gd-member:nth-child(3) .gd-member-rank { color: #cd7f32; }
+
+.gd-member-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.gd-member-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.gd-member-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.gd-member-username {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.gd-member--owner {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gd-member--owner:active {
+  opacity: 0.7;
+}
+
+.gd-member-pnl {
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.gd-member-pnl.positive { color: #22c55e; }
+.gd-member-pnl.negative { color: #ef4444; }
+
+.gd-member-kick {
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gd-member-kick:active {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* ── Owner edit button ── */
+.gd-edit-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 15px;
+  border-radius: 16px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  margin-bottom: 20px;
+}
+
+.gd-edit-btn:active {
+  transform: scale(0.97);
+  border-color: var(--text-muted);
+}
+
+.gd-edit-btn svg {
+  color: var(--text-muted);
+}
+
+/* ── Edit form ── */
+.gd-edit-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: -8px;
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.gd-edit-avatar-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gd-edit-avatar-placeholder {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 2px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.gd-edit-avatar-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  object-fit: cover;
+}
+
+.gd-edit-name {
+  text-align: center;
+}
+
+.gd-edit-desc {
+  resize: none;
+  line-height: 1.4;
+  font-size: 14px;
+}
+
+.gd-edit-cost {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gd-edit-cost-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.gd-edit-cost-amount {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.gd-edit-save {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.gd-edit-save:active {
+  transform: scale(0.97);
+}
+
+/* ── Find Guild Sheet ── */
+.gf-search {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.gf-search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.gf-search-input {
+  width: 100%;
+  padding: 14px 16px 14px 44px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+
+.gf-search-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.gf-search-input:focus {
+  border-color: var(--accent);
+}
+
+.gf-results {
+  display: flex;
+  flex-direction: column;
+}
+
+.gf-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 32px 0;
+}
+
+.gf-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.1s;
+}
+
+.gf-row:first-child {
+  border-top: none;
+}
+
+.gf-row:active {
+  opacity: 0.7;
+}
+
+.gf-rank {
+  width: 22px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.gf-row:nth-child(1) .gf-rank { color: #fbbf24; }
+.gf-row:nth-child(2) .gf-rank { color: #94a3b8; }
+.gf-row:nth-child(3) .gf-rank { color: #cd7f32; }
+
+.gf-join-btn {
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s;
+}
+
+.gf-join-btn:active {
+  transform: scale(0.95);
+}
+
+.gf-full-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ── My Guild Card ── */
+.my-guild-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 16px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.1s;
+}
+
+.my-guild-card:active {
+  opacity: 0.7;
+}
+
+.my-guild-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 12px;
+}
+
+.my-guild-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.my-guild-rank {
+  width: 22px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ── How it works ── */
+.guilds-how-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 16px 0 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.guilds-how-chevron {
+  transition: transform 0.3s ease;
+}
+
+.guilds-how-chevron.open {
+  transform: rotate(180deg);
+}
+
+.guilds-how {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0 16px;
+  animation: howFadeIn 0.3s ease;
+}
+
+@keyframes howFadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.guilds-how-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.guilds-how-icon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+}
+
+.guilds-how-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.guilds-how-item-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.guilds-how-item-text {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ── Toast ── */
+.guilds-toast {
+  position: fixed;
+  bottom: calc(var(--nav-height) + var(--safe-bottom) + 16px);
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 14px;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  white-space: nowrap;
+}
+
+.guilds-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
 }

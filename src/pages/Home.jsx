@@ -328,6 +328,149 @@ function GameSheet({ game, t, balance, currency, onClose }) {
   )
 }
 
+/* ── Mock Friends ── */
+const mockFriends = [
+  { id: 1, first_name: 'Александр', username: 'alex_pro', online: true, pnl: 12400 },
+  { id: 2, first_name: 'Мария', username: 'masha_quiz', online: true, pnl: 8700 },
+  { id: 3, first_name: 'Дмитрий', username: 'dima_wins', online: true, pnl: 5200 },
+  { id: 4, first_name: 'Елена', username: 'lena_star', online: false, pnl: 15300 },
+  { id: 5, first_name: 'Артём', username: 'artem_iq', online: false, pnl: 3100 },
+  { id: 6, first_name: 'София', username: 'sofiya_g', online: false, pnl: 9800 },
+  { id: 7, first_name: 'Никита', username: 'nik_play', online: false, pnl: 1600 },
+]
+
+/* ── Friends Panel ── */
+function FriendsPanel({ open, onClose, t, currency }) {
+  const [query, setQuery] = useState('')
+  const [activeId, setActiveId] = useState(null)
+
+  useEffect(() => {
+    if (!open) {
+      setQuery('')
+      setActiveId(null)
+    }
+  }, [open])
+
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp
+    if (!tg) return
+    if (open) {
+      tg.BackButton.show()
+      tg.BackButton.onClick(onClose)
+    } else {
+      tg.BackButton.hide()
+      tg.BackButton.offClick(onClose)
+    }
+    return () => tg.BackButton.offClick(onClose)
+  }, [open, onClose])
+
+  const filtered = mockFriends.filter(f =>
+    !query || f.first_name.toLowerCase().includes(query.toLowerCase()) ||
+    f.username.toLowerCase().includes(query.toLowerCase())
+  )
+  const online = filtered.filter(f => f.online)
+  const offline = filtered.filter(f => !f.online)
+
+  function handleRowClick(id) {
+    haptic('light')
+    setActiveId(prev => prev === id ? null : id)
+  }
+
+  return (
+    <>
+      <div className={`friends-overlay ${open ? 'visible' : ''}`} onClick={onClose} />
+      <div className={`friends-panel ${open ? 'open' : ''}`} onClick={e => e.stopPropagation()}>
+        <div className="friends-header">
+          <span className="friends-title">{t.friends}</span>
+          <button className="friends-close" onClick={onClose}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div className="friends-search-wrap">
+          <svg className="friends-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            className="friends-search"
+            placeholder={t.friendsFindPlaceholder}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
+        </div>
+
+        <button className="friends-find-btn" onClick={() => haptic('light')}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/>
+            <line x1="22" y1="11" x2="16" y2="11"/>
+          </svg>
+          {t.friendsFind}
+        </button>
+
+        <div className="friends-list">
+          {filtered.length === 0 && (
+            <span className="friends-empty">{t.friendsEmpty}</span>
+          )}
+
+          {online.length > 0 && (
+            <>
+              <span className="friends-group-label">
+                <span className="friends-online-dot" />
+                {t.friendsOnline} · {online.length}
+              </span>
+              {online.map(f => (
+                <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => handleRowClick(f.id)}>
+                  <div className="friends-avatar-wrap">
+                    <div className="friends-avatar">{f.first_name[0]}</div>
+                    <span className="friends-status-dot online" />
+                  </div>
+                  <div className="friends-info">
+                    <span className="friends-name">{f.first_name}</span>
+                    <span className="friends-username">@{f.username}</span>
+                  </div>
+                  {activeId === f.id && (
+                    <div className="friends-actions">
+                      <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
+                      <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsRemove}</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+
+          {offline.length > 0 && (
+            <>
+              <span className="friends-group-label">
+                {t.friendsOffline} · {offline.length}
+              </span>
+              {offline.map(f => (
+                <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => handleRowClick(f.id)}>
+                  <div className="friends-avatar-wrap">
+                    <div className="friends-avatar">{f.first_name[0]}</div>
+                  </div>
+                  <div className="friends-info">
+                    <span className="friends-name">{f.first_name}</span>
+                    <span className="friends-username">@{f.username}</span>
+                  </div>
+                  {activeId === f.id && (
+                    <div className="friends-actions">
+                      <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
+                      <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsRemove}</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
 /* ── Games ── */
 const GAMES = [
   { id: 'quiz', titleKey: 'gameQuizTitle', subKey: 'gameQuizSub', available: true,  accent: '#3B82F6', shadow: '#1d3461' },
@@ -340,10 +483,16 @@ export default function Home() {
   const { balance, currency, lang, setDepositOpen } = useGameStore()
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)
+  const [friendsOpen, setFriendsOpen] = useState(false)
 
   const closeSheet = useCallback(() => {
     haptic('light')
     setSheetGame(null)
+  }, [])
+
+  const closeFriends = useCallback(() => {
+    haptic('light')
+    setFriendsOpen(false)
   }, [])
 
   function handleGameTap(game) {
@@ -356,14 +505,24 @@ export default function Home() {
     <div className="home page">
       <div className="home-topbar">
         <span className="topbar-logo">OUTPLAY</span>
-        <div className="topbar-balance">
-          <span className="topbar-currency">{currency.symbol}</span>
-          <span className="topbar-amount">{Number(balance).toFixed(2)}</span>
-          <button className="topbar-plus" onClick={() => { haptic('light'); setDepositOpen(true) }}>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <path d="M8 2V14M2 8H14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+        <div className="topbar-row">
+          <button className="topbar-friends" onClick={() => { haptic('medium'); setFriendsOpen(true) }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
             </svg>
           </button>
+          <div className="topbar-balance">
+            <span className="topbar-currency">{currency.symbol}</span>
+            <span className="topbar-amount">{Number(balance).toFixed(2)}</span>
+            <button className="topbar-plus" onClick={() => { haptic('light'); setDepositOpen(true) }}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2V14M2 8H14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -411,6 +570,8 @@ export default function Home() {
 
         </div>
       </div>
+
+      <FriendsPanel open={friendsOpen} onClose={closeFriends} t={t} currency={currency} />
 
       <GameSheet
         game={sheetGame}

@@ -248,6 +248,35 @@
   color: var(--text-muted);
 }
 
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.settings-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.settings-action-btn:active {
+  transform: scale(0.97);
+  background: var(--surface2);
+}
+
 .profile-avatar-wrap {
   position: relative;
   padding: 3px;
