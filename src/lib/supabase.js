@@ -121,13 +121,10 @@ export async function getReferralsList(userId, limit = 50, offset = 0) {
   return data ?? { total: 0, items: [] }
 }
 
-// Leaderboard
+// Leaderboard (ranked by real PnL from duels, not balance)
 export async function getLeaderboard(limit = 50) {
-  const { data } = await supabase
-    .from('users')
-    .select('id, first_name, username, avatar_url, balance, wins, losses')
-    .order('balance', { ascending: false })
-    .limit(limit)
+  const { data, error } = await supabase.rpc('get_leaderboard', { p_limit: limit })
+  if (error) { console.error('getLeaderboard error:', error); return [] }
   return data ?? []
 }
 

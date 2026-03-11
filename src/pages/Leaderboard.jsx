@@ -70,7 +70,7 @@ export default function Leaderboard() {
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
 
-  const sorted = [...leaderboard].sort((a, b) => b.balance - a.balance)
+  const sorted = [...leaderboard].sort((a, b) => (b.total_pnl ?? 0) - (a.total_pnl ?? 0))
   const userInTop = sorted.some(p => p.id === user?.id)
 
   // User's own WR for "my position" card
@@ -89,7 +89,8 @@ export default function Leaderboard() {
       {/* Top 3 podium */}
       <div className="lb-podium">
         {sorted.slice(0, 3).map((p, i) => {
-          const isPos = p.balance >= 0
+          const pnl = p.total_pnl ?? 0
+          const isPos = pnl >= 0
           const wr = p.wins + p.losses > 0
             ? Math.round((p.wins / (p.wins + p.losses)) * 100)
             : 0
@@ -105,7 +106,7 @@ export default function Leaderboard() {
               </div>
               <span className="lb-podium-name">{p.first_name}</span>
               <span className={`lb-podium-pnl ${isPos ? 'positive' : 'negative'}`}>
-                {formatCurrency(p.balance, currency, rates, { sign: '+' })}
+                {formatCurrency(pnl, currency, rates, { sign: '+' })}
               </span>
               <span className="lb-podium-wr">{wr}% WR</span>
             </div>
@@ -116,7 +117,8 @@ export default function Leaderboard() {
       {/* Full list */}
       <div className="lb-list">
         {sorted.map((p, i) => {
-          const isPos = p.balance >= 0
+          const pnl = p.total_pnl ?? 0
+          const isPos = pnl >= 0
           const wr = p.wins + p.losses > 0
             ? Math.round((p.wins / (p.wins + p.losses)) * 100)
             : 0
@@ -136,7 +138,7 @@ export default function Leaderboard() {
               </div>
               <div className="lb-right">
                 <span className={`lb-pnl ${isPos ? 'positive' : 'negative'}`}>
-                  {formatCurrency(p.balance, currency, rates, { sign: '+' })}
+                  {formatCurrency(pnl, currency, rates, { sign: '+' })}
                 </span>
                 <span className="lb-wr">{wr}% WR</span>
               </div>

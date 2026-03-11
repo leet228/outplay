@@ -598,9 +598,14 @@ BEGIN
     RETURN jsonb_build_object('error', 'user_not_found');
   END IF;
 
-  -- Rank: users with strictly higher balance + 1
+  -- Total PnL (all time) — compute first, needed for rank
+  SELECT COALESCE(SUM(pnl), 0) INTO v_total
+  FROM user_daily_stats WHERE user_id = p_user_id;
+
+  -- Rank: users with strictly higher PnL + 1
   SELECT COUNT(*) + 1 INTO v_rank
-  FROM users WHERE balance > v_balance;
+  FROM users u
+  WHERE COALESCE((SELECT SUM(pnl) FROM user_daily_stats WHERE user_id = u.id), 0) > v_total;
 
   -- Daily stats for last N days
   SELECT COALESCE(jsonb_agg(
@@ -611,10 +616,6 @@ BEGIN
   FROM user_daily_stats uds
   WHERE uds.user_id = p_user_id
     AND uds.date >= CURRENT_DATE - (p_days || ' days')::INTERVAL;
-
-  -- Total PnL (all time)
-  SELECT COALESCE(SUM(pnl), 0) INTO v_total
-  FROM user_daily_stats WHERE user_id = p_user_id;
 
   -- Referral earnings by period
   SELECT COALESCE(SUM(amount), 0) INTO v_ref_day
@@ -634,6 +635,43 @@ BEGIN
     'daily_stats',  v_stats,
     'total_pnl',    v_total,
     'ref_earnings', jsonb_build_object('day', v_ref_day, 'week', v_ref_week, 'month', v_ref_month, 'all', v_ref_all)
+  );
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  LEADERBOARD (top by real PnL)            ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS get_leaderboard(INTEGER);
+
+CREATE OR REPLACE FUNCTION get_leaderboard(p_limit INTEGER DEFAULT 50)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN (
+    SELECT COALESCE(jsonb_agg(
+      jsonb_build_object(
+        'id',         u.id,
+        'first_name', u.first_name,
+        'username',   u.username,
+        'avatar_url', u.avatar_url,
+        'balance',    u.balance,
+        'wins',       u.wins,
+        'losses',     u.losses,
+        'total_pnl',  COALESCE(s.pnl, 0)
+      )
+      ORDER BY COALESCE(s.pnl, 0) DESC
+    ), '[]'::JSONB)
+    FROM users u
+    LEFT JOIN (
+      SELECT user_id, SUM(pnl) AS pnl
+      FROM user_daily_stats
+      GROUP BY user_id
+    ) s ON s.user_id = u.id
+    ORDER BY COALESCE(s.pnl, 0) DESC
+    LIMIT p_limit
   );
 END;
 $$;
@@ -707,21 +745,19 @@ DECLARE
   v_member_count INTEGER;
 BEGIN
   -- Active season
-  SELECT id, prize_pool, end_date
-  INTO v_season_id, v_season
-  FROM (
-    SELECT id, jsonb_build_object('prize_pool', prize_pool, 'end_date', end_date) AS info
-    FROM guild_seasons WHERE is_active = true LIMIT 1
-  ) s;
+  SELECT id INTO v_season_id
+  FROM guild_seasons WHERE is_active = true LIMIT 1;
 
   IF v_season_id IS NULL THEN
     SELECT id INTO v_season_id FROM guild_seasons ORDER BY end_date DESC LIMIT 1;
   END IF;
 
-  -- Actually extract season info properly
-  SELECT jsonb_build_object('prize_pool', prize_pool, 'end_date', end_date)
-  INTO v_season
-  FROM guild_seasons WHERE id = v_season_id;
+  -- Build season info
+  IF v_season_id IS NOT NULL THEN
+    SELECT jsonb_build_object('prize_pool', prize_pool, 'end_date', end_date)
+    INTO v_season
+    FROM guild_seasons WHERE id = v_season_id;
+  END IF;
 
   -- User's guild
   SELECT gm.guild_id INTO v_guild_id
@@ -813,26 +849,29 @@ BEGIN
   RETURN COALESCE((
     SELECT jsonb_agg(
       jsonb_build_object(
-        'id',         sub.opp_id,
-        'first_name', sub.first_name,
-        'username',   sub.username,
-        'avatar_url', sub.avatar_url
+        'id',         r.opp_id,
+        'first_name', r.first_name,
+        'username',   r.username,
+        'avatar_url', r.avatar_url
       )
     )
     FROM (
-      SELECT DISTINCT ON (opp_id)
-        CASE WHEN d.creator_id = p_user_id THEN d.opponent_id ELSE d.creator_id END AS opp_id,
-        u.first_name, u.username, u.avatar_url,
-        d.created_at
-      FROM duels d
-      JOIN users u ON u.id = CASE WHEN d.creator_id = p_user_id THEN d.opponent_id ELSE d.creator_id END
-      WHERE (d.creator_id = p_user_id OR d.opponent_id = p_user_id)
-        AND d.status = 'finished'
-        AND d.opponent_id IS NOT NULL
-      ORDER BY opp_id, d.created_at DESC
-    ) sub
-    ORDER BY sub.created_at DESC
-    LIMIT p_limit
+      SELECT sub.opp_id, sub.first_name, sub.username, sub.avatar_url
+      FROM (
+        SELECT DISTINCT ON (opp_id)
+          CASE WHEN d.creator_id = p_user_id THEN d.opponent_id ELSE d.creator_id END AS opp_id,
+          u.first_name, u.username, u.avatar_url,
+          d.created_at
+        FROM duels d
+        JOIN users u ON u.id = CASE WHEN d.creator_id = p_user_id THEN d.opponent_id ELSE d.creator_id END
+        WHERE (d.creator_id = p_user_id OR d.opponent_id = p_user_id)
+          AND d.status = 'finished'
+          AND d.opponent_id IS NOT NULL
+        ORDER BY opp_id, d.created_at DESC
+      ) sub
+      ORDER BY sub.created_at DESC
+      LIMIT p_limit
+    ) r
   ), '[]'::JSONB);
 END;
 $$;

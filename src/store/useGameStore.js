@@ -23,7 +23,7 @@ const useGameStore = create((set, get) => ({
   },
 
   // Exchange rates (fetched at bootstrap)
-  rates: { RUB: 1, USD: 0.011, EUR: 0.010 },
+  rates: { RUB: 1, USD: 0.0127, EUR: 0.0109 },
   setRates: (rates) => set({ rates }),
 
   // Language

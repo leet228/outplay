@@ -4,7 +4,7 @@
  * RUB = base currency. 1 Star ≈ 1 RUB.
  * All prices/amounts stored in RUB, converted on display.
  *
- * Rates format: { RUB: 1, USD: 0.0103, EUR: 0.0092 }
+ * Rates format: { RUB: 1, USD: 0.0127, EUR: 0.0109 }
  * Usage:  rubAmount * rates[code] → amount in target currency
  */
 
@@ -12,7 +12,7 @@ const CACHE_KEY = 'outplay_rates'
 const CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
 // Hardcoded fallback (approximate, updated manually)
-const FALLBACK_RATES = { RUB: 1, USD: 0.011, EUR: 0.010 }
+const FALLBACK_RATES = { RUB: 1, USD: 0.0127, EUR: 0.0109 }
 
 /**
  * Fetch live rates from Frankfurter API.
@@ -23,11 +23,12 @@ export async function fetchRates() {
   const cached = readCache()
   if (cached && cached.fresh) return cached.rates
 
-  // 2. Fetch from API
+  // 2. Fetch from API (open.er-api.com — free, supports RUB, no key)
   try {
-    const res = await fetch('https://api.frankfurter.dev/latest?from=RUB&to=USD,EUR')
+    const res = await fetch('https://open.er-api.com/v6/latest/RUB')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
+    if (data.result !== 'success') throw new Error('API error')
     const rates = {
       RUB: 1,
       USD: data.rates?.USD ?? FALLBACK_RATES.USD,
