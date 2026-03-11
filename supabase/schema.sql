@@ -814,14 +814,13 @@ BEGIN
         'id',         sub.opp_id,
         'first_name', sub.first_name,
         'username',   sub.username,
-        'avatar_url', sub.avatar_url,
-        'last_seen',  sub.last_seen
+        'avatar_url', sub.avatar_url
       )
     )
     FROM (
       SELECT DISTINCT ON (opp_id)
         CASE WHEN d.creator_id = p_user_id THEN d.opponent_id ELSE d.creator_id END AS opp_id,
-        u.first_name, u.username, u.avatar_url, u.last_seen,
+        u.first_name, u.username, u.avatar_url,
         d.created_at
       FROM duels d
       JOIN users u ON u.id = CASE WHEN d.creator_id = p_user_id THEN d.opponent_id ELSE d.creator_id END
@@ -830,7 +829,7 @@ BEGIN
         AND d.opponent_id IS NOT NULL
       ORDER BY opp_id, d.created_at DESC
     ) sub
-    ORDER BY sub.last_seen DESC NULLS LAST
+    ORDER BY sub.created_at DESC
     LIMIT p_limit
   ), '[]'::JSONB);
 END;
@@ -972,7 +971,16 @@ LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 BEGIN
   RETURN COALESCE((
-    SELECT jsonb_agg(row_to_jsonb(sub))
+    SELECT jsonb_agg(
+      jsonb_build_object(
+        'id',              sub.id,
+        'first_name',      sub.first_name,
+        'username',        sub.username,
+        'avatar_url',      sub.avatar_url,
+        'is_friend',       sub.is_friend,
+        'request_pending', sub.request_pending
+      )
+    )
     FROM (
       SELECT
         u.id,
