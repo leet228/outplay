@@ -1,44 +1,38 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
+import { getReferralsList } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import './Shop.css'
 
-const PLANS = [
-  {
-    id: '1m',
-    months: 1,
-    price: 499,
-    perMonth: 499,
-    savings: null,
-    badge: null,
-    gradient: 'linear-gradient(145deg, #1e1b4b 0%, #3730a3 100%)',
-    glow: '#6366f1',
-    borderColor: '#6366f155',
-  },
-  {
-    id: '6m',
-    months: 6,
-    price: 2199,
-    perMonth: 366,
-    savings: 795,
-    badge: 'popular',
-    gradient: 'linear-gradient(145deg, #3b0764 0%, #7e22ce 100%)',
-    glow: '#a855f7',
-    borderColor: '#a855f788',
-  },
-  {
-    id: '12m',
-    months: 12,
-    price: 3499,
-    perMonth: 292,
-    savings: 2489,
-    badge: 'best',
-    gradient: 'linear-gradient(145deg, #431407 0%, #c2410c 100%)',
-    glow: '#f97316',
-    borderColor: '#f9731688',
-  },
+// Visual metadata for each plan slot (by position: 0=1m, 1=6m, 2=12m)
+const PLAN_META = [
+  { badge: null,     gradient: 'linear-gradient(145deg, #1e1b4b 0%, #3730a3 100%)', glow: '#6366f1', borderColor: '#6366f155' },
+  { badge: 'popular',gradient: 'linear-gradient(145deg, #3b0764 0%, #7e22ce 100%)', glow: '#a855f7', borderColor: '#a855f788' },
+  { badge: 'best',   gradient: 'linear-gradient(145deg, #431407 0%, #c2410c 100%)', glow: '#f97316', borderColor: '#f9731688' },
 ]
+
+// Merge DB plans with visual metadata
+function mergePlans(dbPlans) {
+  return dbPlans.map((p, i) => ({
+    id:          p.id,
+    months:      p.months,
+    price:       p.price,
+    perMonth:    p.per_month,
+    savings:     p.savings || null,
+    badge:       PLAN_META[i]?.badge      ?? null,
+    gradient:    PLAN_META[i]?.gradient   ?? 'linear-gradient(145deg,#1c1c1e,#2c2c2e)',
+    glow:        PLAN_META[i]?.glow       ?? '#3b82f6',
+    borderColor: PLAN_META[i]?.borderColor ?? '#3b82f655',
+  }))
+}
+
+// Fallback static plans (used before DB loads)
+const STATIC_PLANS = PLAN_META.map((m, i) => ({
+  id: ['1m','6m','12m'][i], months: [1,6,12][i],
+  price: [499,2199,3499][i], perMonth: [499,366,292][i],
+  savings: [null,795,2489][i], ...m,
+}))
 
 const PRO_FEATURES = [
   { emoji: '📊', key: 'proFeat1' },
@@ -48,25 +42,7 @@ const PRO_FEATURES = [
   { emoji: '🎨', key: 'proFeat5' },
 ]
 
-/* ── Referral mock data ── */
-const REFERRAL_PAGE_SIZE = 10
-
-const mockReferrals = [
-  { id: 1,  first_name: 'Александр', username: 'alex_trade',  pnl: 4850, earned: { day: 12, week: 68, month: 210, all: 485 } },
-  { id: 2,  first_name: 'Мария',     username: 'masha_win',   pnl: 2130, earned: { day: 8,  week: 45, month: 130, all: 213 } },
-  { id: 3,  first_name: 'Дмитрий',   username: 'dmitry_x',    pnl: 1740, earned: { day: 6,  week: 32, month: 95,  all: 174 } },
-  { id: 4,  first_name: 'Кирилл',    username: 'kirill_up',   pnl: 1220, earned: { day: 4,  week: 24, month: 72,  all: 122 } },
-  { id: 5,  first_name: 'Анна',      username: 'anna_pro',    pnl: 980,  earned: { day: 3,  week: 18, month: 55,  all: 98  } },
-  { id: 6,  first_name: 'Сергей',    username: 'serg_bet',    pnl: 760,  earned: { day: 2,  week: 14, month: 42,  all: 76  } },
-  { id: 7,  first_name: 'Оля',       username: 'olya_q',      pnl: 530,  earned: { day: 0,  week: 9,  month: 28,  all: 53  } },
-  { id: 8,  first_name: 'Максим',    username: 'max_mm',      pnl: 390,  earned: { day: 0,  week: 7,  month: 21,  all: 39  } },
-  { id: 9,  first_name: 'Лера',      username: 'lera_win',    pnl: 210,  earned: { day: 0,  week: 5,  month: 12,  all: 21  } },
-  { id: 10, first_name: 'Паша',      username: 'pasha_ok',    pnl: 95,   earned: { day: 0,  week: 2,  month: 5,   all: 9   } },
-  { id: 11, first_name: 'Игорь',     username: 'igor_game',   pnl: 450,  earned: { day: 0,  week: 6,  month: 18,  all: 45  } },
-  { id: 12, first_name: 'Татьяна',   username: 'tanya_t',     pnl: 320,  earned: { day: 0,  week: 4,  month: 14,  all: 32  } },
-]
-
-const mockEarnings = { day: 35, week: 210, month: 780, all: 1367 }
+const REFERRAL_PAGE_SIZE = 20
 
 const AVATAR_COLORS = ['#6366f1', '#a855f7', '#f97316', '#22c55e', '#3b82f6', '#ec4899', '#f59e0b', '#14b8a6']
 function avatarColor(name) {
@@ -175,10 +151,34 @@ function PlanSheet({ plan, t, currency, onClose }) {
 
 /* ── Referral Section ── */
 function ReferralSection({ t, currency, user }) {
+  const { refEarnings, referrals, referralsLoading, setReferrals, setReferralsLoading } = useGameStore()
   const [copied, setCopied] = useState(false)
   const [period, setPeriod] = useState('all')
   const [visible, setVisible] = useState(REFERRAL_PAGE_SIZE)
   const copyTimer = useRef(null)
+
+  // Lazy load referrals list on first Shop visit, then cache in store
+  useEffect(() => {
+    if (referrals !== null || referralsLoading || !user?.id || user.id === 'dev') return
+    setReferralsLoading(true)
+    getReferralsList(user.id, 50, 0)
+      .then((result) => {
+        setReferrals({
+          total: result.total ?? 0,
+          items: (result.items ?? []).map(r => ({
+            ...r,
+            earned: {
+              day:   r.earned_day   ?? 0,
+              week:  r.earned_week  ?? 0,
+              month: r.earned_month ?? 0,
+              all:   r.earned_all   ?? 0,
+            },
+          })),
+        })
+      })
+      .catch(() => setReferrals({ total: 0, items: [] }))
+      .finally(() => setReferralsLoading(false))
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const refLink = `https://t.me/outplay_bot?start=ref_${user?.id ?? 'dev'}`
   const shortLink = `t.me/outplay_bot?start=ref_${user?.id ?? 'dev'}`
@@ -210,10 +210,13 @@ function ReferralSection({ t, currency, user }) {
     { key: 'all',   label: t.refAll },
   ]
 
-  const earnings = mockEarnings[period]
-  const sorted = [...mockReferrals].sort((a, b) => b.earned[period] - a.earned[period])
+  // Dev mock: use store refEarnings (set at bootstrap); real users also use store
+  const earnings = refEarnings ? (refEarnings[period] ?? 0) : 0
+  const items = referrals?.items ?? []
+  const total = referrals?.total ?? 0
+  const sorted = [...items].sort((a, b) => b.earned[period] - a.earned[period])
   const displayed = sorted.slice(0, visible)
-  const hasMore = visible < sorted.length
+  const hasMore = visible < items.length
 
   return (
     <div className="ref-section">
@@ -295,16 +298,29 @@ function ReferralSection({ t, currency, user }) {
       <div className="ref-list-card">
         <div className="ref-list-header">
           <span className="ref-list-title">{t.refCount}</span>
-          <span className="ref-list-count">{mockReferrals.length}</span>
+          <span className="ref-list-count">{referralsLoading && referrals === null ? '…' : total}</span>
         </div>
 
-        {mockReferrals.length === 0 ? (
+        {referralsLoading && referrals === null ? (
+          /* Skeleton rows while loading */
+          <div className="ref-rows-wrap">
+            {[0,1,2].map(i => (
+              <div key={i} className="ref-row ref-row--skeleton">
+                <div className="ref-avatar ref-skeleton-box" style={{ width: 36, height: 36, borderRadius: '50%' }} />
+                <div className="ref-info">
+                  <div className="ref-skeleton-box" style={{ width: 90, height: 13, borderRadius: 6, marginBottom: 4 }} />
+                  <div className="ref-skeleton-box" style={{ width: 60, height: 11, borderRadius: 6 }} />
+                </div>
+                <div className="ref-skeleton-box" style={{ width: 50, height: 13, borderRadius: 6 }} />
+              </div>
+            ))}
+          </div>
+        ) : items.length === 0 ? (
           <div className="ref-empty">{t.refEmpty}</div>
         ) : (
           <>
             <div className="ref-rows-wrap">
               {displayed.map(r => {
-                const isPos = r.pnl >= 0
                 const color = avatarColor(r.first_name)
                 return (
                   <div key={r.id} className="ref-row">
@@ -343,8 +359,9 @@ function ReferralSection({ t, currency, user }) {
 
 /* ── Shop ── */
 export default function Shop() {
-  const { lang, currency, user } = useGameStore()
+  const { lang, currency, user, plans } = useGameStore()
   const t = translations[lang]
+  const PLANS = plans.length > 0 ? mergePlans(plans) : STATIC_PLANS
   const [active, setActive] = useState(1)
   const [sheetPlan, setSheetPlan] = useState(null)
   const trackRef = useRef(null)

@@ -7,7 +7,7 @@
 -- ║  1. USERS                                 ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   telegram_id   BIGINT UNIQUE NOT NULL,
   username      TEXT,
@@ -26,15 +26,15 @@ CREATE TABLE users (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_users_telegram ON users(telegram_id);
-CREATE INDEX idx_users_balance ON users(balance DESC);
-CREATE INDEX idx_users_referred_by ON users(referred_by);
+CREATE INDEX IF NOT EXISTS idx_users_telegram ON users(telegram_id);
+CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance DESC);
+CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  2. QUESTIONS                             ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE questions (
+CREATE TABLE IF NOT EXISTS questions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   category      TEXT NOT NULL
                 CHECK (category IN ('general','history','science','sport','movies','music')),
@@ -46,14 +46,14 @@ CREATE TABLE questions (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_questions_category ON questions(category);
-CREATE INDEX idx_questions_lang ON questions(lang);
+CREATE INDEX IF NOT EXISTS idx_questions_category ON questions(category);
+CREATE INDEX IF NOT EXISTS idx_questions_lang ON questions(lang);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  3. DUELS                                 ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE duels (
+CREATE TABLE IF NOT EXISTS duels (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   creator_id      UUID NOT NULL REFERENCES users(id),
   opponent_id     UUID REFERENCES users(id),
@@ -70,16 +70,16 @@ CREATE TABLE duels (
   finished_at     TIMESTAMPTZ
 );
 
-CREATE INDEX idx_duels_status ON duels(status);
-CREATE INDEX idx_duels_creator ON duels(creator_id);
-CREATE INDEX idx_duels_opponent ON duels(opponent_id);
-CREATE INDEX idx_duels_created ON duels(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_duels_status ON duels(status);
+CREATE INDEX IF NOT EXISTS idx_duels_creator ON duels(creator_id);
+CREATE INDEX IF NOT EXISTS idx_duels_opponent ON duels(opponent_id);
+CREATE INDEX IF NOT EXISTS idx_duels_created ON duels(created_at DESC);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  4. FRIENDS                               ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE friends (
+CREATE TABLE IF NOT EXISTS friends (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   friend_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -87,11 +87,11 @@ CREATE TABLE friends (
   UNIQUE(user_id, friend_id)
 );
 
-CREATE INDEX idx_friends_user ON friends(user_id);
-CREATE INDEX idx_friends_friend ON friends(friend_id);
+CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_id);
+CREATE INDEX IF NOT EXISTS idx_friends_friend ON friends(friend_id);
 
 -- Запрос дружбы
-CREATE TABLE friend_requests (
+CREATE TABLE IF NOT EXISTS friend_requests (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   from_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   to_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -101,13 +101,13 @@ CREATE TABLE friend_requests (
   UNIQUE(from_id, to_id)
 );
 
-CREATE INDEX idx_friend_requests_to ON friend_requests(to_id, status);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON friend_requests(to_id, status);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  5. GUILDS                                ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE guild_seasons (
+CREATE TABLE IF NOT EXISTS guild_seasons (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   start_date  TIMESTAMPTZ NOT NULL,
   end_date    TIMESTAMPTZ NOT NULL,
@@ -116,7 +116,7 @@ CREATE TABLE guild_seasons (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE guilds (
+CREATE TABLE IF NOT EXISTS guilds (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name          TEXT NOT NULL,
   description   TEXT DEFAULT '',
@@ -127,9 +127,9 @@ CREATE TABLE guilds (
   updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_guilds_creator ON guilds(creator_id);
+CREATE INDEX IF NOT EXISTS idx_guilds_creator ON guilds(creator_id);
 
-CREATE TABLE guild_members (
+CREATE TABLE IF NOT EXISTS guild_members (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   guild_id    UUID NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -139,11 +139,11 @@ CREATE TABLE guild_members (
   UNIQUE(guild_id, user_id)
 );
 
-CREATE INDEX idx_gm_guild ON guild_members(guild_id);
-CREATE INDEX idx_gm_user ON guild_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_gm_guild ON guild_members(guild_id);
+CREATE INDEX IF NOT EXISTS idx_gm_user ON guild_members(user_id);
 
 -- PnL гильдий по сезонам
-CREATE TABLE guild_season_stats (
+CREATE TABLE IF NOT EXISTS guild_season_stats (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   guild_id    UUID NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
   season_id   UUID NOT NULL REFERENCES guild_seasons(id) ON DELETE CASCADE,
@@ -151,10 +151,10 @@ CREATE TABLE guild_season_stats (
   UNIQUE(guild_id, season_id)
 );
 
-CREATE INDEX idx_gss_season ON guild_season_stats(season_id, pnl DESC);
+CREATE INDEX IF NOT EXISTS idx_gss_season ON guild_season_stats(season_id, pnl DESC);
 
 -- PnL участников в гильдии по сезонам
-CREATE TABLE guild_member_stats (
+CREATE TABLE IF NOT EXISTS guild_member_stats (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   guild_id    UUID NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -163,13 +163,13 @@ CREATE TABLE guild_member_stats (
   UNIQUE(guild_id, user_id, season_id)
 );
 
-CREATE INDEX idx_gms_guild_season ON guild_member_stats(guild_id, season_id, pnl DESC);
+CREATE INDEX IF NOT EXISTS idx_gms_guild_season ON guild_member_stats(guild_id, season_id, pnl DESC);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  6. SUBSCRIPTIONS (PRO)                   ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE plans (
+CREATE TABLE IF NOT EXISTS plans (
   id          TEXT PRIMARY KEY,        -- '1m', '6m', '12m'
   months      INTEGER NOT NULL,
   price       INTEGER NOT NULL,        -- в Stars
@@ -178,13 +178,14 @@ CREATE TABLE plans (
   is_active   BOOLEAN NOT NULL DEFAULT true
 );
 
--- Предзаполняем планы
+-- Предзаполняем планы (ON CONFLICT DO NOTHING — безопасно при повторном запуске)
 INSERT INTO plans (id, months, price, per_month, savings) VALUES
   ('1m',  1,  499,  499, 0),
   ('6m',  6,  2199, 366, 795),
-  ('12m', 12, 3499, 292, 2489);
+  ('12m', 12, 3499, 292, 2489)
+ON CONFLICT (id) DO NOTHING;
 
-CREATE TABLE subscriptions (
+CREATE TABLE IF NOT EXISTS subscriptions (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users(id),
   plan_id     TEXT NOT NULL REFERENCES plans(id),
@@ -195,14 +196,14 @@ CREATE TABLE subscriptions (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_subs_user ON subscriptions(user_id, status);
-CREATE INDEX idx_subs_expires ON subscriptions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_subs_user ON subscriptions(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_subs_expires ON subscriptions(expires_at);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  7. REFERRALS                             ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE referrals (
+CREATE TABLE IF NOT EXISTS referrals (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   referrer_id       UUID NOT NULL REFERENCES users(id),
   referred_user_id  UUID NOT NULL REFERENCES users(id),
@@ -210,10 +211,10 @@ CREATE TABLE referrals (
   UNIQUE(referred_user_id)     -- юзер может быть приглашён только одним рефоводом
 );
 
-CREATE INDEX idx_referrals_referrer ON referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);
 
 -- Начисления за рефералов (каждая выигранная дуэль реферала → % рефоводу)
-CREATE TABLE referral_earnings (
+CREATE TABLE IF NOT EXISTS referral_earnings (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   referrer_id   UUID NOT NULL REFERENCES users(id),
   from_user_id  UUID NOT NULL REFERENCES users(id),
@@ -222,13 +223,13 @@ CREATE TABLE referral_earnings (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_ref_earn_referrer ON referral_earnings(referrer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ref_earn_referrer ON referral_earnings(referrer_id, created_at DESC);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  8. TRANSACTIONS (история баланса)        ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE transactions (
+CREATE TABLE IF NOT EXISTS transactions (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users(id),
   type        TEXT NOT NULL
@@ -245,14 +246,14 @@ CREATE TABLE transactions (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_tx_user ON transactions(user_id, created_at DESC);
-CREATE INDEX idx_tx_type ON transactions(user_id, type);
+CREATE INDEX IF NOT EXISTS idx_tx_user ON transactions(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tx_type ON transactions(user_id, type);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  9. USER DAILY STATS (PnL-график)        ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE user_daily_stats (
+CREATE TABLE IF NOT EXISTS user_daily_stats (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users(id),
   date        DATE NOT NULL,
@@ -262,13 +263,13 @@ CREATE TABLE user_daily_stats (
   UNIQUE(user_id, date)
 );
 
-CREATE INDEX idx_uds_user_date ON user_daily_stats(user_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_uds_user_date ON user_daily_stats(user_id, date DESC);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  10. PUSH TOKENS (уведомления)            ║
 -- ╚═══════════════════════════════════════════╝
 
-CREATE TABLE push_tokens (
+CREATE TABLE IF NOT EXISTS push_tokens (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token       TEXT NOT NULL,
@@ -293,7 +294,6 @@ DROP FUNCTION IF EXISTS edit_guild(UUID, UUID, TEXT, TEXT, TEXT);
 DROP FUNCTION IF EXISTS get_referral_stats(UUID);
 DROP FUNCTION IF EXISTS get_referral_earnings(UUID);
 DROP FUNCTION IF EXISTS subscribe_pro(UUID, TEXT, TEXT);
-DROP FUNCTION IF EXISTS set_updated_at();
 
 -- Атомарное изменение баланса
 CREATE OR REPLACE FUNCTION increment_balance(p_user_id UUID, p_amount INTEGER)
@@ -574,7 +574,7 @@ BEGIN
 END;
 $$;
 
--- Профиль пользователя — единый запрос (rank + daily_stats + total_pnl)
+-- Профиль пользователя — единый запрос (rank + daily_stats + total_pnl + ref_earnings)
 DROP FUNCTION IF EXISTS get_user_profile(UUID, INTEGER);
 
 CREATE OR REPLACE FUNCTION get_user_profile(p_user_id UUID, p_days INTEGER DEFAULT 30)
@@ -582,10 +582,14 @@ RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 DECLARE
-  v_balance INTEGER;
-  v_rank    INTEGER;
-  v_stats   JSONB;
-  v_total   INTEGER;
+  v_balance     INTEGER;
+  v_rank        INTEGER;
+  v_stats       JSONB;
+  v_total       INTEGER;
+  v_ref_day     INTEGER;
+  v_ref_week    INTEGER;
+  v_ref_month   INTEGER;
+  v_ref_all     INTEGER;
 BEGIN
   SELECT balance INTO v_balance FROM users WHERE id = p_user_id;
   IF v_balance IS NULL THEN
@@ -610,7 +614,73 @@ BEGIN
   SELECT COALESCE(SUM(pnl), 0) INTO v_total
   FROM user_daily_stats WHERE user_id = p_user_id;
 
-  RETURN jsonb_build_object('rank', v_rank, 'daily_stats', v_stats, 'total_pnl', v_total);
+  -- Referral earnings by period
+  SELECT COALESCE(SUM(amount), 0) INTO v_ref_day
+  FROM referral_earnings WHERE referrer_id = p_user_id AND created_at >= CURRENT_DATE;
+
+  SELECT COALESCE(SUM(amount), 0) INTO v_ref_week
+  FROM referral_earnings WHERE referrer_id = p_user_id AND created_at >= CURRENT_DATE - INTERVAL '7 days';
+
+  SELECT COALESCE(SUM(amount), 0) INTO v_ref_month
+  FROM referral_earnings WHERE referrer_id = p_user_id AND created_at >= CURRENT_DATE - INTERVAL '30 days';
+
+  SELECT COALESCE(SUM(amount), 0) INTO v_ref_all
+  FROM referral_earnings WHERE referrer_id = p_user_id;
+
+  RETURN jsonb_build_object(
+    'rank',         v_rank,
+    'daily_stats',  v_stats,
+    'total_pnl',    v_total,
+    'ref_earnings', jsonb_build_object('day', v_ref_day, 'week', v_ref_week, 'month', v_ref_month, 'all', v_ref_all)
+  );
+END;
+$$;
+
+-- Список рефералов с заработком по периодам (пагинация)
+DROP FUNCTION IF EXISTS get_referrals_list(UUID, INTEGER, INTEGER);
+
+CREATE OR REPLACE FUNCTION get_referrals_list(p_user_id UUID, p_limit INTEGER DEFAULT 50, p_offset INTEGER DEFAULT 0)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_total INTEGER;
+  v_items JSONB;
+BEGIN
+  SELECT COUNT(*) INTO v_total FROM referrals WHERE referrer_id = p_user_id;
+
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'id',           sub.uid,
+      'first_name',   sub.first_name,
+      'username',     sub.username,
+      'earned_day',   sub.earned_day,
+      'earned_week',  sub.earned_week,
+      'earned_month', sub.earned_month,
+      'earned_all',   sub.earned_all
+    ) ORDER BY sub.earned_all DESC
+  ), '[]'::JSONB)
+  INTO v_items
+  FROM (
+    SELECT
+      u.id        AS uid,
+      u.first_name,
+      u.username,
+      COALESCE(SUM(CASE WHEN re.created_at >= CURRENT_DATE THEN re.amount ELSE 0 END), 0)                    AS earned_day,
+      COALESCE(SUM(CASE WHEN re.created_at >= CURRENT_DATE - INTERVAL '7 days' THEN re.amount ELSE 0 END), 0) AS earned_week,
+      COALESCE(SUM(CASE WHEN re.created_at >= CURRENT_DATE - INTERVAL '30 days' THEN re.amount ELSE 0 END), 0) AS earned_month,
+      COALESCE(SUM(re.amount), 0)                                                                              AS earned_all
+    FROM referrals r
+    JOIN users u ON u.id = r.referred_id
+    LEFT JOIN referral_earnings re
+      ON re.from_user_id = r.referred_id AND re.referrer_id = p_user_id
+    WHERE r.referrer_id = p_user_id
+    GROUP BY u.id, u.first_name, u.username
+    ORDER BY earned_all DESC
+    LIMIT p_limit OFFSET p_offset
+  ) sub;
+
+  RETURN jsonb_build_object('total', v_total, 'items', v_items);
 END;
 $$;
 
@@ -629,6 +699,8 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_users_updated ON users;
+DROP TRIGGER IF EXISTS trg_guilds_updated ON guilds;
 CREATE TRIGGER trg_users_updated BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_guilds_updated BEFORE UPDATE ON guilds FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
@@ -655,6 +727,24 @@ ALTER TABLE user_daily_stats    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_tokens         ENABLE ROW LEVEL SECURITY;
 
 -- Чтение — открыто
+DROP POLICY IF EXISTS "read_all" ON users;
+DROP POLICY IF EXISTS "read_all" ON questions;
+DROP POLICY IF EXISTS "read_all" ON duels;
+DROP POLICY IF EXISTS "read_all" ON friends;
+DROP POLICY IF EXISTS "read_all" ON friend_requests;
+DROP POLICY IF EXISTS "read_all" ON guilds;
+DROP POLICY IF EXISTS "read_all" ON guild_members;
+DROP POLICY IF EXISTS "read_all" ON guild_seasons;
+DROP POLICY IF EXISTS "read_all" ON guild_season_stats;
+DROP POLICY IF EXISTS "read_all" ON guild_member_stats;
+DROP POLICY IF EXISTS "read_all" ON plans;
+DROP POLICY IF EXISTS "read_all" ON subscriptions;
+DROP POLICY IF EXISTS "read_all" ON referrals;
+DROP POLICY IF EXISTS "read_all" ON referral_earnings;
+DROP POLICY IF EXISTS "read_all" ON transactions;
+DROP POLICY IF EXISTS "read_all" ON user_daily_stats;
+DROP POLICY IF EXISTS "read_all" ON push_tokens;
+
 CREATE POLICY "read_all" ON users             FOR SELECT USING (true);
 CREATE POLICY "read_all" ON questions          FOR SELECT USING (true);
 CREATE POLICY "read_all" ON duels              FOR SELECT USING (true);
@@ -674,6 +764,17 @@ CREATE POLICY "read_all" ON user_daily_stats   FOR SELECT USING (true);
 CREATE POLICY "read_all" ON push_tokens        FOR SELECT USING (true);
 
 -- Запись — через SECURITY DEFINER RPC
+DROP POLICY IF EXISTS "write_all" ON users;
+DROP POLICY IF EXISTS "write_all" ON duels;
+DROP POLICY IF EXISTS "write_all" ON friends;
+DROP POLICY IF EXISTS "write_all" ON friend_requests;
+DROP POLICY IF EXISTS "write_all" ON guild_members;
+DROP POLICY IF EXISTS "write_all" ON subscriptions;
+DROP POLICY IF EXISTS "write_all" ON referrals;
+DROP POLICY IF EXISTS "write_all" ON transactions;
+DROP POLICY IF EXISTS "write_all" ON user_daily_stats;
+DROP POLICY IF EXISTS "write_all" ON push_tokens;
+
 CREATE POLICY "write_all" ON users             FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "write_all" ON duels             FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "write_all" ON friends           FOR ALL USING (true) WITH CHECK (true);

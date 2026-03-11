@@ -37,6 +37,20 @@ const useGameStore = create((set, get) => ({
   totalPnl: 0,
   setTotalPnl: (totalPnl) => set({ totalPnl }),
 
+  // Shop — plans (fetched at bootstrap, cached)
+  plans: [],
+  setPlans: (plans) => set({ plans }),
+
+  // Shop — referral earnings by period (fetched at bootstrap via get_user_profile)
+  refEarnings: null,
+  setRefEarnings: (refEarnings) => set({ refEarnings }),
+
+  // Shop — referrals list (lazy loaded on first Shop visit, null = not loaded yet)
+  referrals: null,         // { total, items } | null
+  referralsLoading: false,
+  setReferrals: (referrals) => set({ referrals }),
+  setReferralsLoading: (v) => set({ referralsLoading: v }),
+
   // Active duel
   activeDuel: null,
   setActiveDuel: (duel) => set({ activeDuel: duel }),

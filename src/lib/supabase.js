@@ -95,6 +95,28 @@ export function syncUserSettings(userId, settings) {
     })
 }
 
+// Plans — PRO subscription options from DB
+export async function getPlans() {
+  const { data, error } = await supabase
+    .from('plans')
+    .select('id, months, price, per_month, savings')
+    .eq('is_active', true)
+    .order('months', { ascending: true })
+  if (error) { console.error('getPlans error:', error); return [] }
+  return data ?? []
+}
+
+// Referrals list with per-period earnings (paginated)
+export async function getReferralsList(userId, limit = 50, offset = 0) {
+  const { data, error } = await supabase.rpc('get_referrals_list', {
+    p_user_id: userId,
+    p_limit:   limit,
+    p_offset:  offset,
+  })
+  if (error) { console.error('getReferralsList error:', error); return { total: 0, items: [] } }
+  return data ?? { total: 0, items: [] }
+}
+
 // Leaderboard
 export async function getLeaderboard(limit = 50) {
   const { data } = await supabase

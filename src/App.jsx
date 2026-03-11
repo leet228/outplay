@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
-import { getOrCreateUser, getUserProfile } from './lib/supabase'
+import { getOrCreateUser, getUserProfile, getPlans } from './lib/supabase'
 import useGameStore from './store/useGameStore'
 import './App.css'
 import BottomNav from './components/BottomNav'
@@ -106,6 +106,12 @@ export default function App() {
         { date: '2026-03-10', pnl: 180, games: 3, wins: 2 },
         { date: '2026-03-11', pnl: 90, games: 1, wins: 1 },
       ])
+      store.setRefEarnings({ day: 35, week: 210, month: 780, all: 1367 })
+      store.setPlans([
+        { id: '1m',  months: 1,  price: 499,  per_month: 499, savings: 0    },
+        { id: '6m',  months: 6,  price: 2199, per_month: 366, savings: 795  },
+        { id: '12m', months: 12, price: 3499, per_month: 292, savings: 2489 },
+      ])
       return
     }
 
@@ -113,13 +119,19 @@ export default function App() {
     setUser(user)
     setBalance(user.balance ?? 0)
 
-    // Single RPC: rank + daily stats + total PnL
-    const profile = await getUserProfile(user.id)
+    // Parallel: profile RPC (rank+stats+pnl+ref_earnings) + plans
+    const [profile, plans] = await Promise.all([
+      getUserProfile(user.id),
+      getPlans(),
+    ])
+
     if (profile && !profile.error) {
       store.setRank(profile.rank)
       store.setDailyStats(profile.daily_stats ?? [])
       store.setTotalPnl(profile.total_pnl ?? 0)
+      store.setRefEarnings(profile.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
     }
+    if (plans.length > 0) store.setPlans(plans)
 
     // Sync currency/lang from DB → localStorage (DB is source of truth for cross-device)
     const currencyMap = {
