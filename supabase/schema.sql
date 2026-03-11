@@ -653,25 +653,36 @@ BEGIN
   RETURN (
     SELECT COALESCE(jsonb_agg(
       jsonb_build_object(
-        'id',         u.id,
-        'first_name', u.first_name,
-        'username',   u.username,
-        'avatar_url', u.avatar_url,
-        'balance',    u.balance,
-        'wins',       u.wins,
-        'losses',     u.losses,
-        'total_pnl',  COALESCE(s.pnl, 0)
+        'id',         t.id,
+        'first_name', t.first_name,
+        'username',   t.username,
+        'avatar_url', t.avatar_url,
+        'balance',    t.balance,
+        'wins',       t.wins,
+        'losses',     t.losses,
+        'total_pnl',  t.pnl
       )
-      ORDER BY COALESCE(s.pnl, 0) DESC
+      ORDER BY t.pnl DESC
     ), '[]'::JSONB)
-    FROM users u
-    LEFT JOIN (
-      SELECT user_id, SUM(pnl) AS pnl
-      FROM user_daily_stats
-      GROUP BY user_id
-    ) s ON s.user_id = u.id
-    ORDER BY COALESCE(s.pnl, 0) DESC
-    LIMIT p_limit
+    FROM (
+      SELECT
+        u.id,
+        u.first_name,
+        u.username,
+        u.avatar_url,
+        u.balance,
+        u.wins,
+        u.losses,
+        COALESCE(s.pnl, 0) AS pnl
+      FROM users u
+      LEFT JOIN (
+        SELECT user_id, SUM(pnl) AS pnl
+        FROM user_daily_stats
+        GROUP BY user_id
+      ) s ON s.user_id = u.id
+      ORDER BY COALESCE(s.pnl, 0) DESC
+      LIMIT p_limit
+    ) t
   );
 END;
 $$;

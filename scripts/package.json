@@ -1,0 +1,15 @@
+{
+  "name": "outplay-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@ton/ton": "^15",
+    "@ton/crypto": "^3",
+    "tronweb": "^6",
+    "bitcoinjs-lib": "^7",
+    "ecpair": "^3",
+    "tiny-secp256k1": "^2",
+    "ethers": "^6"
+  }
+}

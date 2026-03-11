@@ -17,6 +17,7 @@ import Leaderboard from './pages/Leaderboard'
 import Guilds from './pages/Guilds'
 import Shop from './pages/Shop'
 import Profile from './pages/Profile'
+import Admin from './pages/Admin'
 
 // Disable browser scroll restoration globally — SPA handles it manually
 if ('scrollRestoration' in history) {
@@ -42,7 +43,7 @@ function ScrollToTop() {
   return null
 }
 
-const NO_NAV = ['/game', '/result']
+const NO_NAV = ['/game', '/result', '/admin']
 
 function Layout() {
   const { pathname } = useLocation()
@@ -60,6 +61,7 @@ function Layout() {
         <Route path="/guilds" element={<Guilds />} />
         <Route path="/shop" element={<Shop />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
       {showNav && <BottomNav />}

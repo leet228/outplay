@@ -67,8 +67,14 @@
   color: var(--text);
 }
 
-.topbar-logo {
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   align-self: center;
+}
+
+.topbar-logo {
   font-size: 42px;
   font-weight: 900;
   letter-spacing: 3px;
@@ -78,6 +84,22 @@
   background-clip: text;
   pointer-events: none;
   filter: drop-shadow(0 0 10px #3B82F6bb) drop-shadow(0 0 26px #3B82F650);
+}
+
+.topbar-admin {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+  padding: 5px 6px;
+  color: var(--accent);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-admin:active {
+  opacity: 0.6;
 }
 
 .topbar-balance {

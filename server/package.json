@@ -1,0 +1,19 @@
+{
+  "name": "outplay-server",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4",
+    "cors": "^2",
+    "dotenv": "^16",
+    "@ton/ton": "^15",
+    "@ton/crypto": "^3",
+    "tronweb": "^6",
+    "ethers": "^6"
+  }
+}
