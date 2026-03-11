@@ -93,7 +93,7 @@ async function fetchBtcBalance(addr) {
 
 async function fetchEthBalance(addr) {
   try {
-    const r = await fetch('https://eth.llamarpc.com', {
+    const r = await fetch('https://cloudflare-eth.com', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [addr, 'latest'] }),
     })
