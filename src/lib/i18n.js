@@ -76,6 +76,16 @@ export const translations = {
     friendsInvite: 'Пригласить',
     friendsRemove: 'Удалить',
     friendsEmpty: 'Пока нет друзей',
+    friendsRequests: 'Заявки в друзья',
+    friendsAccept: 'Принять',
+    friendsDecline: 'Отклонить',
+    friendsAdd: 'Добавить',
+    friendsPending: 'Отправлено',
+    friendsSearch: 'Поиск по всем игрокам...',
+    friendsSearchEmpty: 'Никого не найдено',
+    friendsBack: 'Назад',
+    friendsRequestSent: 'Заявка отправлена',
+    friendsAdded: 'Добавлен в друзья',
 
     // Leaderboard
     leaderboard: 'Лидерборд',
@@ -255,6 +265,16 @@ export const translations = {
     friendsInvite: 'Invite',
     friendsRemove: 'Remove',
     friendsEmpty: 'No friends yet',
+    friendsRequests: 'Friend requests',
+    friendsAccept: 'Accept',
+    friendsDecline: 'Decline',
+    friendsAdd: 'Add',
+    friendsPending: 'Pending',
+    friendsSearch: 'Search all players...',
+    friendsSearchEmpty: 'No one found',
+    friendsBack: 'Back',
+    friendsRequestSent: 'Request sent',
+    friendsAdded: 'Added to friends',
 
     // Leaderboard
     leaderboard: 'Leaderboard',

@@ -26,6 +26,7 @@
 }
 
 .topbar-friends {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,6 +40,26 @@
   padding: 0;
   transition: transform 0.1s, color 0.15s;
   -webkit-tap-highlight-color: transparent;
+}
+
+.topbar-friends-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  line-height: 1;
+  border: 2px solid var(--bg);
+  pointer-events: none;
 }
 
 .topbar-friends:active {
@@ -1090,4 +1111,102 @@
 .friends-action-btn.remove {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+}
+
+.friends-action-btn.accept {
+  background: #22c55e;
+  color: #fff;
+}
+
+.friends-action-btn.decline {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.friends-action-btn.add {
+  background: var(--accent);
+  color: #fff;
+}
+
+.friends-action-btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Incoming requests section */
+.friends-requests {
+  padding: 0 16px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.friends-request-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.friends-request-row {
+  padding-right: 8px;
+}
+
+.friends-req-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* Back button variant */
+.friends-back-btn {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+/* Search mode */
+.friends-search-action {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.friends-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.friends-badge--friend {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.friends-badge--pending {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Spinner */
+.friends-search-loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.friends-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: friends-spin 0.7s linear infinite;
+}
+
+@keyframes friends-spin {
+  to { transform: rotate(360deg); }
 }

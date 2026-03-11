@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
+import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend } from '../lib/supabase'
 import './Home.css'
 
 /* ── Icons ── */
@@ -328,20 +329,45 @@ function GameSheet({ game, t, balance, currency, onClose }) {
   )
 }
 
-/* ── Friends Panel (Recent Opponents) ── */
+/* ── Friends Panel ── */
 const ONLINE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
 
-function FriendsPanel({ open, onClose, t, currency, recentOpponents }) {
+function FriendAvatar({ user, showOnline }) {
+  return (
+    <div className="friends-avatar-wrap">
+      {user.avatar_url
+        ? <img className="friends-avatar" src={user.avatar_url} alt="" style={{ objectFit: 'cover' }} />
+        : <div className="friends-avatar">{user.first_name?.[0] ?? '?'}</div>}
+      {showOnline && <span className="friends-status-dot online" />}
+    </div>
+  )
+}
+
+function FriendsPanel({ open, onClose, t, user }) {
+  const {
+    friends, friendRequests, sentRequestIds,
+    setFriends, setFriendRequests, setSentRequestIds,
+  } = useGameStore()
+
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState(null)
+  const [searchMode, setSearchMode] = useState(false)
+  const [searchResults, setSearchResults] = useState([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [actionLoading, setActionLoading] = useState(null)
+  const debounceRef = useRef(null)
 
+  // Reset on close
   useEffect(() => {
     if (!open) {
       setQuery('')
       setActiveId(null)
+      setSearchMode(false)
+      setSearchResults([])
     }
   }, [open])
 
+  // Telegram BackButton
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return
@@ -355,22 +381,109 @@ function FriendsPanel({ open, onClose, t, currency, recentOpponents }) {
     return () => tg.BackButton.offClick(onClose)
   }, [open, onClose])
 
+  // ── Search handlers ──
+  function handleSearchQuery(val) {
+    setQuery(val)
+    if (!searchMode) return // local filter only
+    clearTimeout(debounceRef.current)
+    const q = val.trim()
+    if (q.length < 2) { setSearchResults([]); setSearchLoading(false); return }
+    setSearchLoading(true)
+    debounceRef.current = setTimeout(async () => {
+      const results = await searchUsersApi(user?.id, q)
+      setSearchResults(results)
+      setSearchLoading(false)
+    }, 300)
+  }
+
+  function enterSearchMode() {
+    haptic('light')
+    setSearchMode(true)
+    setQuery('')
+    setSearchResults([])
+    setActiveId(null)
+  }
+
+  function exitSearchMode() {
+    haptic('light')
+    setSearchMode(false)
+    setQuery('')
+    setSearchResults([])
+  }
+
+  // ── Action handlers ──
+  async function handleAccept(req) {
+    if (actionLoading) return
+    haptic('medium')
+    setActionLoading(req.request_id)
+    const result = await acceptFriendRequest(user.id, req.request_id)
+    if (!result?.error) {
+      setFriendRequests(friendRequests.filter(r => r.request_id !== req.request_id))
+      setFriends([...friends, {
+        id: req.from_user.id,
+        first_name: req.from_user.first_name,
+        username: req.from_user.username,
+        avatar_url: req.from_user.avatar_url,
+        last_seen: new Date().toISOString(),
+      }])
+    }
+    setActionLoading(null)
+  }
+
+  async function handleDecline(req) {
+    if (actionLoading) return
+    haptic('light')
+    setActionLoading(req.request_id)
+    const result = await rejectFriendRequest(user.id, req.request_id)
+    if (!result?.error) {
+      setFriendRequests(friendRequests.filter(r => r.request_id !== req.request_id))
+    }
+    setActionLoading(null)
+  }
+
+  async function handleRemoveFriend(friendId) {
+    if (actionLoading) return
+    haptic('medium')
+    setActionLoading(friendId)
+    const result = await removeFriend(user.id, friendId)
+    if (!result?.error) {
+      setFriends(friends.filter(f => f.id !== friendId))
+    }
+    setActionLoading(null)
+    setActiveId(null)
+  }
+
+  async function handleSendRequest(targetUser) {
+    if (actionLoading) return
+    haptic('medium')
+    setActionLoading(targetUser.id)
+    const result = await sendFriendRequest(user.id, targetUser.id)
+    if (result?.result === 'auto_accepted') {
+      setFriends([...friends, {
+        id: targetUser.id, first_name: targetUser.first_name,
+        username: targetUser.username, avatar_url: targetUser.avatar_url,
+        last_seen: new Date().toISOString(),
+      }])
+      setSearchResults(prev => prev.map(r =>
+        r.id === targetUser.id ? { ...r, is_friend: true } : r
+      ))
+    } else if (!result?.error) {
+      setSentRequestIds([...sentRequestIds, targetUser.id])
+      setSearchResults(prev => prev.map(r =>
+        r.id === targetUser.id ? { ...r, request_pending: true } : r
+      ))
+    }
+    setActionLoading(null)
+  }
+
+  // ── Friends list data ──
   const now = Date.now()
-  const withOnline = (recentOpponents ?? []).map(f => ({
+  const withOnline = (friends ?? []).map(f => ({
     ...f,
     online: f.last_seen ? (now - new Date(f.last_seen).getTime()) < ONLINE_THRESHOLD : false,
   }))
-  const filtered = withOnline.filter(f =>
-    !query || f.first_name?.toLowerCase().includes(query.toLowerCase()) ||
-    (f.username && f.username.toLowerCase().includes(query.toLowerCase()))
-  )
-  const online = filtered.filter(f => f.online)
-  const offline = filtered.filter(f => !f.online)
-
-  function handleRowClick(id) {
-    haptic('light')
-    setActiveId(prev => prev === id ? null : id)
-  }
+  const onlineFriends = withOnline.filter(f => f.online)
+  const offlineFriends = withOnline.filter(f => !f.online)
 
   return (
     <>
@@ -383,84 +496,164 @@ function FriendsPanel({ open, onClose, t, currency, recentOpponents }) {
           </button>
         </div>
 
-        <div className="friends-search-wrap">
-          <svg className="friends-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-          </svg>
-          <input
-            className="friends-search"
-            placeholder={t.friendsFindPlaceholder}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-        </div>
+        {/* Incoming requests (only in friends mode) */}
+        {!searchMode && friendRequests.length > 0 && (
+          <div className="friends-requests">
+            <span className="friends-group-label">
+              <span className="friends-request-dot" />
+              {t.friendsRequests} · {friendRequests.length}
+            </span>
+            {friendRequests.map(req => (
+              <div key={req.request_id} className="friends-row friends-request-row">
+                <FriendAvatar user={req.from_user} />
+                <div className="friends-info">
+                  <span className="friends-name">{req.from_user.first_name}</span>
+                  {req.from_user.username && <span className="friends-username">@{req.from_user.username}</span>}
+                </div>
+                <div className="friends-req-actions">
+                  <button
+                    className="friends-action-btn accept"
+                    disabled={actionLoading === req.request_id}
+                    onClick={e => { e.stopPropagation(); handleAccept(req) }}
+                  >{t.friendsAccept}</button>
+                  <button
+                    className="friends-action-btn decline"
+                    disabled={actionLoading === req.request_id}
+                    onClick={e => { e.stopPropagation(); handleDecline(req) }}
+                  >{t.friendsDecline}</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-        <button className="friends-find-btn" onClick={() => haptic('light')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <line x1="19" y1="8" x2="19" y2="14"/>
-            <line x1="22" y1="11" x2="16" y2="11"/>
-          </svg>
-          {t.friendsFind}
-        </button>
+        {/* Search bar (only in search mode) / Find friends button */}
+        {!searchMode ? (
+          <button className="friends-find-btn" onClick={enterSearchMode}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <line x1="19" y1="8" x2="19" y2="14"/>
+              <line x1="22" y1="11" x2="16" y2="11"/>
+            </svg>
+            {t.friendsFind}
+          </button>
+        ) : (
+          <>
+            <div className="friends-search-wrap">
+              <svg className="friends-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input
+                className="friends-search"
+                placeholder={t.friendsSearch}
+                value={query}
+                onChange={e => handleSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <button className="friends-find-btn friends-back-btn" onClick={exitSearchMode}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              {t.friendsBack}
+            </button>
+          </>
+        )}
 
+        {/* Content */}
         <div className="friends-list">
-          {filtered.length === 0 && (
-            <span className="friends-empty">{t.friendsEmpty}</span>
-          )}
-
-          {online.length > 0 && (
+          {!searchMode ? (
             <>
-              <span className="friends-group-label">
-                <span className="friends-online-dot" />
-                {t.friendsOnline} · {online.length}
-              </span>
-              {online.map(f => (
-                <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => handleRowClick(f.id)}>
-                  <div className="friends-avatar-wrap">
-                    {f.avatar_url
-                      ? <img className="friends-avatar" src={f.avatar_url} alt="" style={{ objectFit: 'cover' }} />
-                      : <div className="friends-avatar">{f.first_name?.[0] ?? '?'}</div>}
-                    <span className="friends-status-dot online" />
-                  </div>
-                  <div className="friends-info">
-                    <span className="friends-name">{f.first_name}</span>
-                    {f.username && <span className="friends-username">@{f.username}</span>}
-                  </div>
-                  {activeId === f.id && (
-                    <div className="friends-actions">
-                      <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
+              {/* Friends list */}
+              {withOnline.length === 0 && friendRequests.length === 0 && (
+                <span className="friends-empty">{t.friendsEmpty}</span>
+              )}
+
+              {onlineFriends.length > 0 && (
+                <>
+                  <span className="friends-group-label">
+                    <span className="friends-online-dot" />
+                    {t.friendsOnline} · {onlineFriends.length}
+                  </span>
+                  {onlineFriends.map(f => (
+                    <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => { haptic('light'); setActiveId(prev => prev === f.id ? null : f.id) }}>
+                      <FriendAvatar user={f} showOnline />
+                      <div className="friends-info">
+                        <span className="friends-name">{f.first_name}</span>
+                        {f.username && <span className="friends-username">@{f.username}</span>}
+                      </div>
+                      {activeId === f.id && (
+                        <div className="friends-actions">
+                          <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
+                          <button className="friends-action-btn remove" disabled={actionLoading === f.id} onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  ))}
+                </>
+              )}
+
+              {offlineFriends.length > 0 && (
+                <>
+                  <span className="friends-group-label">
+                    {t.friendsOffline} · {offlineFriends.length}
+                  </span>
+                  {offlineFriends.map(f => (
+                    <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => { haptic('light'); setActiveId(prev => prev === f.id ? null : f.id) }}>
+                      <FriendAvatar user={f} />
+                      <div className="friends-info">
+                        <span className="friends-name">{f.first_name}</span>
+                        {f.username && <span className="friends-username">@{f.username}</span>}
+                      </div>
+                      {activeId === f.id && (
+                        <div className="friends-actions">
+                          <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
+                          <button className="friends-action-btn remove" disabled={actionLoading === f.id} onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
             </>
-          )}
-
-          {offline.length > 0 && (
+          ) : (
             <>
-              <span className="friends-group-label">
-                {t.friendsOffline} · {offline.length}
-              </span>
-              {offline.map(f => (
-                <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => handleRowClick(f.id)}>
-                  <div className="friends-avatar-wrap">
-                    {f.avatar_url
-                      ? <img className="friends-avatar" src={f.avatar_url} alt="" style={{ objectFit: 'cover' }} />
-                      : <div className="friends-avatar">{f.first_name?.[0] ?? '?'}</div>}
-                  </div>
-                  <div className="friends-info">
-                    <span className="friends-name">{f.first_name}</span>
-                    {f.username && <span className="friends-username">@{f.username}</span>}
-                  </div>
-                  {activeId === f.id && (
-                    <div className="friends-actions">
-                      <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
-                    </div>
-                  )}
+              {/* Global search results */}
+              {searchLoading && (
+                <div className="friends-search-loading">
+                  <div className="friends-spinner" />
                 </div>
-              ))}
+              )}
+              {!searchLoading && searchResults.length === 0 && query.trim().length >= 2 && (
+                <span className="friends-empty">{t.friendsSearchEmpty}</span>
+              )}
+              {searchResults.map(u => {
+                const isFriend = u.is_friend || friends.some(f => f.id === u.id)
+                const isPending = u.request_pending || sentRequestIds.includes(u.id)
+                return (
+                  <div key={u.id} className="friends-row">
+                    <FriendAvatar user={u} />
+                    <div className="friends-info">
+                      <span className="friends-name">{u.first_name}</span>
+                      {u.username && <span className="friends-username">@{u.username}</span>}
+                    </div>
+                    <div className="friends-search-action">
+                      {isFriend ? (
+                        <span className="friends-badge friends-badge--friend">✓</span>
+                      ) : isPending ? (
+                        <span className="friends-badge friends-badge--pending">{t.friendsPending}</span>
+                      ) : (
+                        <button
+                          className="friends-action-btn add"
+                          disabled={actionLoading === u.id}
+                          onClick={e => { e.stopPropagation(); handleSendRequest(u) }}
+                        >{t.friendsAdd}</button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </>
           )}
         </div>
@@ -478,7 +671,7 @@ const GAMES = [
 
 /* ── Home ── */
 export default function Home() {
-  const { balance, currency, lang, setDepositOpen, recentOpponents } = useGameStore()
+  const { balance, currency, lang, setDepositOpen, user, friendRequests } = useGameStore()
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)
   const [friendsOpen, setFriendsOpen] = useState(false)
@@ -505,12 +698,15 @@ export default function Home() {
         <span className="topbar-logo">OUTPLAY</span>
         <div className="topbar-row">
           <button className="topbar-friends" onClick={() => { haptic('medium'); setFriendsOpen(true) }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="8.5" cy="7" r="4"/>
+              <line x1="20" y1="8" x2="20" y2="14"/>
+              <line x1="23" y1="11" x2="17" y2="11"/>
             </svg>
+            {friendRequests.length > 0 && (
+              <span className="topbar-friends-badge">{friendRequests.length}</span>
+            )}
           </button>
           <div className="topbar-balance">
             <span className="topbar-currency">{currency.symbol}</span>
@@ -569,7 +765,7 @@ export default function Home() {
         </div>
       </div>
 
-      <FriendsPanel open={friendsOpen} onClose={closeFriends} t={t} currency={currency} recentOpponents={recentOpponents} />
+      <FriendsPanel open={friendsOpen} onClose={closeFriends} t={t} user={user} />
 
       <GameSheet
         game={sheetGame}

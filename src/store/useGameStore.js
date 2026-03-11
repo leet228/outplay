@@ -65,9 +65,17 @@ const useGameStore = create((set, get) => ({
   guildSeason: null,
   setGuildSeason: (v) => set({ guildSeason: v }),
 
-  // Recent opponents / friends (bootstrap)
+  // Recent opponents (bootstrap)
   recentOpponents: [],
   setRecentOpponents: (v) => set({ recentOpponents: v }),
+
+  // Friends (bootstrap)
+  friends: [],
+  setFriends: (v) => set({ friends: v }),
+  friendRequests: [],
+  setFriendRequests: (v) => set({ friendRequests: v }),
+  sentRequestIds: [],
+  setSentRequestIds: (v) => set({ sentRequestIds: v }),
 
   // Active duel
   activeDuel: null,

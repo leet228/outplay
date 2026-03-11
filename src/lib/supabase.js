@@ -202,3 +202,61 @@ export async function leaveGuild(userId) {
   if (error) { console.error('leaveGuild error:', error); return { error: error.message } }
   return data
 }
+
+// Friends — single RPC for all friends data (bootstrap)
+export async function getFriendsData(userId) {
+  const { data, error } = await supabase.rpc('get_friends_data', { p_user_id: userId })
+  if (error) { console.error('getFriendsData error:', error); return null }
+  return data
+}
+
+// Search users globally (for "Find friends" mode)
+export async function searchUsers(userId, query, limit = 20) {
+  const { data, error } = await supabase.rpc('search_users', {
+    p_user_id: userId,
+    p_query: query,
+    p_limit: limit,
+  })
+  if (error) { console.error('searchUsers error:', error); return [] }
+  return data ?? []
+}
+
+// Send friend request
+export async function sendFriendRequest(fromId, toId) {
+  const { data, error } = await supabase.rpc('send_friend_request', {
+    p_from_id: fromId,
+    p_to_id: toId,
+  })
+  if (error) { console.error('sendFriendRequest error:', error); return { error: error.message } }
+  return data
+}
+
+// Accept friend request
+export async function acceptFriendRequest(userId, requestId) {
+  const { data, error } = await supabase.rpc('accept_friend_request', {
+    p_user_id: userId,
+    p_request_id: requestId,
+  })
+  if (error) { console.error('acceptFriendRequest error:', error); return { error: error.message } }
+  return data
+}
+
+// Reject friend request
+export async function rejectFriendRequest(userId, requestId) {
+  const { data, error } = await supabase.rpc('reject_friend_request', {
+    p_user_id: userId,
+    p_request_id: requestId,
+  })
+  if (error) { console.error('rejectFriendRequest error:', error); return { error: error.message } }
+  return data
+}
+
+// Remove friend
+export async function removeFriend(userId, friendId) {
+  const { data, error } = await supabase.rpc('remove_friend', {
+    p_user_id: userId,
+    p_friend_id: friendId,
+  })
+  if (error) { console.error('removeFriend error:', error); return { error: error.message } }
+  return data
+}

@@ -899,6 +899,234 @@ END;
 $$;
 
 -- ╔═══════════════════════════════════════════╗
+-- ║  FRIENDS DATA (single RPC for bootstrap)  ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS get_friends_data(UUID);
+
+CREATE OR REPLACE FUNCTION get_friends_data(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_friends  JSONB;
+  v_incoming JSONB;
+  v_outgoing JSONB;
+BEGIN
+  -- Confirmed friends
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'id',         u.id,
+      'first_name', u.first_name,
+      'username',   u.username,
+      'avatar_url', u.avatar_url,
+      'last_seen',  u.last_seen
+    ) ORDER BY u.last_seen DESC NULLS LAST
+  ), '[]'::JSONB)
+  INTO v_friends
+  FROM friends f
+  JOIN users u ON u.id = f.friend_id
+  WHERE f.user_id = p_user_id;
+
+  -- Incoming pending requests
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'request_id', fr.id,
+      'from_user',  jsonb_build_object(
+        'id',         u.id,
+        'first_name', u.first_name,
+        'username',   u.username,
+        'avatar_url', u.avatar_url
+      ),
+      'created_at', fr.created_at
+    ) ORDER BY fr.created_at DESC
+  ), '[]'::JSONB)
+  INTO v_incoming
+  FROM friend_requests fr
+  JOIN users u ON u.id = fr.from_id
+  WHERE fr.to_id = p_user_id AND fr.status = 'pending';
+
+  -- Outgoing pending request target IDs
+  SELECT COALESCE(jsonb_agg(fr.to_id), '[]'::JSONB)
+  INTO v_outgoing
+  FROM friend_requests fr
+  WHERE fr.from_id = p_user_id AND fr.status = 'pending';
+
+  RETURN jsonb_build_object(
+    'friends',              v_friends,
+    'incoming_requests',    v_incoming,
+    'outgoing_request_ids', v_outgoing
+  );
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  SEARCH USERS (global friend search)      ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS search_users(UUID, TEXT, INTEGER);
+
+CREATE OR REPLACE FUNCTION search_users(p_user_id UUID, p_query TEXT, p_limit INTEGER DEFAULT 20)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN COALESCE((
+    SELECT jsonb_agg(row_to_jsonb(sub))
+    FROM (
+      SELECT
+        u.id,
+        u.first_name,
+        u.username,
+        u.avatar_url,
+        EXISTS (
+          SELECT 1 FROM friends f
+          WHERE f.user_id = p_user_id AND f.friend_id = u.id
+        ) AS is_friend,
+        EXISTS (
+          SELECT 1 FROM friend_requests fr
+          WHERE fr.from_id = p_user_id AND fr.to_id = u.id AND fr.status = 'pending'
+        ) AS request_pending
+      FROM users u
+      WHERE u.id != p_user_id
+        AND (
+          u.first_name ILIKE '%' || p_query || '%'
+          OR u.username ILIKE '%' || p_query || '%'
+        )
+      ORDER BY u.last_seen DESC NULLS LAST
+      LIMIT p_limit
+    ) sub
+  ), '[]'::JSONB);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  SEND FRIEND REQUEST                      ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS send_friend_request(UUID, UUID);
+
+CREATE OR REPLACE FUNCTION send_friend_request(p_from_id UUID, p_to_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  -- Cannot add self
+  IF p_from_id = p_to_id THEN
+    RETURN jsonb_build_object('error', 'cannot_add_self');
+  END IF;
+
+  -- Already friends
+  IF EXISTS (SELECT 1 FROM friends WHERE user_id = p_from_id AND friend_id = p_to_id) THEN
+    RETURN jsonb_build_object('error', 'already_friends');
+  END IF;
+
+  -- Reverse request exists → auto-accept
+  IF EXISTS (
+    SELECT 1 FROM friend_requests
+    WHERE from_id = p_to_id AND to_id = p_from_id AND status = 'pending'
+  ) THEN
+    UPDATE friend_requests SET status = 'accepted'
+    WHERE from_id = p_to_id AND to_id = p_from_id AND status = 'pending';
+
+    INSERT INTO friends (user_id, friend_id) VALUES (p_from_id, p_to_id) ON CONFLICT DO NOTHING;
+    INSERT INTO friends (user_id, friend_id) VALUES (p_to_id, p_from_id) ON CONFLICT DO NOTHING;
+
+    RETURN jsonb_build_object('result', 'auto_accepted');
+  END IF;
+
+  -- Duplicate pending request
+  IF EXISTS (
+    SELECT 1 FROM friend_requests
+    WHERE from_id = p_from_id AND to_id = p_to_id AND status = 'pending'
+  ) THEN
+    RETURN jsonb_build_object('error', 'already_sent');
+  END IF;
+
+  INSERT INTO friend_requests (from_id, to_id) VALUES (p_from_id, p_to_id);
+
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  ACCEPT FRIEND REQUEST                    ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS accept_friend_request(UUID, UUID);
+
+CREATE OR REPLACE FUNCTION accept_friend_request(p_user_id UUID, p_request_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_from_id UUID;
+BEGIN
+  SELECT from_id INTO v_from_id
+  FROM friend_requests
+  WHERE id = p_request_id AND to_id = p_user_id AND status = 'pending';
+
+  IF v_from_id IS NULL THEN
+    RETURN jsonb_build_object('error', 'request_not_found');
+  END IF;
+
+  UPDATE friend_requests SET status = 'accepted' WHERE id = p_request_id;
+
+  INSERT INTO friends (user_id, friend_id) VALUES (p_user_id, v_from_id) ON CONFLICT DO NOTHING;
+  INSERT INTO friends (user_id, friend_id) VALUES (v_from_id, p_user_id) ON CONFLICT DO NOTHING;
+
+  RETURN jsonb_build_object('ok', true, 'friend_id', v_from_id);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  REJECT FRIEND REQUEST                    ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS reject_friend_request(UUID, UUID);
+
+CREATE OR REPLACE FUNCTION reject_friend_request(p_user_id UUID, p_request_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM friend_requests
+    WHERE id = p_request_id AND to_id = p_user_id AND status = 'pending'
+  ) THEN
+    RETURN jsonb_build_object('error', 'request_not_found');
+  END IF;
+
+  UPDATE friend_requests SET status = 'rejected' WHERE id = p_request_id;
+
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  REMOVE FRIEND                            ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS remove_friend(UUID, UUID);
+
+CREATE OR REPLACE FUNCTION remove_friend(p_user_id UUID, p_friend_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  DELETE FROM friends WHERE user_id = p_user_id AND friend_id = p_friend_id;
+  DELETE FROM friends WHERE user_id = p_friend_id AND friend_id = p_user_id;
+
+  -- Clean up requests between them
+  DELETE FROM friend_requests
+  WHERE (from_id = p_user_id AND to_id = p_friend_id)
+     OR (from_id = p_friend_id AND to_id = p_user_id);
+
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
 -- ║  TRIGGERS                                 ║
 -- ╚═══════════════════════════════════════════╝
 

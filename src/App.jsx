@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
-import { getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents } from './lib/supabase'
+import { getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData } from './lib/supabase'
 import useGameStore from './store/useGameStore'
 import './App.css'
 import BottomNav from './components/BottomNav'
@@ -80,6 +80,9 @@ function hydrateFromCache() {
     if (cache.guildMembers)     store.setGuildMembers(cache.guildMembers)
     if (cache.guildSeason)      store.setGuildSeason(cache.guildSeason)
     if (cache.recentOpponents)  store.setRecentOpponents(cache.recentOpponents)
+    if (cache.friends)          store.setFriends(cache.friends)
+    if (cache.friendRequests)   store.setFriendRequests(cache.friendRequests)
+    if (cache.sentRequestIds)   store.setSentRequestIds(cache.sentRequestIds)
     return true
   } catch { return false }
 }
@@ -190,6 +193,16 @@ export default function App() {
         { id: '4', first_name: 'Кирилл',    username: 'kirill_up',  last_seen: new Date(Date.now() - 86400000).toISOString() },
         { id: '5', first_name: 'Анна',      username: 'anna_pro',   last_seen: new Date(Date.now() - 7200000).toISOString() },
       ])
+      store.setFriends([
+        { id: '1', first_name: 'Александр', username: 'alex_trade', avatar_url: null, last_seen: new Date().toISOString() },
+        { id: '2', first_name: 'Мария',     username: 'masha_win',  avatar_url: null, last_seen: new Date(Date.now() - 120000).toISOString() },
+        { id: '5', first_name: 'Анна',      username: 'anna_pro',   avatar_url: null, last_seen: new Date(Date.now() - 7200000).toISOString() },
+      ])
+      store.setFriendRequests([
+        { request_id: 'req1', from_user: { id: '3', first_name: 'Дмитрий', username: 'dmitry_x', avatar_url: null }, created_at: new Date(Date.now() - 3600000).toISOString() },
+        { request_id: 'req2', from_user: { id: '6', first_name: 'Сергей',  username: 'serg_bet', avatar_url: null }, created_at: new Date(Date.now() - 7200000).toISOString() },
+      ])
+      store.setSentRequestIds(['4'])
       return
     }
 
@@ -198,13 +211,14 @@ export default function App() {
     setUser(user)
     setBalance(user.balance ?? 0)
 
-    // 5 parallel fetches — all data for the entire app
-    const [profile, plans, leaderboard, guildData, opponents] = await Promise.all([
+    // 6 parallel fetches — all data for the entire app
+    const [profile, plans, leaderboard, guildData, opponents, friendsData] = await Promise.all([
       getUserProfile(user.id),
       getPlans(),
       getLeaderboard(50),
       getGuildData(user.id),
       getRecentOpponents(user.id),
+      getFriendsData(user.id),
     ])
 
     // Profile
@@ -230,6 +244,13 @@ export default function App() {
     // Recent opponents
     store.setRecentOpponents(opponents ?? [])
 
+    // Friends
+    if (friendsData) {
+      store.setFriends(friendsData.friends ?? [])
+      store.setFriendRequests(friendsData.incoming_requests ?? [])
+      store.setSentRequestIds(friendsData.outgoing_request_ids ?? [])
+    }
+
     // Write cache for instant load next time
     writeCache({
       leaderboard,
@@ -238,6 +259,9 @@ export default function App() {
       guildMembers:    guildData?.my_guild?.members ?? [],
       guildSeason:     guildData?.season ?? null,
       recentOpponents: opponents ?? [],
+      friends:         friendsData?.friends ?? [],
+      friendRequests:  friendsData?.incoming_requests ?? [],
+      sentRequestIds:  friendsData?.outgoing_request_ids ?? [],
     })
 
     // Sync currency/lang from DB → localStorage (DB is source of truth for cross-device)
