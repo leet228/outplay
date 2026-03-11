@@ -102,7 +102,8 @@ async function fetchEthBalance(addr) {
   } catch { return 0 }
 }
 
-// CoinGecko — real prices in USD + RUB
+// CoinGecko — real prices in USD + RUB (cached)
+let _priceCache = null
 async function fetchPrices() {
   try {
     const r = await fetch(
@@ -110,13 +111,15 @@ async function fetchPrices() {
     )
     if (!r.ok) throw new Error()
     const d = await r.json()
-    return {
+    _priceCache = {
       ton:  { usd: d['the-open-network']?.usd ?? 3,     rub: d['the-open-network']?.rub ?? 270 },
       usdt: { usd: d['tether']?.usd ?? 1,               rub: d['tether']?.rub ?? 90 },
       btc:  { usd: d['bitcoin']?.usd ?? 65000,           rub: d['bitcoin']?.rub ?? 5850000 },
       eth:  { usd: d['ethereum']?.usd ?? 3000,            rub: d['ethereum']?.rub ?? 270000 },
     }
+    return _priceCache
   } catch {
+    if (_priceCache) return _priceCache
     return {
       ton:  { usd: 3, rub: 270 },
       usdt: { usd: 1, rub: 90 },
