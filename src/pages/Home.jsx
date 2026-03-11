@@ -590,16 +590,27 @@ function FriendsPanel({ open, onClose, t, user }) {
                     {t.friendsOnline} · {onlineFriends.length}
                   </span>
                   {onlineFriends.map(f => (
-                    <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => { haptic('light'); setActiveId(prev => prev === f.id ? null : f.id) }}>
-                      <FriendAvatar user={f} showOnline />
-                      <div className="friends-info">
-                        <span className="friends-name">{f.first_name}</span>
-                        {f.username && <span className="friends-username">@{f.username}</span>}
+                    <div key={f.id} className={`friends-row-wrap ${confirmRemoveId === f.id ? 'confirming' : ''}`}>
+                      <div className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => { haptic('light'); setActiveId(prev => prev === f.id ? null : f.id); setConfirmRemoveId(null) }}>
+                        <FriendAvatar user={f} showOnline />
+                        <div className="friends-info">
+                          <span className="friends-name">{f.first_name}</span>
+                          {f.username && <span className="friends-username">@{f.username}</span>}
+                        </div>
+                        {activeId === f.id && (
+                          <div className="friends-actions">
+                            <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
+                            <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
+                          </div>
+                        )}
                       </div>
-                      {activeId === f.id && (
-                        <div className="friends-actions">
-                          <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
-                          <button className="friends-action-btn remove" disabled={actionLoading === f.id} onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
+                      {confirmRemoveId === f.id && (
+                        <div className="friends-confirm-inline">
+                          <span className="friends-confirm-text">{t.friendsRemoveConfirm}</span>
+                          <div className="friends-confirm-actions">
+                            <button className="friends-confirm-btn cancel" onClick={cancelRemove}>{t.friendsRemoveCancel}</button>
+                            <button className="friends-confirm-btn confirm" disabled={actionLoading === f.id} onClick={confirmRemove}>{t.friendsRemoveYes}</button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -613,16 +624,27 @@ function FriendsPanel({ open, onClose, t, user }) {
                     {t.friendsOffline} · {offlineFriends.length}
                   </span>
                   {offlineFriends.map(f => (
-                    <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => { haptic('light'); setActiveId(prev => prev === f.id ? null : f.id) }}>
-                      <FriendAvatar user={f} />
-                      <div className="friends-info">
-                        <span className="friends-name">{f.first_name}</span>
-                        {f.username && <span className="friends-username">@{f.username}</span>}
+                    <div key={f.id} className={`friends-row-wrap ${confirmRemoveId === f.id ? 'confirming' : ''}`}>
+                      <div className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => { haptic('light'); setActiveId(prev => prev === f.id ? null : f.id); setConfirmRemoveId(null) }}>
+                        <FriendAvatar user={f} />
+                        <div className="friends-info">
+                          <span className="friends-name">{f.first_name}</span>
+                          {f.username && <span className="friends-username">@{f.username}</span>}
+                        </div>
+                        {activeId === f.id && (
+                          <div className="friends-actions">
+                            <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
+                            <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
+                          </div>
+                        )}
                       </div>
-                      {activeId === f.id && (
-                        <div className="friends-actions">
-                          <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
-                          <button className="friends-action-btn remove" disabled={actionLoading === f.id} onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
+                      {confirmRemoveId === f.id && (
+                        <div className="friends-confirm-inline">
+                          <span className="friends-confirm-text">{t.friendsRemoveConfirm}</span>
+                          <div className="friends-confirm-actions">
+                            <button className="friends-confirm-btn cancel" onClick={cancelRemove}>{t.friendsRemoveCancel}</button>
+                            <button className="friends-confirm-btn confirm" disabled={actionLoading === f.id} onClick={confirmRemove}>{t.friendsRemoveYes}</button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -671,14 +693,6 @@ function FriendsPanel({ open, onClose, t, user }) {
           )}
         </div>
 
-        {/* Confirm remove bar */}
-        <div className={`friends-confirm-bar ${confirmRemoveId ? 'visible' : ''}`}>
-          <span className="friends-confirm-text">{t.friendsRemoveConfirm}</span>
-          <div className="friends-confirm-actions">
-            <button className="friends-confirm-btn cancel" onClick={cancelRemove}>{t.friendsRemoveCancel}</button>
-            <button className="friends-confirm-btn confirm" disabled={actionLoading === confirmRemoveId} onClick={confirmRemove}>{t.friendsRemoveYes}</button>
-          </div>
-        </div>
       </div>
     </>
   )
