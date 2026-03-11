@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
-import { createStarsInvoice, processDeposit } from '../lib/supabase'
+import { createStarsInvoice, processDeposit, getUserBalance } from '../lib/supabase'
 import { translations } from '../lib/i18n'
 import './DepositSheet.css'
 
@@ -201,13 +201,13 @@ export default function DepositSheet() {
       requestStarsPayment({
         payload: invoice.url,
         onSuccess: async () => {
-          // 3. Credit balance in DB
-          const txId = crypto.randomUUID()
-          const result = await processDeposit(userId, activeAmount, txId)
-          if (result?.new_balance != null) {
-            setBalance(result.new_balance)
-          } else {
-            // Fallback: just add locally
+          // Webhook already credited balance via process_deposit.
+          // Just fetch fresh balance from DB to sync UI.
+          try {
+            const freshBalance = await getUserBalance(userId)
+            setBalance(freshBalance)
+          } catch {
+            // Fallback: add locally
             const s = useGameStore.getState()
             setBalance(s.balance + activeAmount)
           }
