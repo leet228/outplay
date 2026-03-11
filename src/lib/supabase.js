@@ -264,3 +264,23 @@ export async function removeFriend(userId, friendId) {
   if (error) { console.error('removeFriend error:', error); return { error: error.message } }
   return data
 }
+
+// ── Deposits ──
+
+export async function createStarsInvoice(userId, amount) {
+  const { data, error } = await supabase.functions.invoke('create-stars-invoice', {
+    body: { user_id: userId, amount },
+  })
+  if (error) { console.error('createStarsInvoice error:', error); return null }
+  return data // { url, payload }
+}
+
+export async function processDeposit(userId, amount, txId) {
+  const { data, error } = await supabase.rpc('process_deposit', {
+    p_user_id: userId,
+    p_amount: amount,
+    p_tx_id: txId,
+  })
+  if (error) { console.error('processDeposit error:', error); return null }
+  return data // { new_balance } or { new_balance, duplicate: true }
+}

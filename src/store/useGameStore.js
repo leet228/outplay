@@ -10,6 +10,8 @@ const useGameStore = create((set, get) => ({
   balance: 0,
   setBalance: (balance) => set({ balance }),
   addBalance: (amount) => set((s) => ({ balance: s.balance + amount })),
+  balanceBounce: false,
+  setBalanceBounce: (v) => set({ balanceBounce: v }),
 
   // Currency
   currency: JSON.parse(localStorage.getItem('outplay_currency')) || { symbol: '₽', code: 'RUB' },

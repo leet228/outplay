@@ -1135,6 +1135,47 @@ END;
 $$;
 
 -- ╔═══════════════════════════════════════════╗
+-- ║  PROCESS DEPOSIT                          ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS process_deposit(UUID, INTEGER, UUID);
+
+CREATE OR REPLACE FUNCTION process_deposit(p_user_id UUID, p_amount INTEGER, p_tx_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  new_balance INTEGER;
+BEGIN
+  -- Validate
+  IF p_amount < 1 THEN
+    RETURN jsonb_build_object('error', 'amount must be >= 1');
+  END IF;
+
+  -- Deduplication: check if this tx_id was already processed
+  IF EXISTS (
+    SELECT 1 FROM transactions
+    WHERE user_id = p_user_id AND type = 'deposit' AND ref_id = p_tx_id
+  ) THEN
+    SELECT balance INTO new_balance FROM users WHERE id = p_user_id;
+    RETURN jsonb_build_object('new_balance', new_balance, 'duplicate', true);
+  END IF;
+
+  -- Credit balance
+  UPDATE users
+  SET balance = balance + p_amount
+  WHERE id = p_user_id
+  RETURNING balance INTO new_balance;
+
+  -- Log transaction
+  INSERT INTO transactions (user_id, type, amount, ref_id)
+  VALUES (p_user_id, 'deposit', p_amount, p_tx_id);
+
+  RETURN jsonb_build_object('new_balance', new_balance);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
 -- ║  TRIGGERS                                 ║
 -- ╚═══════════════════════════════════════════╝
 

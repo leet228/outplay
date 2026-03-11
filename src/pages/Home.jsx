@@ -707,7 +707,7 @@ const GAMES = [
 
 /* ── Home ── */
 export default function Home() {
-  const { balance, currency, lang, setDepositOpen, user, friendRequests } = useGameStore()
+  const { balance, currency, lang, setDepositOpen, user, friendRequests, balanceBounce } = useGameStore()
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)
   const [friendsOpen, setFriendsOpen] = useState(false)
@@ -744,7 +744,7 @@ export default function Home() {
               <span className="topbar-friends-badge">{friendRequests.length}</span>
             )}
           </button>
-          <div className="topbar-balance">
+          <div className={`topbar-balance ${balanceBounce ? 'bounce' : ''}`}>
             <span className="topbar-currency">{currency.symbol}</span>
             <span className="topbar-amount">{Number(balance).toFixed(2)}</span>
             <button className="topbar-plus" onClick={() => { haptic('light'); setDepositOpen(true) }}>

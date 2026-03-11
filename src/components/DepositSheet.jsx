@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import useGameStore from '../store/useGameStore'
-import { haptic } from '../lib/telegram'
+import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
+import { createStarsInvoice, processDeposit } from '../lib/supabase'
 import { translations } from '../lib/i18n'
 import './DepositSheet.css'
 
@@ -8,6 +9,7 @@ const STAR_USD = 0.013
 const RATES = { RUB: 77, USD: 1, EUR: 0.93 }
 
 const PRESETS = [100, 500, 1000]
+const MIN_STARS = 1 // для тестирования (потом поднять)
 
 const COINS = [
   { id: 'ton',  name: 'TON',         sub: 'TON Network',  color: '#0098EA' },
@@ -67,17 +69,30 @@ function BackButton({ label, onClick }) {
   )
 }
 
+function SuccessCheckmark() {
+  return (
+    <div className="deposit-success-circle">
+      <svg className="deposit-success-check" width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <path d="M12 25L20 33L36 15" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  )
+}
+
 export default function DepositSheet() {
-  const { depositOpen, setDepositOpen, lang, currency } = useGameStore()
+  const { depositOpen, setDepositOpen, lang, currency, user, setBalance, setBalanceBounce } = useGameStore()
   const t = translations[lang]
 
   const [view, setView] = useState('main') // 'main' | 'stars' | 'crypto'
   const [selected, setSelected] = useState(100)
   const [custom, setCustom] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState('idle') // 'idle' | 'success' | 'error'
+  const successAmountRef = useRef(0)
 
   const activeAmount = custom !== '' ? Number(custom) : selected
-  const isCustomValid = custom === '' || Number(custom) >= 100
-  const canBuy = activeAmount >= 100 && isCustomValid
+  const isCustomValid = custom === '' || Number(custom) >= MIN_STARS
+  const canBuy = activeAmount >= MIN_STARS && isCustomValid && !loading
 
   const close = () => {
     haptic('light')
@@ -86,15 +101,28 @@ export default function DepositSheet() {
 
   const goBack = () => {
     haptic('light')
-    setView('main')
+    if (status !== 'idle') {
+      setStatus('idle')
+      setView('stars')
+    } else {
+      setView('main')
+    }
   }
 
+  // Reset on close
   useEffect(() => {
     if (!depositOpen) {
-      setTimeout(() => { setView('main'); setCustom('') }, 300)
+      setTimeout(() => {
+        setView('main')
+        setCustom('')
+        setSelected(100)
+        setLoading(false)
+        setStatus('idle')
+      }, 300)
     }
   }, [depositOpen])
 
+  // Telegram BackButton
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return
@@ -111,6 +139,21 @@ export default function DepositSheet() {
     }
   }, [depositOpen, view])
 
+  // Auto-close after success
+  useEffect(() => {
+    if (status === 'success') {
+      const timer = setTimeout(() => {
+        setDepositOpen(false)
+        // Trigger balance bounce after sheet closes
+        setTimeout(() => {
+          setBalanceBounce(true)
+          setTimeout(() => setBalanceBounce(false), 700)
+        }, 350)
+      }, 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [status])
+
   function handlePreset(amount) {
     haptic('light')
     setSelected(amount)
@@ -123,10 +166,72 @@ export default function DepositSheet() {
     if (val !== '') setSelected(null)
   }
 
-  function handleBuy() {
+  async function handleBuy() {
     if (!canBuy) return
     haptic('medium')
-    // TODO: requestStarsPayment({ amount: activeAmount, ... })
+    setLoading(true)
+    successAmountRef.current = activeAmount
+
+    const userId = user?.id
+
+    // ── Dev mode: simulate success (no real Telegram user) ──
+    const isRealTelegram = !!getTelegramUser()
+    if (!isRealTelegram) {
+      await new Promise(r => setTimeout(r, 500))
+      const newBalance = useGameStore.getState().balance + activeAmount
+      setBalance(newBalance)
+      setLoading(false)
+      setStatus('success')
+      haptic('heavy')
+      return
+    }
+
+    // ── Real Telegram: create invoice → open → process ──
+    try {
+      // 1. Create invoice
+      const invoice = await createStarsInvoice(userId, activeAmount)
+      if (!invoice?.url) {
+        setLoading(false)
+        setStatus('error')
+        haptic('heavy')
+        return
+      }
+
+      // 2. Open Telegram invoice
+      requestStarsPayment({
+        payload: invoice.url,
+        onSuccess: async () => {
+          // 3. Credit balance in DB
+          const txId = crypto.randomUUID()
+          const result = await processDeposit(userId, activeAmount, txId)
+          if (result?.new_balance != null) {
+            setBalance(result.new_balance)
+          } else {
+            // Fallback: just add locally
+            const s = useGameStore.getState()
+            setBalance(s.balance + activeAmount)
+          }
+          setLoading(false)
+          setStatus('success')
+          haptic('heavy')
+        },
+        onFail: (failStatus) => {
+          console.log('Payment cancelled/failed:', failStatus)
+          setLoading(false)
+          if (failStatus === 'cancelled') {
+            // User cancelled — just go back
+          } else {
+            setStatus('error')
+          }
+          haptic('medium')
+        },
+      })
+    } catch (err) {
+      console.error('Payment error:', err)
+      setLoading(false)
+      setStatus('error')
+      haptic('heavy')
+    }
   }
 
   function handleCoinSelect(coin) {
@@ -141,21 +246,43 @@ export default function DepositSheet() {
       <div className={`deposit-sheet ${depositOpen ? 'open' : ''}`}>
         <div className="deposit-handle" />
 
-        {/* Header */}
-        <div className="deposit-header">
-          {view !== 'main'
-            ? <BackButton label={t.depositBack} onClick={goBack} />
-            : <span className="deposit-title">{t.depositTitle}</span>
-          }
-          <button className="deposit-close" onClick={close}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+        {/* Header — hidden during success */}
+        {status !== 'success' && (
+          <div className="deposit-header">
+            {view !== 'main'
+              ? <BackButton label={t.depositBack} onClick={goBack} />
+              : <span className="deposit-title">{t.depositTitle}</span>
+            }
+            <button className="deposit-close" onClick={close}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
 
-        {/* Main */}
-        {view === 'main' && (
+        {/* ── Success View ── */}
+        {status === 'success' && (
+          <div className="deposit-success">
+            <SuccessCheckmark />
+            <span className="deposit-success-title">{t.depositSuccess}</span>
+            <span className="deposit-success-amount">+{successAmountRef.current} ⭐</span>
+          </div>
+        )}
+
+        {/* ── Error View ── */}
+        {status === 'error' && (
+          <div className="deposit-error">
+            <div className="deposit-error-icon">✕</div>
+            <span className="deposit-error-title">{t.depositError}</span>
+            <button className="deposit-buy-btn" onClick={() => setStatus('idle')}>
+              {t.depositBack}
+            </button>
+          </div>
+        )}
+
+        {/* ── Main ── */}
+        {status === 'idle' && view === 'main' && (
           <div className="deposit-options">
             <button className="deposit-option deposit-option--stars" onClick={() => { haptic('medium'); setView('stars') }}>
               <div className="deposit-option-icon">⭐</div>
@@ -181,8 +308,8 @@ export default function DepositSheet() {
           </div>
         )}
 
-        {/* Stars */}
-        {view === 'stars' && (
+        {/* ── Stars ── */}
+        {status === 'idle' && view === 'stars' && (
           <div className="deposit-stars-view">
             <p className="deposit-stars-subtitle">{t.depositStarsTitle}</p>
 
@@ -209,7 +336,7 @@ export default function DepositSheet() {
                   inputMode="numeric"
                   placeholder={t.depositCustomPlaceholder}
                   value={custom}
-                  min={100}
+                  min={MIN_STARS}
                   onChange={handleCustomChange}
                 />
                 {custom !== '' && isCustomValid && (
@@ -218,14 +345,18 @@ export default function DepositSheet() {
               </div>
             </div>
 
-            <button className="deposit-buy-btn" disabled={!canBuy} onClick={handleBuy}>
-              {t.depositBuy} {activeAmount >= 100 ? activeAmount : '—'} ⭐
+            <button className={`deposit-buy-btn ${loading ? 'loading' : ''}`} disabled={!canBuy} onClick={handleBuy}>
+              {loading ? (
+                <div className="deposit-btn-spinner" />
+              ) : (
+                <>{t.depositBuy} {activeAmount >= MIN_STARS ? activeAmount : '—'} ⭐</>
+              )}
             </button>
           </div>
         )}
 
-        {/* Crypto */}
-        {view === 'crypto' && (
+        {/* ── Crypto ── */}
+        {status === 'idle' && view === 'crypto' && (
           <div className="deposit-crypto-view">
             <p className="deposit-stars-subtitle">{t.depositCryptoTitle}</p>
 
