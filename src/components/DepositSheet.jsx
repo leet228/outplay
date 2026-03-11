@@ -9,13 +9,13 @@ const STAR_USD = 0.013
 const RATES = { RUB: 77, USD: 1, EUR: 0.93 }
 
 const PRESETS = [100, 500, 1000]
-const MIN_STARS = 1 // для тестирования (потом поднять)
+const MIN_STARS = 1
 
 const COINS = [
-  { id: 'ton',  name: 'TON',         sub: 'TON Network',  color: '#0098EA' },
-  { id: 'usdt', name: 'USDT',        sub: 'TRC-20',       color: '#26A17B' },
-  { id: 'btc',  name: 'Bitcoin',     sub: 'BTC',          color: '#F7931A' },
-  { id: 'eth',  name: 'Ethereum',    sub: 'ERC-20',       color: '#627EEA' },
+  { id: 'ton',  name: 'TON',      sub: 'TON Network', color: '#0098EA' },
+  { id: 'usdt', name: 'USDT',     sub: 'TRC-20',      color: '#26A17B' },
+  { id: 'btc',  name: 'Bitcoin',  sub: 'BTC',         color: '#F7931A' },
+  { id: 'eth',  name: 'Ethereum', sub: 'ERC-20',      color: '#627EEA' },
 ]
 
 function CoinIcon({ id, color }) {
@@ -49,11 +49,20 @@ function CoinIcon({ id, color }) {
   )
 }
 
-function toCurrency(stars, currency) {
+/** ≈ 100 ₽  /  ≈ $1.30  (for presets & custom input) */
+function toCurrency(stars, cur) {
   const usd = stars * STAR_USD
-  const amount = usd * (RATES[currency.code] ?? 1)
-  if (currency.code === 'RUB') return `≈ ${Math.round(amount)} ${currency.symbol}`
-  return `≈ ${currency.symbol}${amount.toFixed(2)}`
+  const amount = usd * (RATES[cur.code] ?? 1)
+  if (cur.code === 'RUB') return `≈ ${Math.round(amount)} ${cur.symbol}`
+  return `≈ ${cur.symbol}${amount.toFixed(2)}`
+}
+
+/** +100 ₽  /  +$1.30  (for success screen — no ≈, with +) */
+function toSuccessAmount(stars, cur) {
+  const usd = stars * STAR_USD
+  const amount = usd * (RATES[cur.code] ?? 1)
+  if (cur.code === 'RUB') return `+${Math.round(amount)} ${cur.symbol}`
+  return `+${cur.symbol}${amount.toFixed(2)}`
 }
 
 function BackButton({ label, onClick }) {
@@ -79,16 +88,29 @@ function SuccessCheckmark() {
   )
 }
 
+/** Poll balance from DB with retries (webhook may need a moment) */
+async function pollBalance(userId, prevBalance, maxRetries = 4) {
+  for (let i = 0; i < maxRetries; i++) {
+    await new Promise(r => setTimeout(r, 600 + i * 400))
+    try {
+      const bal = await getUserBalance(userId)
+      if (bal > prevBalance) return bal
+    } catch { /* retry */ }
+  }
+  return null // webhook didn't process in time
+}
+
 export default function DepositSheet() {
-  const { depositOpen, setDepositOpen, lang, currency, user, setBalance, setBalanceBounce } = useGameStore()
+  const { depositOpen, setDepositOpen, lang, currency, user, balance, setBalance, setBalanceBounce } = useGameStore()
   const t = translations[lang]
 
-  const [view, setView] = useState('main') // 'main' | 'stars' | 'crypto'
+  const [view, setView] = useState('main')
   const [selected, setSelected] = useState(100)
   const [custom, setCustom] = useState('')
   const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState('idle') // 'idle' | 'success' | 'error'
+  const [status, setStatus] = useState('idle')
   const successAmountRef = useRef(0)
+  const invoiceTxRef = useRef(null) // shared tx_id between webhook & client
 
   const activeAmount = custom !== '' ? Number(custom) : selected
   const isCustomValid = custom === '' || Number(custom) >= MIN_STARS
@@ -118,6 +140,7 @@ export default function DepositSheet() {
         setSelected(100)
         setLoading(false)
         setStatus('idle')
+        invoiceTxRef.current = null
       }, 300)
     }
   }, [depositOpen])
@@ -144,7 +167,6 @@ export default function DepositSheet() {
     if (status === 'success') {
       const timer = setTimeout(() => {
         setDepositOpen(false)
-        // Trigger balance bounce after sheet closes
         setTimeout(() => {
           setBalanceBounce(true)
           setTimeout(() => setBalanceBounce(false), 700)
@@ -173,13 +195,12 @@ export default function DepositSheet() {
     successAmountRef.current = activeAmount
 
     const userId = user?.id
+    const prevBalance = useGameStore.getState().balance
 
-    // ── Dev mode: simulate success (no real Telegram user) ──
-    const isRealTelegram = !!getTelegramUser()
-    if (!isRealTelegram) {
+    // ── Dev mode ──
+    if (!getTelegramUser()) {
       await new Promise(r => setTimeout(r, 500))
-      const newBalance = useGameStore.getState().balance + activeAmount
-      setBalance(newBalance)
+      setBalance(prevBalance + activeAmount)
       setLoading(false)
       setStatus('success')
       haptic('heavy')
@@ -188,39 +209,47 @@ export default function DepositSheet() {
 
     // ── Real Telegram: create invoice → open → process ──
     try {
-      // 1. Create invoice
       const invoice = await createStarsInvoice(userId, activeAmount)
-      if (!invoice?.url) {
+      if (!invoice?.url || !invoice?.tx_id) {
         setLoading(false)
         setStatus('error')
         haptic('heavy')
         return
       }
 
-      // 2. Open Telegram invoice
+      invoiceTxRef.current = invoice.tx_id
+
       requestStarsPayment({
         payload: invoice.url,
         onSuccess: async () => {
-          // Webhook already credited balance via process_deposit.
-          // Just fetch fresh balance from DB to sync UI.
-          try {
-            const freshBalance = await getUserBalance(userId)
-            setBalance(freshBalance)
-          } catch {
-            // Fallback: add locally
-            const s = useGameStore.getState()
-            setBalance(s.balance + activeAmount)
+          // 1. Try polling — webhook might have credited balance already
+          const polled = await pollBalance(userId, prevBalance)
+
+          if (polled != null) {
+            // Webhook handled it — just sync UI
+            setBalance(polled)
+          } else {
+            // 2. Webhook didn't process in time — client calls process_deposit as backup
+            // Same tx_id → dedup prevents double credit
+            try {
+              const result = await processDeposit(userId, activeAmount, invoiceTxRef.current)
+              if (result?.new_balance != null) {
+                setBalance(result.new_balance)
+              } else {
+                setBalance(prevBalance + activeAmount)
+              }
+            } catch {
+              setBalance(prevBalance + activeAmount)
+            }
           }
+
           setLoading(false)
           setStatus('success')
           haptic('heavy')
         },
         onFail: (failStatus) => {
-          console.log('Payment cancelled/failed:', failStatus)
           setLoading(false)
-          if (failStatus === 'cancelled') {
-            // User cancelled — just go back
-          } else {
+          if (failStatus !== 'cancelled') {
             setStatus('error')
           }
           haptic('medium')
@@ -236,7 +265,6 @@ export default function DepositSheet() {
 
   function handleCoinSelect(coin) {
     haptic('medium')
-    // TODO: показать адрес кошелька для coin.id
   }
 
   return (
@@ -246,7 +274,6 @@ export default function DepositSheet() {
       <div className={`deposit-sheet ${depositOpen ? 'open' : ''}`}>
         <div className="deposit-handle" />
 
-        {/* Header — hidden during success */}
         {status !== 'success' && (
           <div className="deposit-header">
             {view !== 'main'
@@ -261,22 +288,24 @@ export default function DepositSheet() {
           </div>
         )}
 
-        {/* ── Success View ── */}
+        {/* ── Success ── */}
         {status === 'success' && (
           <div className="deposit-success">
             <SuccessCheckmark />
             <span className="deposit-success-title">{t.depositSuccess}</span>
-            <span className="deposit-success-amount">+{successAmountRef.current} ⭐</span>
+            <span className="deposit-success-amount">
+              {toSuccessAmount(successAmountRef.current, currency)}
+            </span>
           </div>
         )}
 
-        {/* ── Error View ── */}
+        {/* ── Error ── */}
         {status === 'error' && (
           <div className="deposit-error">
             <div className="deposit-error-icon">✕</div>
             <span className="deposit-error-title">{t.depositError}</span>
             <button className="deposit-buy-btn" onClick={() => setStatus('idle')}>
-              {t.depositBack}
+              {t.depositRetry || t.depositBack}
             </button>
           </div>
         )}

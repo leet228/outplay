@@ -7,89 +7,55 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
-
+  // Telegram always sends POST, no CORS needed for webhook
   try {
     const update = await req.json()
-    console.log('Telegram update:', JSON.stringify(update))
 
-    // ── Handle pre_checkout_query ──
-    // Telegram sends this BEFORE charging the user.
-    // We MUST answer within 10 seconds or payment fails.
+    // ── pre_checkout_query → MUST answer within 10s or payment fails ──
     if (update.pre_checkout_query) {
-      const queryId = update.pre_checkout_query.id
-
-      // Always approve (for Stars, no additional validation needed)
       const res = await fetch(`${TELEGRAM_API}/answerPreCheckoutQuery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pre_checkout_query_id: queryId,
+          pre_checkout_query_id: update.pre_checkout_query.id,
           ok: true,
         }),
       })
-
-      const result = await res.json()
-      console.log('answerPreCheckoutQuery result:', JSON.stringify(result))
-
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      console.log('answerPreCheckoutQuery:', (await res.json()).ok)
+      return new Response('ok')
     }
 
-    // ── Handle successful_payment ──
-    // Telegram sends this AFTER payment is confirmed.
-    // We credit the balance server-side as a safety net.
+    // ── successful_payment → credit balance in DB ──
     if (update.message?.successful_payment) {
       const payment = update.message.successful_payment
-      const payloadStr = payment.invoice_payload
 
       try {
-        const payload = JSON.parse(payloadStr)
-        const userId = payload.user_id
-        const amount = payload.amount
+        const payload = JSON.parse(payment.invoice_payload)
+        const { user_id, amount, tx_id } = payload
 
-        if (userId && amount) {
+        if (user_id && amount && tx_id) {
           const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-          // Use telegram_provider_charge_id as unique tx id for dedup
-          const txId = payment.telegram_payment_charge_id || crypto.randomUUID()
-
+          // tx_id is a UUID generated in create-stars-invoice — same one client has
           const { data, error } = await supabase.rpc('process_deposit', {
-            p_user_id: userId,
+            p_user_id: user_id,
             p_amount: amount,
-            p_tx_id: txId,
+            p_tx_id: tx_id,
           })
 
-          console.log('process_deposit result:', JSON.stringify(data), 'error:', error)
+          console.log('process_deposit:', JSON.stringify(data), error?.message)
         }
       } catch (e) {
-        console.error('Failed to parse payload or process deposit:', e)
+        console.error('Webhook deposit error:', e)
       }
 
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+      return new Response('ok')
     }
 
-    // Other updates — ignore
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-
+    return new Response('ok')
   } catch (err) {
     console.error('Webhook error:', err)
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return new Response('ok')
   }
 })

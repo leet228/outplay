@@ -9,7 +9,6 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -31,10 +30,10 @@ serve(async (req) => {
       )
     }
 
-    // Unique payload for deduplication
-    const payload = JSON.stringify({ user_id, amount, ts: Date.now() })
+    // Generate a single tx_id used by BOTH webhook and client for dedup
+    const txId = crypto.randomUUID()
+    const payload = JSON.stringify({ user_id, amount, tx_id: txId })
 
-    // Create invoice link via Telegram Bot API
     const res = await fetch(`${TELEGRAM_API}/createInvoiceLink`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -42,8 +41,8 @@ serve(async (req) => {
         title: `${amount} Stars`,
         description: `Top up balance with ${amount} Telegram Stars`,
         payload,
-        provider_token: '',      // Empty for Stars
-        currency: 'XTR',         // Telegram Stars currency
+        provider_token: '',
+        currency: 'XTR',
         prices: [{ label: 'Stars', amount }],
       }),
     })
@@ -58,8 +57,9 @@ serve(async (req) => {
       )
     }
 
+    // Return invoice URL + tx_id so client can also call process_deposit as backup
     return new Response(
-      JSON.stringify({ url: data.result, payload }),
+      JSON.stringify({ url: data.result, tx_id: txId }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
