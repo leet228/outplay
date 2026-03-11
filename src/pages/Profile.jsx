@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
+import { formatCurrency } from '../lib/currency'
 import './Profile.css'
 
 function getRankDisplay(rank) {
@@ -38,7 +39,7 @@ const W = 320
 const H = 130
 
 export default function Profile() {
-  const { user, balance, currency, setCurrency, lang, setLang, setDepositOpen, rank, dailyStats, totalPnl } = useGameStore()
+  const { user, balance, currency, rates, setCurrency, lang, setLang, setDepositOpen, rank, dailyStats, totalPnl } = useGameStore()
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
   const [tooltip, setTooltip] = useState(null)
@@ -144,7 +145,7 @@ export default function Profile() {
 
       <div className="balance-card">
         <span className="balance-label">{t.balance}</span>
-        <span className="balance-amount">{currency.symbol} {Number(balance).toFixed(2)}</span>
+        <span className="balance-amount">{formatCurrency(balance, currency, rates)}</span>
         <div className="balance-actions">
           <button className="balance-btn deposit" onClick={() => { haptic('light'); setDepositOpen(true) }}>
             {t.deposit}
@@ -157,7 +158,7 @@ export default function Profile() {
           </button>
         </div>
         <div className={`withdraw-error ${withdrawError ? 'visible' : ''}`}>
-          {t.withdrawMin.replace('{sym}', currency.symbol)}
+          {t.withdrawMin.replace('{amount}', formatCurrency(MIN_WITHDRAW, currency, rates))}
         </div>
       </div>
 
@@ -184,7 +185,7 @@ export default function Profile() {
         <div className="pnl-header">
           <div className="pnl-numbers">
             <span className={`pnl-amount ${isPositive ? 'positive' : 'negative'}`}>
-              {isPositive ? '+' : ''}{currency.symbol}{totalPnl.toFixed(2)}
+              {formatCurrency(totalPnl, currency, rates, { sign: '+' })}
             </span>
             <span className={`pnl-pct ${isPositive ? 'positive' : 'negative'}`}>
               {isPositive ? '+' : ''}{totalPct}%
@@ -251,7 +252,7 @@ export default function Profile() {
                     fontWeight="700"
                     fill={isPos ? '#22c55e' : '#ef4444'}
                   >
-                    {isPos ? '+' : ''}{currency.symbol}{d.pnl.toFixed(2)}
+                    {formatCurrency(d.pnl, currency, rates, { sign: '+' })}
                   </text>
                   <text
                     x={tx + tooltipW / 2} y={ty + 31}

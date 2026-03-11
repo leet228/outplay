@@ -47,7 +47,7 @@ export const translations = {
     balance: 'Баланс',
     deposit: 'Пополнить',
     withdraw: 'Вывод',
-    withdrawMin: 'Вывод доступен от 2 000 {sym}',
+    withdrawMin: 'Вывод доступен от {amount}',
     games: 'Игр',
     allTime: 'за всё время',
 
@@ -242,7 +242,7 @@ export const translations = {
     balance: 'Balance',
     deposit: 'Deposit',
     withdraw: 'Withdraw',
-    withdrawMin: 'Withdrawal available from {sym}2 000',
+    withdrawMin: 'Withdrawal available from {amount}',
     games: 'Games',
     allTime: 'all time',
 

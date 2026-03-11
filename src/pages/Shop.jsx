@@ -3,6 +3,7 @@ import useGameStore from '../store/useGameStore'
 import { getReferralsList } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
+import { formatCurrency } from '../lib/currency'
 import './Shop.css'
 
 // Visual metadata for each plan slot (by position: 0=1m, 1=6m, 2=12m)
@@ -50,7 +51,7 @@ function avatarColor(name) {
 }
 
 /* ── Plan Sheet ── */
-function PlanSheet({ plan, t, currency, onClose }) {
+function PlanSheet({ plan, t, currency, rates, onClose }) {
   useEffect(() => {
     if (plan) {
       document.body.style.overflow = 'hidden'
@@ -108,14 +109,14 @@ function PlanSheet({ plan, t, currency, onClose }) {
         <div className="plan-sheet-price-block" style={{ '--plan-glow': plan?.glow }}>
           <div className="plan-sheet-price-orb" />
           <span className="plan-sheet-price">
-            {currency.symbol}{plan?.price.toLocaleString('ru-RU')}
+            {plan ? formatCurrency(plan.price, currency, rates) : ''}
           </span>
           <span className="plan-sheet-per">
-            {currency.symbol}{plan?.perMonth} {t.proPerMonth}
+            {plan ? formatCurrency(plan.perMonth, currency, rates) : ''} {t.proPerMonth}
           </span>
           {plan?.savings && (
             <span className="plan-sheet-savings">
-              {t.proSave} {currency.symbol}{plan.savings.toLocaleString('ru-RU')}
+              {t.proSave} {formatCurrency(plan.savings, currency, rates)}
             </span>
           )}
         </div>
@@ -142,7 +143,7 @@ function PlanSheet({ plan, t, currency, onClose }) {
           style={{ background: plan?.gradient, '--plan-glow': plan?.glow }}
           onClick={handleSubscribe}
         >
-          {t.proSubscribe} · {currency.symbol}{plan?.price.toLocaleString('ru-RU')}
+          {t.proSubscribe} · {plan ? formatCurrency(plan.price, currency, rates) : ''}
         </button>
       </div>
     </>
@@ -150,7 +151,7 @@ function PlanSheet({ plan, t, currency, onClose }) {
 }
 
 /* ── Referral Section ── */
-function ReferralSection({ t, currency, user }) {
+function ReferralSection({ t, currency, rates, user }) {
   const { refEarnings, referrals, referralsLoading, setReferrals, setReferralsLoading } = useGameStore()
   const [copied, setCopied] = useState(false)
   const [period, setPeriod] = useState('all')
@@ -286,7 +287,7 @@ function ReferralSection({ t, currency, user }) {
         </div>
         <div className="ref-earnings-amount">
           <span className="ref-earnings-value">
-            {currency.symbol}{earnings.toLocaleString('ru-RU')}
+            {formatCurrency(earnings, currency, rates)}
           </span>
           <span className="ref-earnings-period-label">
             {periods.find(p => p.key === period)?.label.toLowerCase()}
@@ -332,7 +333,7 @@ function ReferralSection({ t, currency, user }) {
                       <span className="ref-username">@{r.username}</span>
                     </div>
                     <div className="ref-earned">
-                      <span className="ref-earned-value">+{currency.symbol}{r.earned[period].toLocaleString('ru-RU')}</span>
+                      <span className="ref-earned-value">{formatCurrency(r.earned[period], currency, rates, { sign: '+' })}</span>
                       <span className="ref-earned-label">{t.refEarned}</span>
                     </div>
                   </div>
@@ -359,7 +360,7 @@ function ReferralSection({ t, currency, user }) {
 
 /* ── Shop ── */
 export default function Shop() {
-  const { lang, currency, user, plans } = useGameStore()
+  const { lang, currency, rates, user, plans } = useGameStore()
   const t = translations[lang]
   const PLANS = plans.length > 0 ? mergePlans(plans) : STATIC_PLANS
   const [active, setActive] = useState(1)
@@ -456,11 +457,11 @@ export default function Shop() {
                   </div>
                 )}
                 <div className="pro-card-period">{periodLabel}</div>
-                <div className="pro-card-price">{currency.symbol}{p.price.toLocaleString('ru-RU')}</div>
-                <div className="pro-card-per">{currency.symbol}{p.perMonth} {t.proPerMonth}</div>
+                <div className="pro-card-price">{formatCurrency(p.price, currency, rates)}</div>
+                <div className="pro-card-per">{formatCurrency(p.perMonth, currency, rates)} {t.proPerMonth}</div>
                 {p.savings && (
                   <div className="pro-card-savings">
-                    {t.proSave} {currency.symbol}{p.savings.toLocaleString('ru-RU')}
+                    {t.proSave} {formatCurrency(p.savings, currency, rates)}
                   </div>
                 )}
                 {isActive && (
@@ -484,13 +485,14 @@ export default function Shop() {
       </div>
 
       {/* Referral Section */}
-      <ReferralSection t={t} currency={currency} user={user} />
+      <ReferralSection t={t} currency={currency} rates={rates} user={user} />
 
       {/* Plan Sheet */}
       <PlanSheet
         plan={sheetPlan}
         t={t}
         currency={currency}
+        rates={rates}
         onClose={closeSheet}
       />
     </div>

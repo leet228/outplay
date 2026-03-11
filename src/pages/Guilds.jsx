@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { haptic } from '../lib/telegram'
+import { formatCurrency } from '../lib/currency'
 import { createGuild, joinGuild, kickFromGuild, editGuild, leaveGuild, searchGuilds as searchGuildsApi, getGuildData } from '../lib/supabase'
 import './Guilds.css'
 
@@ -24,7 +25,7 @@ function guildColor(name) {
 }
 
 /* ── Guild Detail Sheet ── */
-function GuildDetailSheet({ guild, members, onClose, t, currency, isOwner, user, onKick, onEdit, onLeave }) {
+function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, user, onKick, onEdit, onLeave }) {
   const open = !!guild
   const [kickTarget, setKickTarget] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -106,7 +107,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, isOwner, user,
                 <span className="gd-meta">{guild.member_count ?? members.length}/50</span>
               </div>
               <span className={`gd-pnl ${(guild.pnl ?? 0) >= 0 ? 'positive' : 'negative'}`}>
-                {(guild.pnl ?? 0) >= 0 ? '+' : ''}{currency.symbol}{Math.abs(guild.pnl ?? 0).toLocaleString('ru-RU')}
+                {formatCurrency(guild.pnl ?? 0, currency, rates, { sign: '+' })}
               </span>
             </div>
 
@@ -167,7 +168,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, isOwner, user,
                     />
                     <div className="gd-edit-cost">
                       <span className="gd-edit-cost-label">{t.guildsEditCost}</span>
-                      <span className="gd-edit-cost-amount">{currency.symbol}{EDIT_COST.toLocaleString('ru-RU')}</span>
+                      <span className="gd-edit-cost-amount">{formatCurrency(EDIT_COST, currency, rates)}</span>
                     </div>
                     <button className="gd-edit-save" onClick={handleSaveEdit} disabled={saving}>
                       {t.guildsEditSave}
@@ -252,7 +253,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, isOwner, user,
                       </button>
                     ) : (
                       <span className={`gd-member-pnl ${pos ? 'positive' : 'negative'}`}>
-                        {pos ? '+' : ''}{currency.symbol}{Math.abs(m.pnl ?? 0).toLocaleString('ru-RU')}
+                        {formatCurrency(m.pnl ?? 0, currency, rates, { sign: '+' })}
                       </span>
                     )}
                   </div>
@@ -267,7 +268,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, isOwner, user,
 }
 
 /* ── Create Guild Sheet ── */
-function CreateGuildSheet({ open, onClose, onCreated, t, currency }) {
+function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates }) {
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [avatar, setAvatar] = useState(null)
@@ -376,7 +377,7 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency }) {
         <div className="guilds-sheet-footer">
           <div className="guilds-sheet-cost">
             <span className="guilds-sheet-cost-label">{t.guildsCost}</span>
-            <span className="guilds-sheet-cost-amount">{currency.symbol}{CREATE_COST.toLocaleString('ru-RU')}</span>
+            <span className="guilds-sheet-cost-amount">{formatCurrency(CREATE_COST, currency, rates)}</span>
           </div>
           <button
             className={`guilds-sheet-submit ${canCreate && !creating ? '' : 'disabled'}`}
@@ -392,7 +393,7 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency }) {
 }
 
 /* ── Find Guild Sheet ── */
-function FindGuildSheet({ open, onClose, onJoined, t, currency, topGuilds }) {
+function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds }) {
   const [query, setQuery] = useState('')
   const [joinTarget, setJoinTarget] = useState(null)
   const [results, setResults] = useState([])
@@ -511,7 +512,7 @@ function FindGuildSheet({ open, onClose, onJoined, t, currency, topGuilds }) {
                   <span className="gf-full-label">{t.guildsFull}</span>
                 ) : (
                   <span className={`guild-pnl ${isPositive ? 'positive' : 'negative'}`}>
-                    {isPositive ? '+' : ''}{currency.symbol}{Math.abs(g.pnl ?? 0).toLocaleString('ru-RU')}
+                    {formatCurrency(g.pnl ?? 0, currency, rates, { sign: '+' })}
                   </span>
                 )}
               </div>
@@ -526,7 +527,7 @@ function FindGuildSheet({ open, onClose, onJoined, t, currency, topGuilds }) {
 /* ── Main Page ── */
 export default function Guilds() {
   const {
-    lang, currency, user, balance,
+    lang, currency, rates, user, balance,
     guild, guildMembers, topGuilds, guildSeason,
     setGuild, setGuildMembers, setTopGuilds, setGuildSeason, setBalance,
   } = useGameStore()
@@ -700,7 +701,7 @@ export default function Guilds() {
         </div>
         <span className="guilds-prize-label">{t.guildsPrizePool}</span>
         <span className="guilds-prize-amount">
-          {currency.symbol}{prizePool.toLocaleString('ru-RU')}
+          {formatCurrency(prizePool, currency, rates)}
         </span>
       </div>
 
@@ -735,7 +736,7 @@ export default function Guilds() {
               <span className="guild-members">{guild.member_count ?? guildMembers.length}/50</span>
             </div>
             <span className={`guild-pnl ${myGuildPositive ? 'positive' : 'negative'}`}>
-              {myGuildPositive ? '+' : ''}{currency.symbol}{Math.abs(myGuildPnl).toLocaleString('ru-RU')}
+              {formatCurrency(myGuildPnl, currency, rates, { sign: '+' })}
             </span>
           </div>
         </div>
@@ -768,7 +769,7 @@ export default function Guilds() {
                   <span className="guild-members">{g.member_count ?? 0}/50</span>
                 </div>
                 <span className={`guild-pnl ${isPositive ? 'positive' : 'negative'}`}>
-                  {isPositive ? '+' : ''}{currency.symbol}{Math.abs(g.pnl ?? 0).toLocaleString('ru-RU')}
+                  {formatCurrency(g.pnl ?? 0, currency, rates, { sign: '+' })}
                 </span>
               </div>
             )
@@ -823,14 +824,15 @@ export default function Guilds() {
       </div>
 
       {/* Sheets */}
-      <CreateGuildSheet open={createOpen} onClose={closeCreate} onCreated={handleGuildCreated} t={t} currency={currency} />
-      <FindGuildSheet open={findOpen} onClose={closeFind} onJoined={handleJoinFromFind} t={t} currency={currency} topGuilds={topGuilds} />
+      <CreateGuildSheet open={createOpen} onClose={closeCreate} onCreated={handleGuildCreated} t={t} currency={currency} rates={rates} />
+      <FindGuildSheet open={findOpen} onClose={closeFind} onJoined={handleJoinFromFind} t={t} currency={currency} rates={rates} topGuilds={topGuilds} />
       <GuildDetailSheet
         guild={selectedGuild}
         members={detailMembers}
         onClose={closeDetail}
         t={t}
         currency={currency}
+        rates={rates}
         isOwner={isDetailOwner}
         user={user}
         onKick={handleKickMember}

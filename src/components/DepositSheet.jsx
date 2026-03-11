@@ -2,11 +2,9 @@ import { useEffect, useState, useRef } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
 import { createStarsInvoice, processDeposit, getUserBalance } from '../lib/supabase'
+import { formatCurrency, convertFromRub } from '../lib/currency'
 import { translations } from '../lib/i18n'
 import './DepositSheet.css'
-
-const STAR_USD = 0.013
-const RATES = { RUB: 77, USD: 1, EUR: 0.93 }
 
 const PRESETS = [100, 500, 1000]
 const MIN_STARS = 1
@@ -49,26 +47,9 @@ function CoinIcon({ id, color }) {
   )
 }
 
-/** ≈ 100 ₽  /  ≈ $1.30  (for presets & custom input) */
-function toCurrency(stars, cur) {
-  const usd = stars * STAR_USD
-  const amount = usd * (RATES[cur.code] ?? 1)
-  if (cur.code === 'RUB') return `≈ ${Math.round(amount)} ${cur.symbol}`
-  return `≈ ${cur.symbol}${amount.toFixed(2)}`
-}
-
-/** +100 ₽  /  +$1.30  (for success screen — no ≈, with +) */
-function toSuccessAmount(stars, cur) {
-  const usd = stars * STAR_USD
-  const amount = usd * (RATES[cur.code] ?? 1)
-  if (cur.code === 'RUB') return `+${Math.round(amount)} ${cur.symbol}`
-  return `+${cur.symbol}${amount.toFixed(2)}`
-}
-
-/** Raw numeric currency amount for DB (e.g. 100.10) */
-function toCurrencyRaw(stars, curCode) {
-  const usd = stars * STAR_USD
-  const amount = usd * (RATES[curCode] ?? 1)
+/** Raw numeric currency amount for DB (e.g. 100.10) — 1 Star = 1 RUB */
+function toCurrencyRaw(stars, curCode, rates) {
+  const amount = convertFromRub(stars, curCode, rates)
   return Math.round(amount * 100) / 100
 }
 
@@ -108,7 +89,7 @@ async function pollBalance(userId, prevBalance, maxRetries = 4) {
 }
 
 export default function DepositSheet() {
-  const { depositOpen, setDepositOpen, lang, currency, user, balance, setBalance, setBalanceBounce } = useGameStore()
+  const { depositOpen, setDepositOpen, lang, currency, rates, user, balance, setBalance, setBalanceBounce } = useGameStore()
   const t = translations[lang]
 
   const [view, setView] = useState('main')
@@ -216,7 +197,7 @@ export default function DepositSheet() {
 
     // ── Real Telegram: create invoice → open → process ──
     try {
-      const curAmt = toCurrencyRaw(activeAmount, currency.code)
+      const curAmt = toCurrencyRaw(activeAmount, currency.code, rates)
       const invoice = await createStarsInvoice(userId, activeAmount, curAmt, currency.code)
       if (!invoice?.url || !invoice?.tx_id) {
         setLoading(false)
@@ -240,7 +221,7 @@ export default function DepositSheet() {
             // 2. Webhook didn't process in time — client calls process_deposit as backup
             // Same tx_id → dedup prevents double credit
             try {
-              const curAmt = toCurrencyRaw(activeAmount, currency.code)
+              const curAmt = toCurrencyRaw(activeAmount, currency.code, rates)
               const result = await processDeposit(userId, activeAmount, invoiceTxRef.current, curAmt, currency.code)
               if (result?.new_balance != null) {
                 setBalance(result.new_balance)
@@ -303,7 +284,7 @@ export default function DepositSheet() {
             <SuccessCheckmark />
             <span className="deposit-success-title">{t.depositSuccess}</span>
             <span className="deposit-success-amount">
-              {toSuccessAmount(successAmountRef.current, currency)}
+              {formatCurrency(successAmountRef.current, currency, rates, { sign: '+' })}
             </span>
           </div>
         )}
@@ -359,7 +340,7 @@ export default function DepositSheet() {
                   onClick={() => handlePreset(amount)}
                 >
                   <span className="deposit-preset-stars">⭐ {amount}</span>
-                  <span className="deposit-preset-rub">{toCurrency(amount, currency)}</span>
+                  <span className="deposit-preset-rub">{formatCurrency(amount, currency, rates, { approximate: true })}</span>
                 </button>
               ))}
             </div>
@@ -378,7 +359,7 @@ export default function DepositSheet() {
                   onChange={handleCustomChange}
                 />
                 {custom !== '' && isCustomValid && (
-                  <span className="deposit-custom-rub">{toCurrency(Number(custom), currency)}</span>
+                  <span className="deposit-custom-rub">{formatCurrency(Number(custom), currency, rates, { approximate: true })}</span>
                 )}
               </div>
             </div>

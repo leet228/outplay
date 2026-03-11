@@ -1,5 +1,6 @@
 import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
+import { formatCurrency } from '../lib/currency'
 import './Leaderboard.css'
 
 function approxRank(rank) {
@@ -65,7 +66,7 @@ function ListRankBadge({ rank }) {
 }
 
 export default function Leaderboard() {
-  const { user, currency, lang, leaderboard, rank, totalPnl } = useGameStore()
+  const { user, currency, rates, lang, leaderboard, rank, totalPnl } = useGameStore()
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
 
@@ -104,7 +105,7 @@ export default function Leaderboard() {
               </div>
               <span className="lb-podium-name">{p.first_name}</span>
               <span className={`lb-podium-pnl ${isPos ? 'positive' : 'negative'}`}>
-                {isPos ? '+' : ''}{currency.symbol}{Math.abs(p.balance).toLocaleString()}
+                {formatCurrency(p.balance, currency, rates, { sign: '+' })}
               </span>
               <span className="lb-podium-wr">{wr}% WR</span>
             </div>
@@ -135,7 +136,7 @@ export default function Leaderboard() {
               </div>
               <div className="lb-right">
                 <span className={`lb-pnl ${isPos ? 'positive' : 'negative'}`}>
-                  {isPos ? '+' : ''}{currency.symbol}{Math.abs(p.balance).toLocaleString()}
+                  {formatCurrency(p.balance, currency, rates, { sign: '+' })}
                 </span>
                 <span className="lb-wr">{wr}% WR</span>
               </div>
@@ -163,7 +164,7 @@ export default function Leaderboard() {
             </div>
             <div className="lb-right">
               <span className={`lb-pnl ${myPnlPositive ? 'positive' : 'negative'}`}>
-                {myPnlPositive ? '+' : ''}{currency.symbol}{Math.abs(myPnl).toLocaleString()}
+                {formatCurrency(myPnl, currency, rates, { sign: '+' })}
               </span>
               <span className="lb-wr">{myWr}% WR</span>
             </div>

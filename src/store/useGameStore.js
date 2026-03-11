@@ -22,6 +22,10 @@ const useGameStore = create((set, get) => ({
     if (uid && uid !== 'dev') syncUserSettings(uid, { currency: currency.code })
   },
 
+  // Exchange rates (fetched at bootstrap)
+  rates: { RUB: 1, USD: 0.011, EUR: 0.010 },
+  setRates: (rates) => set({ rates }),
+
   // Language
   lang: localStorage.getItem('outplay_lang') || 'ru',
   setLang: (lang) => {

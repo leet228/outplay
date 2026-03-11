@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
+import { formatCurrency } from '../lib/currency'
 import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend } from '../lib/supabase'
 import './Home.css'
 
@@ -186,7 +187,7 @@ function BannerCarousel({ t }) {
 /* ── Game Sheet ── */
 const STAKES = [100, 300, 500, 1000]
 
-function GameSheet({ game, t, balance, currency, onClose }) {
+function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const [selectedStakes, setSelectedStakes] = useState([])
   const [error, setError] = useState(false)
   const errorTimer = useRef(null)
@@ -306,7 +307,7 @@ function GameSheet({ game, t, balance, currency, onClose }) {
                   className={`sheet-stake ${isActive ? 'active' : ''} ${!canAfford ? 'locked' : ''}`}
                   onClick={() => toggleStake(amount)}
                 >
-                  {currency.symbol}{amount}
+                  {formatCurrency(amount, currency, rates)}
                 </button>
               )
             })}
@@ -707,7 +708,7 @@ const GAMES = [
 
 /* ── Home ── */
 export default function Home() {
-  const { balance, currency, lang, setDepositOpen, user, friendRequests, balanceBounce } = useGameStore()
+  const { balance, currency, rates, lang, setDepositOpen, user, friendRequests, balanceBounce } = useGameStore()
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)
   const [friendsOpen, setFriendsOpen] = useState(false)
@@ -745,8 +746,7 @@ export default function Home() {
             )}
           </button>
           <div className={`topbar-balance ${balanceBounce ? 'bounce' : ''}`}>
-            <span className="topbar-currency">{currency.symbol}</span>
-            <span className="topbar-amount">{Number(balance).toFixed(2)}</span>
+            <span className="topbar-amount">{formatCurrency(balance, currency, rates)}</span>
             <button className="topbar-plus" onClick={() => { haptic('light'); setDepositOpen(true) }}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                 <path d="M8 2V14M2 8H14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
@@ -808,6 +808,7 @@ export default function Home() {
         t={t}
         balance={balance}
         currency={currency}
+        rates={rates}
         onClose={closeSheet}
       />
     </div>

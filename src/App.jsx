@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
 import { getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline } from './lib/supabase'
+import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
 import './App.css'
 import BottomNav from './components/BottomNav'
@@ -212,6 +213,8 @@ export default function App() {
         { request_id: 'req2', from_user: { id: '6', first_name: 'Сергей',  username: 'serg_bet', avatar_url: null }, created_at: new Date(Date.now() - 7200000).toISOString() },
       ])
       store.setSentRequestIds(['4'])
+      // Fetch exchange rates (dev mode too)
+      fetchRates().then(r => store.setRates(r)).catch(() => {})
       return
     }
 
@@ -220,15 +223,19 @@ export default function App() {
     setUser(user)
     setBalance(user.balance ?? 0)
 
-    // 6 parallel fetches — all data for the entire app
-    const [profile, plans, leaderboard, guildData, opponents, friendsData] = await Promise.all([
+    // 7 parallel fetches — all data for the entire app
+    const [profile, plans, leaderboard, guildData, opponents, friendsData, rates] = await Promise.all([
       getUserProfile(user.id),
       getPlans(),
       getLeaderboard(50),
       getGuildData(user.id),
       getRecentOpponents(user.id),
       getFriendsData(user.id),
+      fetchRates(),
     ])
+
+    // Exchange rates
+    if (rates) store.setRates(rates)
 
     // Profile
     if (profile && !profile.error) {
