@@ -2,63 +2,36 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { haptic } from '../lib/telegram'
+import { createGuild, joinGuild, kickFromGuild, editGuild, leaveGuild, searchGuilds as searchGuildsApi, getGuildData } from '../lib/supabase'
 import './Guilds.css'
 
-function getTimeLeft() {
-  const now = new Date()
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-  const diff = end - now
+function getTimeLeft(endDate) {
+  const end = endDate ? new Date(endDate) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1)
+  const diff = Math.max(0, end - new Date())
   const days = Math.floor(diff / 86400000)
   const hours = Math.floor((diff % 86400000) / 3600000)
   const minutes = Math.floor((diff % 3600000) / 60000)
   return { days, hours, minutes }
 }
 
-const MOCK_PRIZE = 50000
 const CREATE_COST = 5000
 const EDIT_COST = 100
 
 const GUILD_COLORS = ['#6366f1', '#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#ec4899', '#a855f7', '#14b8a6']
 
-const mockMembers = [
-  { id: 1, first_name: 'Александр', username: 'alex_pro', pnl: 18200 },
-  { id: 2, first_name: 'Мария',     username: 'masha_q',  pnl: 14500 },
-  { id: 3, first_name: 'Дмитрий',   username: 'dima_iq',  pnl: 12800 },
-  { id: 4, first_name: 'Кирилл',    username: 'kirill99', pnl: 9400  },
-  { id: 5, first_name: 'Анна',      username: 'anna_win', pnl: 7600  },
-  { id: 6, first_name: 'Сергей',    username: 'serg_top', pnl: 5200  },
-  { id: 7, first_name: 'Оля',       username: 'olya_q',   pnl: 3100  },
-  { id: 8, first_name: 'Максим',    username: 'max_iq',   pnl: 1800  },
-]
-
-const mockGuilds = [
-  { id: 1, name: 'Alpha Wolves',    tag: 'AW',  members: 48, pnl: 128450, desc: 'Сильнейшая гильдия. Только победы.', creator: 'Виктор' },
-  { id: 2, name: 'Brain Storm',     tag: 'BS',  members: 50, pnl: 95200,  desc: 'Мозговой штурм каждый день!', creator: 'Настя' },
-  { id: 3, name: 'Quiz Kings',      tag: 'QK',  members: 45, pnl: 87100,  desc: 'Короли викторин. Присоединяйся.', creator: 'Артём' },
-  { id: 4, name: 'Нейронка',        tag: 'НР',  members: 42, pnl: 63800,  desc: 'Думаем быстрее всех.', creator: 'Лена' },
-  { id: 5, name: 'Эрудиты',         tag: 'ЭР',  members: 38, pnl: 51200,  desc: 'Знания — наша сила.', creator: 'Павел' },
-  { id: 6, name: 'Mind Breakers',   tag: 'MB',  members: 50, pnl: 44700,  desc: 'Break minds, take wins.', creator: 'Jake' },
-  { id: 7, name: 'Топ Квиз',        tag: 'ТК',  members: 31, pnl: 32100,  desc: 'Лучшие квизеры страны.', creator: 'Иван' },
-  { id: 8, name: 'IQ Masters',      tag: 'IQ',  members: 27, pnl: 21500,  desc: 'High IQ only.', creator: 'Dev' },
-  { id: 9, name: 'Fast Minds',      tag: 'FM',  members: 19, pnl: 14800,  desc: 'Speed is everything.', creator: 'Mike' },
-  { id: 10, name: 'Знатоки',        tag: 'ЗН',  members: 12, pnl: 8300,   desc: 'Клуб знатоков.', creator: 'Олег' },
-]
-
-const MY_GUILD = mockGuilds[7] // IQ Masters — user is creator
-const MY_GUILD_RANK = mockGuilds.findIndex(g => g.id === MY_GUILD.id) + 1
-
 function guildColor(name) {
-  return GUILD_COLORS[name.charCodeAt(0) % GUILD_COLORS.length]
+  return GUILD_COLORS[(name || '').charCodeAt(0) % GUILD_COLORS.length]
 }
 
 /* ── Guild Detail Sheet ── */
-function GuildDetailSheet({ guild, onClose, t, currency, isOwner }) {
+function GuildDetailSheet({ guild, members, onClose, t, currency, isOwner, user, onKick, onEdit, onLeave }) {
   const open = !!guild
   const [kickTarget, setKickTarget] = useState(null)
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editAvatar, setEditAvatar] = useState(null)
+  const [saving, setSaving] = useState(false)
   const editFileRef = useRef(null)
 
   useEffect(() => {
@@ -96,8 +69,24 @@ function GuildDetailSheet({ guild, onClose, t, currency, isOwner }) {
     reader.readAsDataURL(file)
   }
 
+  async function handleSaveEdit() {
+    if (saving || !guild) return
+    haptic('medium')
+    setSaving(true)
+    await onEdit(editName || null, editDesc || null, editAvatar || null)
+    setSaving(false)
+    setEditing(false)
+  }
+
+  async function handleKick(memberId) {
+    haptic('medium')
+    await onKick(memberId)
+    setKickTarget(null)
+  }
+
   const color = guild ? guildColor(guild.name) : '#888'
-  const canJoin = guild && guild.members < 50
+  const canJoin = guild && (guild.member_count ?? 0) < 50
+  const tag = guild?.tag || (guild?.name ? guild.name.substring(0, 2).toUpperCase() : '??')
 
   return (
     <>
@@ -110,19 +99,19 @@ function GuildDetailSheet({ guild, onClose, t, currency, isOwner }) {
             {/* Guild header */}
             <div className="gd-header">
               <div className="gd-avatar" style={{ background: `${color}22`, color }}>
-                {guild.tag[0]}
+                {tag[0]}
               </div>
               <div className="gd-header-info">
                 <span className="gd-name">{guild.name}</span>
-                <span className="gd-meta">{guild.members}/50</span>
+                <span className="gd-meta">{guild.member_count ?? members.length}/50</span>
               </div>
-              <span className={`gd-pnl ${guild.pnl >= 0 ? 'positive' : 'negative'}`}>
-                {guild.pnl >= 0 ? '+' : ''}{currency.symbol}{guild.pnl.toLocaleString('ru-RU')}
+              <span className={`gd-pnl ${(guild.pnl ?? 0) >= 0 ? 'positive' : 'negative'}`}>
+                {(guild.pnl ?? 0) >= 0 ? '+' : ''}{currency.symbol}{Math.abs(guild.pnl ?? 0).toLocaleString('ru-RU')}
               </span>
             </div>
 
             {/* Description */}
-            <p className="gd-desc">{guild.desc}</p>
+            <p className="gd-desc">{guild.description || ''}</p>
 
             {/* Action button */}
             {isOwner ? (
@@ -170,7 +159,7 @@ function GuildDetailSheet({ guild, onClose, t, currency, isOwner }) {
                     />
                     <textarea
                       className="guilds-sheet-input gd-edit-desc"
-                      placeholder={guild.desc}
+                      placeholder={guild.description || ''}
                       value={editDesc}
                       onChange={e => setEditDesc(e.target.value)}
                       maxLength={120}
@@ -180,7 +169,7 @@ function GuildDetailSheet({ guild, onClose, t, currency, isOwner }) {
                       <span className="gd-edit-cost-label">{t.guildsEditCost}</span>
                       <span className="gd-edit-cost-amount">{currency.symbol}{EDIT_COST.toLocaleString('ru-RU')}</span>
                     </div>
-                    <button className="gd-edit-save" onClick={() => haptic('medium')}>
+                    <button className="gd-edit-save" onClick={handleSaveEdit} disabled={saving}>
                       {t.guildsEditSave}
                     </button>
                   </div>
@@ -209,50 +198,61 @@ function GuildDetailSheet({ guild, onClose, t, currency, isOwner }) {
               </span>
               <div className="gd-creator-row">
                 <div className="gd-creator-avatar" style={{ background: `${color}22`, color }}>
-                  {guild.creator[0]}
+                  {(guild.creator_name || '?')[0]}
                 </div>
-                <span className="gd-creator-name">{guild.creator}</span>
+                <span className="gd-creator-name">{guild.creator_name || '—'}</span>
               </div>
             </div>
+
+            {/* Leave button (for non-creator members) */}
+            {!isOwner && guild.id && user && onLeave && (
+              <button
+                className="gd-leave-btn"
+                onClick={() => { haptic('medium'); onLeave() }}
+              >
+                {t.guildsLeave || 'Leave Guild'}
+              </button>
+            )}
 
             {/* Members list */}
             <div className="gd-members-header">
               <span className="gd-members-title">{t.guildsPlayerList}</span>
-              <span className="gd-members-count">{mockMembers.length}</span>
+              <span className="gd-members-count">{members.length}</span>
             </div>
             <div className="gd-members">
-              {mockMembers.map((m, i) => {
-                const mc = guildColor(m.first_name)
-                const pos = m.pnl >= 0
-                const isKickTarget = kickTarget === m.id
+              {members.map((m, i) => {
+                const mc = guildColor(m.first_name || '?')
+                const pos = (m.pnl ?? 0) >= 0
+                const isKickTarget = kickTarget === m.user_id
+                const isMe = m.user_id === user?.id
                 return (
                   <div
-                    key={m.id}
-                    className={`gd-member ${isOwner ? 'gd-member--owner' : ''}`}
+                    key={m.user_id}
+                    className={`gd-member ${isOwner && !isMe ? 'gd-member--owner' : ''}`}
                     onClick={() => {
-                      if (!isOwner) return
+                      if (!isOwner || isMe) return
                       haptic('light')
-                      setKickTarget(isKickTarget ? null : m.id)
+                      setKickTarget(isKickTarget ? null : m.user_id)
                     }}
                   >
                     <span className="gd-member-rank">{i + 1}</span>
                     <div className="gd-member-avatar" style={{ background: `${mc}22`, color: mc }}>
-                      {m.first_name[0]}
+                      {(m.first_name || '?')[0]}
                     </div>
                     <div className="gd-member-info">
                       <span className="gd-member-name">{m.first_name}</span>
                       {isOwner && <span className="gd-member-username">@{m.username}</span>}
                     </div>
-                    {isKickTarget ? (
+                    {isKickTarget && !isMe ? (
                       <button
                         className="gd-member-kick"
-                        onClick={e => { e.stopPropagation(); haptic('medium') }}
+                        onClick={e => { e.stopPropagation(); handleKick(m.user_id) }}
                       >
                         {t.guildsKick}
                       </button>
                     ) : (
                       <span className={`gd-member-pnl ${pos ? 'positive' : 'negative'}`}>
-                        {pos ? '+' : ''}{currency.symbol}{m.pnl.toLocaleString('ru-RU')}
+                        {pos ? '+' : ''}{currency.symbol}{Math.abs(m.pnl ?? 0).toLocaleString('ru-RU')}
                       </span>
                     )}
                   </div>
@@ -267,10 +267,11 @@ function GuildDetailSheet({ guild, onClose, t, currency, isOwner }) {
 }
 
 /* ── Create Guild Sheet ── */
-function CreateGuildSheet({ open, onClose, t, currency }) {
+function CreateGuildSheet({ open, onClose, onCreated, t, currency }) {
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [avatar, setAvatar] = useState(null)
+  const [creating, setCreating] = useState(false)
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -302,6 +303,14 @@ function CreateGuildSheet({ open, onClose, t, currency }) {
     const reader = new FileReader()
     reader.onload = (ev) => setAvatar(ev.target.result)
     reader.readAsDataURL(file)
+  }
+
+  async function handleCreate() {
+    if (!canCreate || creating) return
+    haptic('medium')
+    setCreating(true)
+    await onCreated(name.trim(), desc.trim(), avatar)
+    setCreating(false)
   }
 
   const canCreate = name.trim().length >= 2
@@ -370,9 +379,9 @@ function CreateGuildSheet({ open, onClose, t, currency }) {
             <span className="guilds-sheet-cost-amount">{currency.symbol}{CREATE_COST.toLocaleString('ru-RU')}</span>
           </div>
           <button
-            className={`guilds-sheet-submit ${canCreate ? '' : 'disabled'}`}
-            onClick={() => { if (canCreate) haptic('medium') }}
-            disabled={!canCreate}
+            className={`guilds-sheet-submit ${canCreate && !creating ? '' : 'disabled'}`}
+            onClick={handleCreate}
+            disabled={!canCreate || creating}
           >
             {t.guildsCreateBtn}
           </button>
@@ -383,19 +392,24 @@ function CreateGuildSheet({ open, onClose, t, currency }) {
 }
 
 /* ── Find Guild Sheet ── */
-function FindGuildSheet({ open, onClose, t, currency }) {
+function FindGuildSheet({ open, onClose, onJoined, t, currency, topGuilds }) {
   const [query, setQuery] = useState('')
   const [joinTarget, setJoinTarget] = useState(null)
+  const [results, setResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [joining, setJoining] = useState(false)
+  const debounceRef = useRef(null)
 
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden'
+      setResults(topGuilds)
     } else {
       document.body.style.overflow = ''
-      setTimeout(() => { setQuery(''); setJoinTarget(null) }, 300)
+      setTimeout(() => { setQuery(''); setJoinTarget(null); setResults([]) }, 300)
     }
     return () => { document.body.style.overflow = '' }
-  }, [open])
+  }, [open, topGuilds])
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp
@@ -410,10 +424,32 @@ function FindGuildSheet({ open, onClose, t, currency }) {
     return () => tg.BackButton.offClick(onClose)
   }, [open, onClose])
 
-  const q = query.trim().toLowerCase()
-  const results = q.length >= 1
-    ? mockGuilds.filter(g => g.name.toLowerCase().includes(q))
-    : mockGuilds
+  function handleQueryChange(val) {
+    setQuery(val)
+    setJoinTarget(null)
+    clearTimeout(debounceRef.current)
+
+    const q = val.trim()
+    if (q.length === 0) {
+      setResults(topGuilds)
+      return
+    }
+
+    setSearching(true)
+    debounceRef.current = setTimeout(async () => {
+      const data = await searchGuildsApi(q)
+      setResults(data)
+      setSearching(false)
+    }, 300)
+  }
+
+  async function handleJoin(guildId) {
+    if (joining) return
+    haptic('medium')
+    setJoining(true)
+    await onJoined(guildId)
+    setJoining(false)
+  }
 
   return (
     <>
@@ -433,21 +469,22 @@ function FindGuildSheet({ open, onClose, t, currency }) {
             type="text"
             placeholder={t.guildsFindPlaceholder}
             value={query}
-            onChange={e => { setQuery(e.target.value); setJoinTarget(null) }}
+            onChange={e => handleQueryChange(e.target.value)}
             autoFocus
           />
         </div>
 
         <div className="gf-results">
-          {results.length === 0 && (
+          {results.length === 0 && !searching && (
             <div className="gf-empty">{t.guildsFindEmpty}</div>
           )}
-          {results.map(g => {
+          {results.map((g, idx) => {
             const color = guildColor(g.name)
-            const rank = mockGuilds.indexOf(g) + 1
-            const isPositive = g.pnl >= 0
+            const rank = idx + 1
+            const isPositive = (g.pnl ?? 0) >= 0
             const isJoinTarget = joinTarget === g.id
-            const canJoin = g.members < 50
+            const canJoin = (g.member_count ?? 0) < (g.max_members ?? 50)
+            const tag = g.tag || (g.name ? g.name.substring(0, 2).toUpperCase() : '??')
             return (
               <div
                 key={g.id}
@@ -456,16 +493,17 @@ function FindGuildSheet({ open, onClose, t, currency }) {
               >
                 <span className="gf-rank">{rank}</span>
                 <div className="guild-avatar" style={{ background: `${color}22`, color }}>
-                  {g.tag[0]}
+                  {tag[0]}
                 </div>
                 <div className="guild-info">
                   <span className="guild-name">{g.name}</span>
-                  <span className="guild-members">{g.members}/50</span>
+                  <span className="guild-members">{g.member_count ?? 0}/50</span>
                 </div>
                 {isJoinTarget && canJoin ? (
                   <button
                     className="gf-join-btn"
-                    onClick={e => { e.stopPropagation(); haptic('medium') }}
+                    onClick={e => { e.stopPropagation(); handleJoin(g.id) }}
+                    disabled={joining}
                   >
                     {t.guildsJoin}
                   </button>
@@ -473,7 +511,7 @@ function FindGuildSheet({ open, onClose, t, currency }) {
                   <span className="gf-full-label">{t.guildsFull}</span>
                 ) : (
                   <span className={`guild-pnl ${isPositive ? 'positive' : 'negative'}`}>
-                    {isPositive ? '+' : ''}{currency.symbol}{g.pnl.toLocaleString('ru-RU')}
+                    {isPositive ? '+' : ''}{currency.symbol}{Math.abs(g.pnl ?? 0).toLocaleString('ru-RU')}
                   </span>
                 )}
               </div>
@@ -487,15 +525,20 @@ function FindGuildSheet({ open, onClose, t, currency }) {
 
 /* ── Main Page ── */
 export default function Guilds() {
-  const { lang, currency } = useGameStore()
+  const {
+    lang, currency, user, balance,
+    guild, guildMembers, topGuilds, guildSeason,
+    setGuild, setGuildMembers, setTopGuilds, setGuildSeason, setBalance,
+  } = useGameStore()
   const t = translations[lang]
-  const [time, setTime] = useState(getTimeLeft)
+  const [time, setTime] = useState(() => getTimeLeft(guildSeason?.end_date))
   const prizeRef = useRef(null)
   const [prizeVisible, setPrizeVisible] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [findOpen, setFindOpen] = useState(false)
   const [selectedGuild, setSelectedGuild] = useState(null)
   const [toastVisible, setToastVisible] = useState(false)
+  const [toastMsg, setToastMsg] = useState('')
   const [howOpen, setHowOpen] = useState(false)
 
   const closeCreate = useCallback(() => setCreateOpen(false), [])
@@ -503,9 +546,9 @@ export default function Guilds() {
   const closeDetail = useCallback(() => setSelectedGuild(null), [])
 
   useEffect(() => {
-    const id = setInterval(() => setTime(getTimeLeft()), 60000)
+    const id = setInterval(() => setTime(getTimeLeft(guildSeason?.end_date)), 60000)
     return () => clearInterval(id)
-  }, [])
+  }, [guildSeason?.end_date])
 
   useEffect(() => {
     const el = prizeRef.current
@@ -515,19 +558,98 @@ export default function Guilds() {
     return () => obs.disconnect()
   }, [])
 
+  function showToast(msg) {
+    setToastMsg(msg)
+    setToastVisible(true)
+    setTimeout(() => setToastVisible(false), 2000)
+  }
+
+  // Refresh guild data from server
+  async function refreshGuildData() {
+    if (!user?.id || user.id === 'dev') return
+    const data = await getGuildData(user.id)
+    if (data) {
+      setGuild(data.my_guild ?? null)
+      setGuildMembers(data.my_guild?.members ?? [])
+      setTopGuilds(data.top_guilds ?? [])
+      setGuildSeason(data.season ?? null)
+    }
+  }
+
   function handleCreateClick() {
     haptic('medium')
-    if (MY_GUILD) {
-      setToastVisible(true)
-      setTimeout(() => setToastVisible(false), 2000)
+    if (guild) {
+      showToast(t.guildsAlreadyHave)
       return
     }
     setCreateOpen(true)
   }
 
-  const myGuildInTop5 = MY_GUILD_RANK <= 5
-  const myGuildColor = guildColor(MY_GUILD.name)
-  const myGuildPositive = MY_GUILD.pnl >= 0
+  async function handleGuildCreated(name, desc, avatarUrl) {
+    if (!user?.id || user.id === 'dev') return
+    const result = await createGuild(user.id, name, desc, avatarUrl)
+    if (result?.error) {
+      showToast(result.error === 'insufficient_balance' ? (t.guildsNotEnoughBalance || 'Not enough balance') : result.error)
+      return
+    }
+    // Deduct balance locally
+    setBalance(balance - CREATE_COST)
+    // Refresh guild data
+    await refreshGuildData()
+    setCreateOpen(false)
+  }
+
+  async function handleJoinFromFind(guildId) {
+    if (!user?.id || user.id === 'dev') return
+    const result = await joinGuild(user.id, guildId)
+    if (result?.error) {
+      showToast(result.error)
+      return
+    }
+    await refreshGuildData()
+    setFindOpen(false)
+  }
+
+  async function handleKickMember(targetId) {
+    if (!user?.id || !guild?.id || user.id === 'dev') return
+    const result = await kickFromGuild(user.id, targetId, guild.id)
+    if (result?.error) { showToast(result.error); return }
+    // Remove from local state
+    setGuildMembers(guildMembers.filter(m => m.user_id !== targetId))
+  }
+
+  async function handleEditGuild(name, desc, avatarUrl) {
+    if (!user?.id || !guild?.id || user.id === 'dev') return
+    const result = await editGuild(user.id, guild.id, name, desc, avatarUrl)
+    if (result?.error) {
+      showToast(result.error === 'insufficient_balance' ? (t.guildsNotEnoughBalance || 'Not enough balance') : result.error)
+      return
+    }
+    setBalance(balance - EDIT_COST)
+    await refreshGuildData()
+  }
+
+  async function handleLeaveGuild() {
+    if (!user?.id || user.id === 'dev') return
+    const result = await leaveGuild(user.id)
+    if (result?.error) { showToast(result.error); return }
+    setGuild(null)
+    setGuildMembers([])
+    setSelectedGuild(null)
+  }
+
+  const hasGuild = guild !== null
+  const myGuildRank = guild?.rank ?? 999
+  const myGuildInTop5 = hasGuild && myGuildRank <= 5
+  const myGuildColor = hasGuild ? guildColor(guild.name) : '#888'
+  const myGuildPnl = guild?.pnl ?? 0
+  const myGuildPositive = myGuildPnl >= 0
+  const prizePool = guildSeason?.prize_pool ?? 0
+  const myGuildTag = guild?.tag || (guild?.name ? guild.name.substring(0, 2).toUpperCase() : '??')
+
+  // When user taps own guild in the leaderboard list, show detail with their own data
+  const isDetailOwner = selectedGuild && hasGuild && selectedGuild.id === guild.id
+  const detailMembers = isDetailOwner ? guildMembers : (selectedGuild?.members ?? [])
 
   return (
     <div className="guilds page">
@@ -578,7 +700,7 @@ export default function Guilds() {
         </div>
         <span className="guilds-prize-label">{t.guildsPrizePool}</span>
         <span className="guilds-prize-amount">
-          {currency.symbol}{MOCK_PRIZE.toLocaleString('ru-RU')}
+          {currency.symbol}{prizePool.toLocaleString('ru-RU')}
         </span>
       </div>
 
@@ -600,20 +722,20 @@ export default function Guilds() {
       </div>
 
       {/* My guild (if not in top 5) */}
-      {!myGuildInTop5 && (
-        <div className="my-guild-card" onClick={() => { haptic('light'); setSelectedGuild(MY_GUILD) }}>
+      {hasGuild && !myGuildInTop5 && (
+        <div className="my-guild-card" onClick={() => { haptic('light'); setSelectedGuild(guild) }}>
           <div className="my-guild-label">{t.guildsMyGuild}</div>
           <div className="my-guild-row">
-            <span className="my-guild-rank">{MY_GUILD_RANK}</span>
+            <span className="my-guild-rank">{myGuildRank}</span>
             <div className="guild-avatar" style={{ background: `${myGuildColor}22`, color: myGuildColor }}>
-              {MY_GUILD.tag[0]}
+              {myGuildTag[0]}
             </div>
             <div className="guild-info">
-              <span className="guild-name">{MY_GUILD.name}</span>
-              <span className="guild-members">{MY_GUILD.members}/50</span>
+              <span className="guild-name">{guild.name}</span>
+              <span className="guild-members">{guild.member_count ?? guildMembers.length}/50</span>
             </div>
             <span className={`guild-pnl ${myGuildPositive ? 'positive' : 'negative'}`}>
-              {myGuildPositive ? '+' : ''}{currency.symbol}{MY_GUILD.pnl.toLocaleString('ru-RU')}
+              {myGuildPositive ? '+' : ''}{currency.symbol}{Math.abs(myGuildPnl).toLocaleString('ru-RU')}
             </span>
           </div>
         </div>
@@ -626,21 +748,27 @@ export default function Guilds() {
         </div>
 
         <div className="guilds-rows">
-          {mockGuilds.slice(0, 5).map((g, i) => {
+          {topGuilds.slice(0, 5).map((g, i) => {
             const color = guildColor(g.name)
-            const isPositive = g.pnl >= 0
+            const isPositive = (g.pnl ?? 0) >= 0
+            const tag = g.tag || (g.name ? g.name.substring(0, 2).toUpperCase() : '??')
+            const isMyGuild = hasGuild && g.id === guild.id
             return (
-              <div key={g.id} className="guild-row" onClick={() => { haptic('light'); setSelectedGuild(g) }}>
+              <div
+                key={g.id}
+                className={`guild-row ${isMyGuild ? 'guild-row--mine' : ''}`}
+                onClick={() => { haptic('light'); setSelectedGuild(isMyGuild ? guild : g) }}
+              >
                 <span className="guild-rank">{i + 1}</span>
                 <div className="guild-avatar" style={{ background: `${color}22`, color }}>
-                  {g.tag[0]}
+                  {tag[0]}
                 </div>
                 <div className="guild-info">
                   <span className="guild-name">{g.name}</span>
-                  <span className="guild-members">{g.members}/50</span>
+                  <span className="guild-members">{g.member_count ?? 0}/50</span>
                 </div>
                 <span className={`guild-pnl ${isPositive ? 'positive' : 'negative'}`}>
-                  {isPositive ? '+' : ''}{currency.symbol}{g.pnl.toLocaleString('ru-RU')}
+                  {isPositive ? '+' : ''}{currency.symbol}{Math.abs(g.pnl ?? 0).toLocaleString('ru-RU')}
                 </span>
               </div>
             )
@@ -691,18 +819,23 @@ export default function Guilds() {
 
       {/* Toast */}
       <div className={`guilds-toast ${toastVisible ? 'visible' : ''}`}>
-        {t.guildsAlreadyHave}
+        {toastMsg}
       </div>
 
       {/* Sheets */}
-      <CreateGuildSheet open={createOpen} onClose={closeCreate} t={t} currency={currency} />
-      <FindGuildSheet open={findOpen} onClose={closeFind} t={t} currency={currency} />
+      <CreateGuildSheet open={createOpen} onClose={closeCreate} onCreated={handleGuildCreated} t={t} currency={currency} />
+      <FindGuildSheet open={findOpen} onClose={closeFind} onJoined={handleJoinFromFind} t={t} currency={currency} topGuilds={topGuilds} />
       <GuildDetailSheet
         guild={selectedGuild}
+        members={detailMembers}
         onClose={closeDetail}
         t={t}
         currency={currency}
-        isOwner={selectedGuild?.id === MY_GUILD.id}
+        isOwner={isDetailOwner}
+        user={user}
+        onKick={handleKickMember}
+        onEdit={handleEditGuild}
+        onLeave={handleLeaveGuild}
       />
 
     </div>

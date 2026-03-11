@@ -51,6 +51,24 @@ const useGameStore = create((set, get) => ({
   setReferrals: (referrals) => set({ referrals }),
   setReferralsLoading: (v) => set({ referralsLoading: v }),
 
+  // Leaderboard (bootstrap)
+  leaderboard: [],
+  setLeaderboard: (v) => set({ leaderboard: v }),
+
+  // Guilds (bootstrap)
+  guild: null,
+  setGuild: (v) => set({ guild: v }),
+  guildMembers: [],
+  setGuildMembers: (v) => set({ guildMembers: v }),
+  topGuilds: [],
+  setTopGuilds: (v) => set({ topGuilds: v }),
+  guildSeason: null,
+  setGuildSeason: (v) => set({ guildSeason: v }),
+
+  // Recent opponents / friends (bootstrap)
+  recentOpponents: [],
+  setRecentOpponents: (v) => set({ recentOpponents: v }),
+
   // Active duel
   activeDuel: null,
   setActiveDuel: (duel) => set({ activeDuel: duel }),

@@ -126,3 +126,79 @@ export async function getLeaderboard(limit = 50) {
     .limit(limit)
   return data ?? []
 }
+
+// Guild data — user's guild + top guilds + season (single RPC)
+export async function getGuildData(userId) {
+  const { data, error } = await supabase.rpc('get_guild_data', { p_user_id: userId })
+  if (error) { console.error('getGuildData error:', error); return null }
+  return data
+}
+
+// Recent opponents from finished duels
+export async function getRecentOpponents(userId, limit = 20) {
+  const { data, error } = await supabase.rpc('get_recent_opponents', {
+    p_user_id: userId,
+    p_limit: limit,
+  })
+  if (error) { console.error('getRecentOpponents error:', error); return [] }
+  return data ?? []
+}
+
+// Search guilds by name (on-demand, FindGuildSheet)
+export async function searchGuilds(query, limit = 20) {
+  const { data, error } = await supabase.rpc('search_guilds', {
+    p_query: query,
+    p_limit: limit,
+  })
+  if (error) { console.error('searchGuilds error:', error); return [] }
+  return data ?? []
+}
+
+// Guild operations (wrappers for existing RPCs)
+export async function createGuild(userId, name, description, avatarUrl) {
+  const { data, error } = await supabase.rpc('create_guild', {
+    p_user_id: userId,
+    p_name: name,
+    p_description: description || '',
+    p_avatar_url: avatarUrl || null,
+  })
+  if (error) { console.error('createGuild error:', error); return { error: error.message } }
+  return data
+}
+
+export async function joinGuild(userId, guildId) {
+  const { data, error } = await supabase.rpc('join_guild', {
+    p_user_id: userId,
+    p_guild_id: guildId,
+  })
+  if (error) { console.error('joinGuild error:', error); return { error: error.message } }
+  return data
+}
+
+export async function kickFromGuild(creatorId, targetId, guildId) {
+  const { data, error } = await supabase.rpc('kick_from_guild', {
+    p_creator_id: creatorId,
+    p_target_id: targetId,
+    p_guild_id: guildId,
+  })
+  if (error) { console.error('kickFromGuild error:', error); return { error: error.message } }
+  return data
+}
+
+export async function editGuild(userId, guildId, name, description, avatarUrl) {
+  const { data, error } = await supabase.rpc('edit_guild', {
+    p_user_id: userId,
+    p_guild_id: guildId,
+    p_name: name || null,
+    p_description: description || null,
+    p_avatar_url: avatarUrl || null,
+  })
+  if (error) { console.error('editGuild error:', error); return { error: error.message } }
+  return data
+}
+
+export async function leaveGuild(userId) {
+  const { data, error } = await supabase.rpc('leave_guild', { p_user_id: userId })
+  if (error) { console.error('leaveGuild error:', error); return { error: error.message } }
+  return data
+}

@@ -685,6 +685,220 @@ END;
 $$;
 
 -- ╔═══════════════════════════════════════════╗
+-- ║  GUILD DATA (single RPC for Guilds page)  ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS get_guild_data(UUID);
+
+CREATE OR REPLACE FUNCTION get_guild_data(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_guild_id   UUID;
+  v_season_id  UUID;
+  v_my_guild   JSONB := 'null'::JSONB;
+  v_top_guilds JSONB := '[]'::JSONB;
+  v_season     JSONB := 'null'::JSONB;
+  v_members    JSONB;
+  v_rank       INTEGER;
+  v_member_count INTEGER;
+BEGIN
+  -- Active season
+  SELECT id, prize_pool, end_date
+  INTO v_season_id, v_season
+  FROM (
+    SELECT id, jsonb_build_object('prize_pool', prize_pool, 'end_date', end_date) AS info
+    FROM guild_seasons WHERE is_active = true LIMIT 1
+  ) s;
+
+  IF v_season_id IS NULL THEN
+    SELECT id INTO v_season_id FROM guild_seasons ORDER BY end_date DESC LIMIT 1;
+  END IF;
+
+  -- Actually extract season info properly
+  SELECT jsonb_build_object('prize_pool', prize_pool, 'end_date', end_date)
+  INTO v_season
+  FROM guild_seasons WHERE id = v_season_id;
+
+  -- User's guild
+  SELECT gm.guild_id INTO v_guild_id
+  FROM guild_members gm WHERE gm.user_id = p_user_id LIMIT 1;
+
+  IF v_guild_id IS NOT NULL THEN
+    -- Member count
+    SELECT COUNT(*) INTO v_member_count FROM guild_members WHERE guild_id = v_guild_id;
+
+    -- Guild rank among all guilds in season
+    SELECT COALESCE(pos, 0) INTO v_rank
+    FROM (
+      SELECT guild_id, ROW_NUMBER() OVER (ORDER BY pnl DESC) AS pos
+      FROM guild_season_stats WHERE season_id = v_season_id
+    ) ranked
+    WHERE guild_id = v_guild_id;
+
+    IF v_rank IS NULL OR v_rank = 0 THEN v_rank := 999; END IF;
+
+    -- Members with PnL
+    SELECT COALESCE(jsonb_agg(
+      jsonb_build_object(
+        'user_id',    u.id,
+        'first_name', u.first_name,
+        'username',   u.username,
+        'avatar_url', u.avatar_url,
+        'role',       gm.role,
+        'pnl',        COALESCE(gms.pnl, 0)
+      ) ORDER BY COALESCE(gms.pnl, 0) DESC
+    ), '[]'::JSONB) INTO v_members
+    FROM guild_members gm
+    JOIN users u ON u.id = gm.user_id
+    LEFT JOIN guild_member_stats gms
+      ON gms.guild_id = v_guild_id AND gms.user_id = gm.user_id AND gms.season_id = v_season_id
+    WHERE gm.guild_id = v_guild_id;
+
+    -- Build my_guild object
+    SELECT jsonb_build_object(
+      'id',           g.id,
+      'name',         g.name,
+      'description',  g.description,
+      'avatar_url',   g.avatar_url,
+      'creator_id',   g.creator_id,
+      'rank',         v_rank,
+      'member_count', v_member_count,
+      'pnl',          COALESCE(gss.pnl, 0),
+      'members',      v_members,
+      'creator_name', (SELECT first_name FROM users WHERE id = g.creator_id)
+    ) INTO v_my_guild
+    FROM guilds g
+    LEFT JOIN guild_season_stats gss ON gss.guild_id = g.id AND gss.season_id = v_season_id
+    WHERE g.id = v_guild_id;
+  END IF;
+
+  -- Top guilds
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'id',            g.id,
+      'name',          g.name,
+      'tag',           UPPER(LEFT(g.name, 2)),
+      'avatar_url',    g.avatar_url,
+      'member_count',  (SELECT COUNT(*) FROM guild_members WHERE guild_id = g.id),
+      'pnl',           COALESCE(gss.pnl, 0),
+      'creator_name',  (SELECT first_name FROM users WHERE id = g.creator_id)
+    ) ORDER BY COALESCE(gss.pnl, 0) DESC
+  ), '[]'::JSONB) INTO v_top_guilds
+  FROM guilds g
+  LEFT JOIN guild_season_stats gss ON gss.guild_id = g.id AND gss.season_id = v_season_id;
+
+  RETURN jsonb_build_object(
+    'my_guild',   v_my_guild,
+    'top_guilds', v_top_guilds,
+    'season',     v_season
+  );
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  RECENT OPPONENTS                         ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS get_recent_opponents(UUID, INTEGER);
+
+CREATE OR REPLACE FUNCTION get_recent_opponents(p_user_id UUID, p_limit INTEGER DEFAULT 20)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN COALESCE((
+    SELECT jsonb_agg(
+      jsonb_build_object(
+        'id',         sub.opp_id,
+        'first_name', sub.first_name,
+        'username',   sub.username,
+        'avatar_url', sub.avatar_url,
+        'last_seen',  sub.last_seen
+      )
+    )
+    FROM (
+      SELECT DISTINCT ON (opp_id)
+        CASE WHEN d.creator_id = p_user_id THEN d.opponent_id ELSE d.creator_id END AS opp_id,
+        u.first_name, u.username, u.avatar_url, u.last_seen,
+        d.created_at
+      FROM duels d
+      JOIN users u ON u.id = CASE WHEN d.creator_id = p_user_id THEN d.opponent_id ELSE d.creator_id END
+      WHERE (d.creator_id = p_user_id OR d.opponent_id = p_user_id)
+        AND d.status = 'finished'
+        AND d.opponent_id IS NOT NULL
+      ORDER BY opp_id, d.created_at DESC
+    ) sub
+    ORDER BY sub.last_seen DESC NULLS LAST
+    LIMIT p_limit
+  ), '[]'::JSONB);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  SEARCH GUILDS                            ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS search_guilds(TEXT, INTEGER);
+
+CREATE OR REPLACE FUNCTION search_guilds(p_query TEXT, p_limit INTEGER DEFAULT 20)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_season_id UUID;
+BEGIN
+  SELECT id INTO v_season_id FROM guild_seasons WHERE is_active = true LIMIT 1;
+
+  RETURN COALESCE((
+    SELECT jsonb_agg(
+      jsonb_build_object(
+        'id',           g.id,
+        'name',         g.name,
+        'tag',          UPPER(LEFT(g.name, 2)),
+        'avatar_url',   g.avatar_url,
+        'member_count', (SELECT COUNT(*) FROM guild_members WHERE guild_id = g.id),
+        'pnl',          COALESCE(gss.pnl, 0),
+        'creator_name', (SELECT first_name FROM users WHERE id = g.creator_id),
+        'max_members',  g.max_members
+      ) ORDER BY COALESCE(gss.pnl, 0) DESC
+    )
+    FROM guilds g
+    LEFT JOIN guild_season_stats gss ON gss.guild_id = g.id AND gss.season_id = v_season_id
+    WHERE g.name ILIKE '%' || p_query || '%'
+    LIMIT p_limit
+  ), '[]'::JSONB);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  LEAVE GUILD                              ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS leave_guild(UUID);
+
+CREATE OR REPLACE FUNCTION leave_guild(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  -- Creator cannot leave, must delete guild
+  IF EXISTS (SELECT 1 FROM guild_members WHERE user_id = p_user_id AND role = 'creator') THEN
+    RETURN jsonb_build_object('error', 'creator_cannot_leave');
+  END IF;
+
+  DELETE FROM guild_members WHERE user_id = p_user_id;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'not_in_guild');
+  END IF;
+
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
 -- ║  TRIGGERS                                 ║
 -- ╚═══════════════════════════════════════════╝
 

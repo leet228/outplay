@@ -328,19 +328,10 @@ function GameSheet({ game, t, balance, currency, onClose }) {
   )
 }
 
-/* ── Mock Friends ── */
-const mockFriends = [
-  { id: 1, first_name: 'Александр', username: 'alex_pro', online: true, pnl: 12400 },
-  { id: 2, first_name: 'Мария', username: 'masha_quiz', online: true, pnl: 8700 },
-  { id: 3, first_name: 'Дмитрий', username: 'dima_wins', online: true, pnl: 5200 },
-  { id: 4, first_name: 'Елена', username: 'lena_star', online: false, pnl: 15300 },
-  { id: 5, first_name: 'Артём', username: 'artem_iq', online: false, pnl: 3100 },
-  { id: 6, first_name: 'София', username: 'sofiya_g', online: false, pnl: 9800 },
-  { id: 7, first_name: 'Никита', username: 'nik_play', online: false, pnl: 1600 },
-]
+/* ── Friends Panel (Recent Opponents) ── */
+const ONLINE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
 
-/* ── Friends Panel ── */
-function FriendsPanel({ open, onClose, t, currency }) {
+function FriendsPanel({ open, onClose, t, currency, recentOpponents }) {
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState(null)
 
@@ -364,9 +355,14 @@ function FriendsPanel({ open, onClose, t, currency }) {
     return () => tg.BackButton.offClick(onClose)
   }, [open, onClose])
 
-  const filtered = mockFriends.filter(f =>
-    !query || f.first_name.toLowerCase().includes(query.toLowerCase()) ||
-    f.username.toLowerCase().includes(query.toLowerCase())
+  const now = Date.now()
+  const withOnline = (recentOpponents ?? []).map(f => ({
+    ...f,
+    online: f.last_seen ? (now - new Date(f.last_seen).getTime()) < ONLINE_THRESHOLD : false,
+  }))
+  const filtered = withOnline.filter(f =>
+    !query || f.first_name?.toLowerCase().includes(query.toLowerCase()) ||
+    (f.username && f.username.toLowerCase().includes(query.toLowerCase()))
   )
   const online = filtered.filter(f => f.online)
   const offline = filtered.filter(f => !f.online)
@@ -423,17 +419,18 @@ function FriendsPanel({ open, onClose, t, currency }) {
               {online.map(f => (
                 <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => handleRowClick(f.id)}>
                   <div className="friends-avatar-wrap">
-                    <div className="friends-avatar">{f.first_name[0]}</div>
+                    {f.avatar_url
+                      ? <img className="friends-avatar" src={f.avatar_url} alt="" style={{ objectFit: 'cover' }} />
+                      : <div className="friends-avatar">{f.first_name?.[0] ?? '?'}</div>}
                     <span className="friends-status-dot online" />
                   </div>
                   <div className="friends-info">
                     <span className="friends-name">{f.first_name}</span>
-                    <span className="friends-username">@{f.username}</span>
+                    {f.username && <span className="friends-username">@{f.username}</span>}
                   </div>
                   {activeId === f.id && (
                     <div className="friends-actions">
                       <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
-                      <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsRemove}</button>
                     </div>
                   )}
                 </div>
@@ -449,16 +446,17 @@ function FriendsPanel({ open, onClose, t, currency }) {
               {offline.map(f => (
                 <div key={f.id} className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => handleRowClick(f.id)}>
                   <div className="friends-avatar-wrap">
-                    <div className="friends-avatar">{f.first_name[0]}</div>
+                    {f.avatar_url
+                      ? <img className="friends-avatar" src={f.avatar_url} alt="" style={{ objectFit: 'cover' }} />
+                      : <div className="friends-avatar">{f.first_name?.[0] ?? '?'}</div>}
                   </div>
                   <div className="friends-info">
                     <span className="friends-name">{f.first_name}</span>
-                    <span className="friends-username">@{f.username}</span>
+                    {f.username && <span className="friends-username">@{f.username}</span>}
                   </div>
                   {activeId === f.id && (
                     <div className="friends-actions">
                       <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
-                      <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsRemove}</button>
                     </div>
                   )}
                 </div>
@@ -480,7 +478,7 @@ const GAMES = [
 
 /* ── Home ── */
 export default function Home() {
-  const { balance, currency, lang, setDepositOpen } = useGameStore()
+  const { balance, currency, lang, setDepositOpen, recentOpponents } = useGameStore()
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)
   const [friendsOpen, setFriendsOpen] = useState(false)
@@ -571,7 +569,7 @@ export default function Home() {
         </div>
       </div>
 
-      <FriendsPanel open={friendsOpen} onClose={closeFriends} t={t} currency={currency} />
+      <FriendsPanel open={friendsOpen} onClose={closeFriends} t={t} currency={currency} recentOpponents={recentOpponents} />
 
       <GameSheet
         game={sheetGame}

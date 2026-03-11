@@ -2,22 +2,6 @@ import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import './Leaderboard.css'
 
-const mockLeaders = [
-  { id: 1,  first_name: 'Александр', username: 'alex_trade', wins: 24, losses: 6,  pnl: 4850 },
-  { id: 2,  first_name: 'Мария',     username: 'masha_win',  wins: 18, losses: 9,  pnl: 2130 },
-  { id: 3,  first_name: 'Дмитрий',   username: 'dmitry_x',   wins: 21, losses: 8,  pnl: 1740 },
-  { id: 4,  first_name: 'Кирилл',    username: 'kirill_up',  wins: 15, losses: 7,  pnl: 1220 },
-  { id: 5,  first_name: 'Анна',      username: 'anna_pro',   wins: 12, losses: 5,  pnl: 980  },
-  { id: 6,  first_name: 'Сергей',    username: 'serg_bet',   wins: 10, losses: 6,  pnl: 760  },
-  { id: 7,  first_name: 'Оля',       username: 'olya_q',     wins: 9,  losses: 8,  pnl: 530  },
-  { id: 8,  first_name: 'Максим',    username: 'max_mm',     wins: 8,  losses: 7,  pnl: 390  },
-  { id: 9,  first_name: 'Лера',      username: 'lera_win',   wins: 7,  losses: 9,  pnl: 210  },
-  { id: 10, first_name: 'Паша',      username: 'pasha_ok',   wins: 5,  losses: 6,  pnl: 95   },
-]
-
-// Заглушка — позиция текущего пользователя вне топа
-const mockUserRank = 247
-
 function approxRank(rank) {
   if (rank > 1000) return '1000+'
   if (rank > 500)  return '500+'
@@ -81,12 +65,19 @@ function ListRankBadge({ rank }) {
 }
 
 export default function Leaderboard() {
-  const { user, currency, lang } = useGameStore()
+  const { user, currency, lang, leaderboard, rank, totalPnl } = useGameStore()
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
 
-  const sorted = [...mockLeaders].sort((a, b) => b.pnl - a.pnl)
+  const sorted = [...leaderboard].sort((a, b) => b.balance - a.balance)
   const userInTop = sorted.some(p => p.id === user?.id)
+
+  // User's own WR for "my position" card
+  const myWins = user?.wins ?? 0
+  const myLosses = user?.losses ?? 0
+  const myWr = myWins + myLosses > 0 ? Math.round((myWins / (myWins + myLosses)) * 100) : 0
+  const myPnl = totalPnl ?? 0
+  const myPnlPositive = myPnl >= 0
 
   return (
     <div className="leaderboard page">
@@ -97,7 +88,7 @@ export default function Leaderboard() {
       {/* Top 3 podium */}
       <div className="lb-podium">
         {sorted.slice(0, 3).map((p, i) => {
-          const isPos = p.pnl >= 0
+          const isPos = p.balance >= 0
           const wr = p.wins + p.losses > 0
             ? Math.round((p.wins / (p.wins + p.losses)) * 100)
             : 0
@@ -113,7 +104,7 @@ export default function Leaderboard() {
               </div>
               <span className="lb-podium-name">{p.first_name}</span>
               <span className={`lb-podium-pnl ${isPos ? 'positive' : 'negative'}`}>
-                {isPos ? '+' : ''}{currency.symbol}{Math.abs(p.pnl).toLocaleString()}
+                {isPos ? '+' : ''}{currency.symbol}{Math.abs(p.balance).toLocaleString()}
               </span>
               <span className="lb-podium-wr">{wr}% WR</span>
             </div>
@@ -124,7 +115,7 @@ export default function Leaderboard() {
       {/* Full list */}
       <div className="lb-list">
         {sorted.map((p, i) => {
-          const isPos = p.pnl >= 0
+          const isPos = p.balance >= 0
           const wr = p.wins + p.losses > 0
             ? Math.round((p.wins / (p.wins + p.losses)) * 100)
             : 0
@@ -144,7 +135,7 @@ export default function Leaderboard() {
               </div>
               <div className="lb-right">
                 <span className={`lb-pnl ${isPos ? 'positive' : 'negative'}`}>
-                  {isPos ? '+' : ''}{currency.symbol}{Math.abs(p.pnl).toLocaleString()}
+                  {isPos ? '+' : ''}{currency.symbol}{Math.abs(p.balance).toLocaleString()}
                 </span>
                 <span className="lb-wr">{wr}% WR</span>
               </div>
@@ -161,7 +152,7 @@ export default function Leaderboard() {
           </div>
           <div className="lb-row lb-row--mine lb-row--my-card">
             <div className="lb-rank-wrap">
-              <span className="lb-rank-num lb-rank-approx">{approxRank(mockUserRank)}</span>
+              <span className="lb-rank-num lb-rank-approx">{approxRank(rank ?? 999)}</span>
             </div>
             {photoUrl
               ? <img className="lb-avatar" src={photoUrl} alt="" style={{ objectFit: 'cover' }} />
@@ -171,8 +162,10 @@ export default function Leaderboard() {
               <span className="lb-name">{user.first_name ?? '—'}</span>
             </div>
             <div className="lb-right">
-              <span className="lb-pnl positive">+{currency.symbol}0</span>
-              <span className="lb-wr">0% WR</span>
+              <span className={`lb-pnl ${myPnlPositive ? 'positive' : 'negative'}`}>
+                {myPnlPositive ? '+' : ''}{currency.symbol}{Math.abs(myPnl).toLocaleString()}
+              </span>
+              <span className="lb-wr">{myWr}% WR</span>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
-import { getOrCreateUser, getUserProfile, getPlans } from './lib/supabase'
+import { getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents } from './lib/supabase'
 import useGameStore from './store/useGameStore'
 import './App.css'
 import BottomNav from './components/BottomNav'
@@ -21,6 +21,8 @@ import Profile from './pages/Profile'
 if ('scrollRestoration' in history) {
   history.scrollRestoration = 'manual'
 }
+
+const CACHE_KEY = 'outplay_data'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -65,6 +67,30 @@ function Layout() {
   )
 }
 
+// Hydrate store from localStorage cache (instant UI on repeat visits)
+function hydrateFromCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return false
+    const cache = JSON.parse(raw)
+    const store = useGameStore.getState()
+    if (cache.leaderboard)      store.setLeaderboard(cache.leaderboard)
+    if (cache.topGuilds)        store.setTopGuilds(cache.topGuilds)
+    if (cache.guild !== undefined) store.setGuild(cache.guild)
+    if (cache.guildMembers)     store.setGuildMembers(cache.guildMembers)
+    if (cache.guildSeason)      store.setGuildSeason(cache.guildSeason)
+    if (cache.recentOpponents)  store.setRecentOpponents(cache.recentOpponents)
+    return true
+  } catch { return false }
+}
+
+// Write fresh data to cache
+function writeCache(data) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data))
+  } catch { /* quota exceeded — ignore */ }
+}
+
 export default function App() {
   const { setUser, setBalance } = useGameStore()
   // 'splash' | 'onboarding' | 'app'
@@ -75,17 +101,26 @@ export default function App() {
     applyTelegramTheme(tg)
 
     const isOnboarded = localStorage.getItem('outplay_onboarded')
-    const SPLASH_MIN = 1400 // ms — минимальное время сплэша
+    const SPLASH_MIN = 1400 // ms
+    const hasCached = hydrateFromCache()
 
-    const splashStart = Date.now()
-
-    bootstrap().then(() => {
-      const elapsed = Date.now() - splashStart
-      const delay = Math.max(0, SPLASH_MIN - elapsed)
+    if (hasCached) {
+      // Cache exists → show app after splash, refresh data in background
+      bootstrap().catch(() => {})
       setTimeout(() => {
         setPhase(isOnboarded ? 'app' : 'onboarding')
-      }, delay)
-    })
+      }, SPLASH_MIN)
+    } else {
+      // No cache → wait for bootstrap to finish
+      const splashStart = Date.now()
+      bootstrap().then(() => {
+        const elapsed = Date.now() - splashStart
+        const delay = Math.max(0, SPLASH_MIN - elapsed)
+        setTimeout(() => {
+          setPhase(isOnboarded ? 'app' : 'onboarding')
+        }, delay)
+      })
+    }
   }, [])
 
   async function bootstrap() {
@@ -93,6 +128,7 @@ export default function App() {
     const store = useGameStore.getState()
 
     if (!tgUser) {
+      // ── Dev fallback ──
       setUser({ id: 'dev', first_name: 'Dev', username: 'dev', wins: 3, losses: 1 })
       setBalance(500)
       store.setRank(1)
@@ -112,19 +148,66 @@ export default function App() {
         { id: '6m',  months: 6,  price: 2199, per_month: 366, savings: 795  },
         { id: '12m', months: 12, price: 3499, per_month: 292, savings: 2489 },
       ])
+      store.setLeaderboard([
+        { id: '1',  first_name: 'Александр', username: 'alex_trade', balance: 4850, wins: 24, losses: 6 },
+        { id: '2',  first_name: 'Мария',     username: 'masha_win',  balance: 2130, wins: 18, losses: 9 },
+        { id: '3',  first_name: 'Дмитрий',   username: 'dmitry_x',   balance: 1740, wins: 21, losses: 8 },
+        { id: '4',  first_name: 'Кирилл',    username: 'kirill_up',  balance: 1220, wins: 15, losses: 7 },
+        { id: '5',  first_name: 'Анна',      username: 'anna_pro',   balance: 980,  wins: 12, losses: 5 },
+        { id: '6',  first_name: 'Сергей',    username: 'serg_bet',   balance: 760,  wins: 10, losses: 6 },
+        { id: '7',  first_name: 'Оля',       username: 'olya_q',     balance: 530,  wins: 9,  losses: 8 },
+        { id: '8',  first_name: 'Максим',    username: 'max_mm',     balance: 390,  wins: 8,  losses: 7 },
+        { id: '9',  first_name: 'Лера',      username: 'lera_win',   balance: 210,  wins: 7,  losses: 9 },
+        { id: '10', first_name: 'Паша',      username: 'pasha_ok',   balance: 95,   wins: 5,  losses: 6 },
+      ])
+      store.setGuild({
+        id: 'g1', name: 'IQ Masters', description: 'High IQ only.',
+        avatar_url: null, creator_id: 'dev', rank: 8,
+        member_count: 8, pnl: 21500, creator_name: 'Dev',
+      })
+      store.setGuildMembers([
+        { user_id: 'dev', first_name: 'Dev',       username: 'dev',      role: 'creator', pnl: 8200 },
+        { user_id: '2',   first_name: 'Мария',     username: 'masha_q',  role: 'member',  pnl: 5400 },
+        { user_id: '3',   first_name: 'Дмитрий',   username: 'dima_iq',  role: 'member',  pnl: 3800 },
+        { user_id: '4',   first_name: 'Кирилл',    username: 'kirill99', role: 'member',  pnl: 2100 },
+        { user_id: '5',   first_name: 'Анна',      username: 'anna_win', role: 'member',  pnl: 1200 },
+        { user_id: '6',   first_name: 'Сергей',    username: 'serg_top', role: 'member',  pnl: 500  },
+        { user_id: '7',   first_name: 'Оля',       username: 'olya_q',   role: 'member',  pnl: 200  },
+        { user_id: '8',   first_name: 'Максим',    username: 'max_iq',   role: 'member',  pnl: 100  },
+      ])
+      store.setTopGuilds([
+        { id: 'tg1', name: 'Alpha Wolves',  tag: 'AL', member_count: 48, pnl: 128450, creator_name: 'Виктор' },
+        { id: 'tg2', name: 'Brain Storm',   tag: 'BR', member_count: 50, pnl: 95200,  creator_name: 'Настя'  },
+        { id: 'tg3', name: 'Quiz Kings',    tag: 'QU', member_count: 45, pnl: 87100,  creator_name: 'Артём'  },
+        { id: 'tg4', name: 'Нейронка',      tag: 'НЕ', member_count: 42, pnl: 63800,  creator_name: 'Лена'   },
+        { id: 'tg5', name: 'Эрудиты',       tag: 'ЭР', member_count: 38, pnl: 51200,  creator_name: 'Павел'  },
+      ])
+      store.setGuildSeason({ prize_pool: 50000, end_date: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString() })
+      store.setRecentOpponents([
+        { id: '1', first_name: 'Александр', username: 'alex_trade', last_seen: new Date().toISOString() },
+        { id: '2', first_name: 'Мария',     username: 'masha_win',  last_seen: new Date(Date.now() - 120000).toISOString() },
+        { id: '3', first_name: 'Дмитрий',   username: 'dmitry_x',   last_seen: new Date(Date.now() - 3600000).toISOString() },
+        { id: '4', first_name: 'Кирилл',    username: 'kirill_up',  last_seen: new Date(Date.now() - 86400000).toISOString() },
+        { id: '5', first_name: 'Анна',      username: 'anna_pro',   last_seen: new Date(Date.now() - 7200000).toISOString() },
+      ])
       return
     }
 
+    // ── Real user ──
     const user = await getOrCreateUser(tgUser)
     setUser(user)
     setBalance(user.balance ?? 0)
 
-    // Parallel: profile RPC (rank+stats+pnl+ref_earnings) + plans
-    const [profile, plans] = await Promise.all([
+    // 5 parallel fetches — all data for the entire app
+    const [profile, plans, leaderboard, guildData, opponents] = await Promise.all([
       getUserProfile(user.id),
       getPlans(),
+      getLeaderboard(50),
+      getGuildData(user.id),
+      getRecentOpponents(user.id),
     ])
 
+    // Profile
     if (profile && !profile.error) {
       store.setRank(profile.rank)
       store.setDailyStats(profile.daily_stats ?? [])
@@ -132,6 +215,30 @@ export default function App() {
       store.setRefEarnings(profile.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
     }
     if (plans.length > 0) store.setPlans(plans)
+
+    // Leaderboard
+    store.setLeaderboard(leaderboard)
+
+    // Guilds
+    if (guildData) {
+      store.setGuild(guildData.my_guild ?? null)
+      store.setGuildMembers(guildData.my_guild?.members ?? [])
+      store.setTopGuilds(guildData.top_guilds ?? [])
+      store.setGuildSeason(guildData.season ?? null)
+    }
+
+    // Recent opponents
+    store.setRecentOpponents(opponents ?? [])
+
+    // Write cache for instant load next time
+    writeCache({
+      leaderboard,
+      topGuilds:       guildData?.top_guilds ?? [],
+      guild:           guildData?.my_guild ?? null,
+      guildMembers:    guildData?.my_guild?.members ?? [],
+      guildSeason:     guildData?.season ?? null,
+      recentOpponents: opponents ?? [],
+    })
 
     // Sync currency/lang from DB → localStorage (DB is source of truth for cross-device)
     const currencyMap = {
