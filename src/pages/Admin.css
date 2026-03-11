@@ -2,7 +2,7 @@
   min-height: 100svh;
   background: var(--bg);
   color: var(--text);
-  padding: calc(var(--safe-top, 0px) + 16px) 16px 40px;
+  padding: calc(var(--safe-top, 0px) + 86px) 16px 40px;
 }
 
 /* ── Access denied ── */
