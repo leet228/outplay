@@ -386,7 +386,7 @@ function FriendsPanel({ open, onClose, t, user }) {
     setQuery(val)
     if (!searchMode) return // local filter only
     clearTimeout(debounceRef.current)
-    const q = val.trim()
+    const q = val.trim().replace(/^@/, '')
     if (q.length < 2) { setSearchResults([]); setSearchLoading(false); return }
     setSearchLoading(true)
     debounceRef.current = setTimeout(async () => {
