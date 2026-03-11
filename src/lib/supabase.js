@@ -267,20 +267,23 @@ export async function removeFriend(userId, friendId) {
 
 // ── Deposits ──
 
-export async function createStarsInvoice(userId, amount) {
+export async function createStarsInvoice(userId, amount, currencyAmount, currencyCode) {
   const { data, error } = await supabase.functions.invoke('create-stars-invoice', {
-    body: { user_id: userId, amount },
+    body: { user_id: userId, amount, currency_amount: currencyAmount, currency_code: currencyCode },
   })
   if (error) { console.error('createStarsInvoice error:', error); return null }
-  return data // { url, payload }
+  return data // { url, tx_id }
 }
 
-export async function processDeposit(userId, amount, txId) {
-  const { data, error } = await supabase.rpc('process_deposit', {
+export async function processDeposit(userId, amount, txId, currencyAmount, currencyCode) {
+  const params = {
     p_user_id: userId,
     p_amount: amount,
     p_tx_id: txId,
-  })
+  }
+  if (currencyAmount != null) params.p_currency_amt = currencyAmount
+  if (currencyCode) params.p_currency_code = currencyCode
+  const { data, error } = await supabase.rpc('process_deposit', params)
   if (error) { console.error('processDeposit error:', error); return null }
-  return data // { new_balance } or { new_balance, duplicate: true }
+  return data
 }

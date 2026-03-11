@@ -65,6 +65,13 @@ function toSuccessAmount(stars, cur) {
   return `+${cur.symbol}${amount.toFixed(2)}`
 }
 
+/** Raw numeric currency amount for DB (e.g. 100.10) */
+function toCurrencyRaw(stars, curCode) {
+  const usd = stars * STAR_USD
+  const amount = usd * (RATES[curCode] ?? 1)
+  return Math.round(amount * 100) / 100
+}
+
 function BackButton({ label, onClick }) {
   return (
     <button className="deposit-back" onClick={onClick}>
@@ -209,7 +216,8 @@ export default function DepositSheet() {
 
     // ── Real Telegram: create invoice → open → process ──
     try {
-      const invoice = await createStarsInvoice(userId, activeAmount)
+      const curAmt = toCurrencyRaw(activeAmount, currency.code)
+      const invoice = await createStarsInvoice(userId, activeAmount, curAmt, currency.code)
       if (!invoice?.url || !invoice?.tx_id) {
         setLoading(false)
         setStatus('error')
@@ -232,7 +240,8 @@ export default function DepositSheet() {
             // 2. Webhook didn't process in time — client calls process_deposit as backup
             // Same tx_id → dedup prevents double credit
             try {
-              const result = await processDeposit(userId, activeAmount, invoiceTxRef.current)
+              const curAmt = toCurrencyRaw(activeAmount, currency.code)
+              const result = await processDeposit(userId, activeAmount, invoiceTxRef.current, curAmt, currency.code)
               if (result?.new_balance != null) {
                 setBalance(result.new_balance)
               } else {

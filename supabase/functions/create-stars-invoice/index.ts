@@ -14,7 +14,7 @@ serve(async (req) => {
   }
 
   try {
-    const { amount, user_id } = await req.json()
+    const { amount, user_id, currency_amount, currency_code } = await req.json()
 
     if (!amount || amount < 1) {
       return new Response(
@@ -32,7 +32,7 @@ serve(async (req) => {
 
     // Generate a single tx_id used by BOTH webhook and client for dedup
     const txId = crypto.randomUUID()
-    const payload = JSON.stringify({ user_id, amount, tx_id: txId })
+    const payload = JSON.stringify({ user_id, amount, tx_id: txId, currency_amount, currency_code })
 
     const res = await fetch(`${TELEGRAM_API}/createInvoiceLink`, {
       method: 'POST',

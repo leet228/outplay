@@ -230,20 +230,22 @@ CREATE INDEX IF NOT EXISTS idx_ref_earn_referrer ON referral_earnings(referrer_i
 -- ╚═══════════════════════════════════════════╝
 
 CREATE TABLE IF NOT EXISTS transactions (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     UUID NOT NULL REFERENCES users(id),
-  type        TEXT NOT NULL
-              CHECK (type IN (
-                'deposit','withdrawal',
-                'duel_win','duel_loss','duel_draw',
-                'referral_bonus',
-                'guild_create','guild_edit',
-                'guild_prize',
-                'subscription'
-              )),
-  amount      INTEGER NOT NULL,             -- положительный = приход, отрицательный = расход
-  ref_id      UUID,                         -- ссылка на duel_id / subscription_id и т.д.
-  created_at  TIMESTAMPTZ DEFAULT NOW()
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL REFERENCES users(id),
+  type            TEXT NOT NULL
+                  CHECK (type IN (
+                    'deposit','withdrawal',
+                    'duel_win','duel_loss','duel_draw',
+                    'referral_bonus',
+                    'guild_create','guild_edit',
+                    'guild_prize',
+                    'subscription'
+                  )),
+  amount          INTEGER NOT NULL,             -- Stars (положительный = приход, отрицательный = расход)
+  currency_amount NUMERIC(12,2),               -- сумма в валюте пользователя (≈ 100.00 ₽)
+  currency_code   TEXT,                         -- RUB / USD / EUR
+  ref_id          UUID,                         -- ссылка на duel_id / subscription_id и т.д.
+  created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_tx_user ON transactions(user_id, created_at DESC);
@@ -1139,20 +1141,26 @@ $$;
 -- ╚═══════════════════════════════════════════╝
 
 DROP FUNCTION IF EXISTS process_deposit(UUID, INTEGER, UUID);
+DROP FUNCTION IF EXISTS process_deposit(UUID, INTEGER, UUID, NUMERIC, TEXT);
 
-CREATE OR REPLACE FUNCTION process_deposit(p_user_id UUID, p_amount INTEGER, p_tx_id UUID)
+CREATE OR REPLACE FUNCTION process_deposit(
+  p_user_id       UUID,
+  p_amount        INTEGER,
+  p_tx_id         UUID,
+  p_currency_amt  NUMERIC DEFAULT NULL,
+  p_currency_code TEXT    DEFAULT NULL
+)
 RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 DECLARE
   new_balance INTEGER;
 BEGIN
-  -- Validate
   IF p_amount < 1 THEN
     RETURN jsonb_build_object('error', 'amount must be >= 1');
   END IF;
 
-  -- Deduplication: check if this tx_id was already processed
+  -- Deduplication
   IF EXISTS (
     SELECT 1 FROM transactions
     WHERE user_id = p_user_id AND type = 'deposit' AND ref_id = p_tx_id
@@ -1167,9 +1175,9 @@ BEGIN
   WHERE id = p_user_id
   RETURNING balance INTO new_balance;
 
-  -- Log transaction
-  INSERT INTO transactions (user_id, type, amount, ref_id)
-  VALUES (p_user_id, 'deposit', p_amount, p_tx_id);
+  -- Log transaction with currency info
+  INSERT INTO transactions (user_id, type, amount, currency_amount, currency_code, ref_id)
+  VALUES (p_user_id, 'deposit', p_amount, p_currency_amt, p_currency_code, p_tx_id);
 
   RETURN jsonb_build_object('new_balance', new_balance);
 END;

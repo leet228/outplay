@@ -32,17 +32,20 @@ serve(async (req) => {
 
       try {
         const payload = JSON.parse(payment.invoice_payload)
-        const { user_id, amount, tx_id } = payload
+        const { user_id, amount, tx_id, currency_amount, currency_code } = payload
 
         if (user_id && amount && tx_id) {
           const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-          // tx_id is a UUID generated in create-stars-invoice — same one client has
-          const { data, error } = await supabase.rpc('process_deposit', {
+          const params: Record<string, unknown> = {
             p_user_id: user_id,
             p_amount: amount,
             p_tx_id: tx_id,
-          })
+          }
+          if (currency_amount != null) params.p_currency_amt = currency_amount
+          if (currency_code) params.p_currency_code = currency_code
+
+          const { data, error } = await supabase.rpc('process_deposit', params)
 
           console.log('process_deposit:', JSON.stringify(data), error?.message)
         }
