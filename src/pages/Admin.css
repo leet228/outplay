@@ -2,7 +2,7 @@
   min-height: 100svh;
   background: var(--bg);
   color: var(--text);
-  padding: 20px 16px 40px;
+  padding: calc(var(--safe-top, 0px) + 16px) 16px 40px;
 }
 
 /* ── Access denied ── */
@@ -12,21 +12,14 @@
   align-items: center;
   justify-content: center;
   min-height: 60svh;
-  gap: 12px;
+  gap: 16px;
 }
 
-.admin-denied-icon {
-  font-size: 48px;
-}
-
-.admin-denied p {
-  font-size: 18px;
-  color: var(--text-muted);
-  margin: 0;
-}
+.admin-denied-icon { font-size: 56px; }
+.admin-denied p { font-size: 18px; color: var(--text-muted); margin: 0; }
 
 .admin-btn {
-  padding: 12px 24px;
+  padding: 12px 28px;
   border-radius: 12px;
   border: none;
   background: var(--accent);
@@ -34,18 +27,16 @@
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  transition: opacity 0.15s;
 }
-
-.admin-btn:active {
-  opacity: 0.8;
-}
+.admin-btn:active { opacity: 0.75; }
 
 /* ── Header ── */
 .admin-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 4px;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
 .admin-back {
@@ -56,160 +47,279 @@
   cursor: pointer;
   display: flex;
   align-items: center;
+  border-radius: 8px;
+  transition: background 0.15s;
 }
-
-.admin-back:active {
-  opacity: 0.6;
-}
+.admin-back:active { background: var(--surface); }
 
 .admin-header h2 {
-  font-size: 22px;
+  font-size: 20px;
+  font-weight: 700;
   margin: 0;
   flex: 1;
 }
 
-.admin-btn-icon {
+.admin-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.admin-fiat-toggle {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 6px 10px;
-  font-size: 18px;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  letter-spacing: 0.3px;
+  transition: background 0.15s;
+}
+.admin-fiat-toggle:active { background: var(--border); }
+
+.admin-btn-refresh {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 7px;
   cursor: pointer;
   color: var(--text);
+  display: flex;
+  align-items: center;
+  transition: background 0.15s;
 }
-
-.admin-btn-icon:disabled {
-  opacity: 0.5;
+.admin-btn-refresh:active { background: var(--border); }
+.admin-btn-refresh:disabled { opacity: 0.4; }
+.admin-btn-refresh.spinning svg {
+  animation: admin-spin 0.8s linear infinite;
 }
+@keyframes admin-spin { to { transform: rotate(360deg); } }
 
 .admin-refresh-time {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   margin-bottom: 16px;
+  letter-spacing: 0.2px;
 }
 
 /* ── Total card ── */
 .admin-total-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
+  border-radius: 18px;
+  padding: 24px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.admin-total-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0098EA, #26A17B, #F7931A, #627EEA);
 }
 
 .admin-total-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
+  font-weight: 500;
 }
 
 .admin-total-value {
-  font-size: 32px;
-  font-weight: 700;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.admin-total-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ── Skeleton loading ── */
+.admin-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.admin-skeleton-card {
+  height: 130px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  animation: admin-pulse 1.5s ease-in-out infinite;
+}
+@keyframes admin-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.3; }
 }
 
 /* ── Wallet cards ── */
+.admin-wallet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .admin-wallet-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 4px solid;
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 16px;
-  margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
 }
 
-.admin-wallet-header {
+.admin-wallet-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  border-radius: 4px 0 0 4px;
+}
+
+.admin-wallet-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding-left: 8px;
 }
 
-.admin-wallet-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.admin-wallet-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
   flex-shrink: 0;
+}
+
+.admin-wallet-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .admin-wallet-name {
   font-weight: 600;
   font-size: 15px;
-  flex: 1;
 }
 
-.admin-wallet-address-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.admin-wallet-address {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 4px 10px;
-  border-radius: 8px;
-  flex: 1;
-}
-
-.admin-btn-copy {
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 4px 8px;
+.admin-wallet-fiat {
   font-size: 14px;
-  cursor: pointer;
-  color: var(--text);
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
-.admin-btn-copy:active {
-  background: var(--border);
-}
-
-.admin-wallet-balances {
+.admin-wallet-balance-row {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 6px;
+  padding-left: 8px;
+  margin-bottom: 8px;
 }
 
 .admin-wallet-balance {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
 }
 
-.admin-wallet-usd {
-  font-size: 14px;
+.admin-wallet-symbol {
+  font-size: 13px;
   color: var(--text-muted);
+  font-weight: 500;
 }
 
-.admin-wallet-extra {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* ── Prices footer ── */
-.admin-prices {
+.admin-wallet-gas {
   display: flex;
-  gap: 12px;
   align-items: center;
-  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 8px;
+  margin-bottom: 8px;
   font-size: 12px;
   color: var(--text-muted);
-  margin-top: 16px;
-  padding-top: 12px;
+}
+
+.admin-wallet-addr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 8px;
+}
+
+.admin-wallet-addr {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 5px 10px;
+  border-radius: 8px;
+  flex: 1;
+  letter-spacing: 0.3px;
+}
+
+.admin-copy-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.admin-copy-btn:active { background: var(--border); }
+
+/* ── Prices bar ── */
+.admin-prices-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
 }
 
-.admin-prices-label {
-  font-weight: 600;
-  color: var(--text);
+.admin-price-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.admin-price-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.admin-price-val {
+  color: var(--text-muted);
 }
