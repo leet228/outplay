@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
-import { getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData } from './lib/supabase'
+import { getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline } from './lib/supabase'
 import useGameStore from './store/useGameStore'
 import './App.css'
 import BottomNav from './components/BottomNav'
@@ -124,6 +124,15 @@ export default function App() {
         }, delay)
       })
     }
+  }, [])
+
+  // Ping online every 2 min so friends see us as online
+  useEffect(() => {
+    const id = setInterval(() => {
+      const uid = useGameStore.getState().user?.id
+      if (uid && uid !== 'dev') pingOnline(uid)
+    }, 2 * 60 * 1000)
+    return () => clearInterval(id)
   }, [])
 
   async function bootstrap() {

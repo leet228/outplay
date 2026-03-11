@@ -45,6 +45,10 @@ export async function getOrCreateUser(telegramUser) {
   return newUser
 }
 
+export async function pingOnline(userId) {
+  await supabase.from('users').update({ last_seen: new Date().toISOString() }).eq('id', userId)
+}
+
 export async function getUserBalance(userId) {
   const { data } = await supabase
     .from('users')
