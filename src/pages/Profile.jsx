@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
-import { getUserRank } from '../lib/supabase'
 import './Profile.css'
 
 function getRankDisplay(rank) {
@@ -18,28 +17,33 @@ function getRankDisplay(rank) {
   return { label: '500+', color: '#4B5563', bg: '#4B556318' }
 }
 
-// Заглушка — заменить на реальные данные из Supabase
-const mockPnlData = [
-  { date: '02.03', pnl: -45 },
-  { date: '03.03', pnl: 200 },
-  { date: '04.03', pnl: -80 },
-  { date: '05.03', pnl: 350 },
-  { date: '06.03', pnl: -120 },
-  { date: '07.03', pnl: 180 },
-  { date: '08.03', pnl: 90 },
-]
+// Fill missing days with zeros for chart rendering
+function buildChartData(dailyStats, days = 7) {
+  const statsMap = new Map()
+  for (const s of dailyStats) statsMap.set(s.date, s)
+  const result = []
+  const today = new Date()
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0, 10)
+    const label = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`
+    const stat = statsMap.get(key)
+    result.push({ date: label, pnl: stat?.pnl ?? 0 })
+  }
+  return result
+}
 
 const W = 320
 const H = 130
 
 export default function Profile() {
-  const { user, balance, currency, setCurrency, lang, setLang, setDepositOpen } = useGameStore()
+  const { user, balance, currency, setCurrency, lang, setLang, setDepositOpen, rank, dailyStats, totalPnl } = useGameStore()
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
   const [tooltip, setTooltip] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
-  const [rank, setRank] = useState(null)
   const [withdrawError, setWithdrawError] = useState(false)
   const withdrawTimer = useRef(null)
 
@@ -56,12 +60,6 @@ export default function Profile() {
     }
     // TODO: withdrawal flow
   }
-
-  useEffect(() => {
-    if (balance != null) {
-      getUserRank(balance).then(setRank)
-    }
-  }, [balance])
 
   const closeSettings = useCallback(() => {
     haptic('light')
@@ -94,15 +92,15 @@ export default function Profile() {
       ? Math.round((user.wins / (user.wins + user.losses)) * 100)
       : 0
 
-  const totalPnl = mockPnlData.reduce((sum, d) => sum + d.pnl, 0)
+  const chartData = buildChartData(dailyStats, 7)
   const startBalance = balance - totalPnl
   const totalPct = startBalance > 0
     ? ((totalPnl / startBalance) * 100).toFixed(1)
     : '0.0'
   const isPositive = totalPnl >= 0
 
-  const maxAbs = Math.max(...mockPnlData.map(d => Math.abs(d.pnl)), 1)
-  const barW = W / mockPnlData.length
+  const maxAbs = Math.max(...chartData.map(d => Math.abs(d.pnl)), 1)
+  const barW = W / chartData.length
   const midY = H / 2
 
   function handleBarClick(e, i) {
@@ -204,7 +202,7 @@ export default function Profile() {
           >
             <line x1="0" y1={midY} x2={W} y2={midY} stroke="var(--border)" strokeWidth="1" />
 
-            {mockPnlData.map((d, i) => {
+            {chartData.map((d, i) => {
               const barH = Math.max((Math.abs(d.pnl) / maxAbs) * (midY - 10), 3)
               const isPos = d.pnl >= 0
               const x = i * barW + barW * 0.22
@@ -226,7 +224,7 @@ export default function Profile() {
             })}
 
             {tooltip !== null && (() => {
-              const d = mockPnlData[tooltip.index]
+              const d = chartData[tooltip.index]
               const isPos = d.pnl >= 0
               const barH = Math.max((Math.abs(d.pnl) / maxAbs) * (midY - 10), 3)
               const centerX = tooltip.index * barW + barW * 0.5

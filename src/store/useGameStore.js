@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { syncUserSettings } from '../lib/supabase'
 
 const useGameStore = create((set, get) => ({
   // Auth
@@ -11,12 +12,30 @@ const useGameStore = create((set, get) => ({
   addBalance: (amount) => set((s) => ({ balance: s.balance + amount })),
 
   // Currency
-  currency: { symbol: '₽', code: 'RUB' },
-  setCurrency: (currency) => set({ currency }),
+  currency: JSON.parse(localStorage.getItem('outplay_currency')) || { symbol: '₽', code: 'RUB' },
+  setCurrency: (currency) => {
+    localStorage.setItem('outplay_currency', JSON.stringify(currency))
+    set({ currency })
+    const uid = get().user?.id
+    if (uid && uid !== 'dev') syncUserSettings(uid, { currency: currency.code })
+  },
 
   // Language
-  lang: 'ru',
-  setLang: (lang) => set({ lang }),
+  lang: localStorage.getItem('outplay_lang') || 'ru',
+  setLang: (lang) => {
+    localStorage.setItem('outplay_lang', lang)
+    set({ lang })
+    const uid = get().user?.id
+    if (uid && uid !== 'dev') syncUserSettings(uid, { lang })
+  },
+
+  // Profile (fetched at bootstrap)
+  rank: null,
+  setRank: (rank) => set({ rank }),
+  dailyStats: [],
+  setDailyStats: (dailyStats) => set({ dailyStats }),
+  totalPnl: 0,
+  setTotalPnl: (totalPnl) => set({ totalPnl }),
 
   // Active duel
   activeDuel: null,

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
-import { getOrCreateUser } from './lib/supabase'
+import { getOrCreateUser, getUserProfile } from './lib/supabase'
 import useGameStore from './store/useGameStore'
 import './App.css'
 import BottomNav from './components/BottomNav'
@@ -90,14 +90,58 @@ export default function App() {
 
   async function bootstrap() {
     const tgUser = getTelegramUser()
+    const store = useGameStore.getState()
+
     if (!tgUser) {
       setUser({ id: 'dev', first_name: 'Dev', username: 'dev', wins: 3, losses: 1 })
       setBalance(500)
+      store.setRank(1)
+      store.setTotalPnl(575)
+      store.setDailyStats([
+        { date: '2026-03-05', pnl: -45, games: 2, wins: 0 },
+        { date: '2026-03-06', pnl: 200, games: 3, wins: 2 },
+        { date: '2026-03-07', pnl: -80, games: 1, wins: 0 },
+        { date: '2026-03-08', pnl: 350, games: 4, wins: 3 },
+        { date: '2026-03-09', pnl: -120, games: 2, wins: 0 },
+        { date: '2026-03-10', pnl: 180, games: 3, wins: 2 },
+        { date: '2026-03-11', pnl: 90, games: 1, wins: 1 },
+      ])
       return
     }
+
     const user = await getOrCreateUser(tgUser)
     setUser(user)
     setBalance(user.balance ?? 0)
+
+    // Single RPC: rank + daily stats + total PnL
+    const profile = await getUserProfile(user.id)
+    if (profile && !profile.error) {
+      store.setRank(profile.rank)
+      store.setDailyStats(profile.daily_stats ?? [])
+      store.setTotalPnl(profile.total_pnl ?? 0)
+    }
+
+    // Sync currency/lang from DB → localStorage (DB is source of truth for cross-device)
+    const currencyMap = {
+      RUB: { symbol: '₽', code: 'RUB' },
+      USD: { symbol: '$', code: 'USD' },
+      EUR: { symbol: '€', code: 'EUR' },
+    }
+    if (user.currency && currencyMap[user.currency]) {
+      const stored = JSON.parse(localStorage.getItem('outplay_currency') || 'null')
+      if (!stored || stored.code !== user.currency) {
+        const c = currencyMap[user.currency]
+        localStorage.setItem('outplay_currency', JSON.stringify(c))
+        useGameStore.setState({ currency: c })
+      }
+    }
+    if (user.lang) {
+      const storedLang = localStorage.getItem('outplay_lang')
+      if (user.lang !== storedLang) {
+        localStorage.setItem('outplay_lang', user.lang)
+        useGameStore.setState({ lang: user.lang })
+      }
+    }
   }
 
   if (phase === 'splash') return <SplashScreen />

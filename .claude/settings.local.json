@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm install)",
       "Bash(npm install react-router-dom @supabase/supabase-js zustand)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(taskkill //F //IM node.exe)"
     ]
   }
 }

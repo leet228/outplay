@@ -21,6 +21,7 @@ export async function getOrCreateUser(telegramUser) {
         first_name: telegramUser.first_name,
         username: telegramUser.username ?? null,
         avatar_url: telegramUser.photo_url ?? null,
+        last_seen: new Date().toISOString(),
       })
       .eq('telegram_id', telegramUser.id)
       .select()
@@ -68,6 +69,30 @@ export async function getUserRank(balance) {
     .select('*', { count: 'exact', head: true })
     .gt('balance', balance)
   return (count ?? 0) + 1
+}
+
+// Profile — single RPC (rank + daily_stats + total_pnl)
+export async function getUserProfile(userId, days = 30) {
+  const { data, error } = await supabase.rpc('get_user_profile', {
+    p_user_id: userId,
+    p_days: days,
+  })
+  if (error) {
+    console.error('getUserProfile error:', error)
+    return null
+  }
+  return data
+}
+
+// Sync settings to DB — fire-and-forget
+export function syncUserSettings(userId, settings) {
+  supabase
+    .from('users')
+    .update(settings)
+    .eq('id', userId)
+    .then(({ error }) => {
+      if (error) console.error('syncUserSettings error:', error)
+    })
 }
 
 // Leaderboard
