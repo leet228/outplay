@@ -355,6 +355,7 @@ function FriendsPanel({ open, onClose, t, user }) {
   const [searchResults, setSearchResults] = useState([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(null)
+  const [confirmRemoveId, setConfirmRemoveId] = useState(null)
   const debounceRef = useRef(null)
 
   // Reset on close
@@ -364,6 +365,7 @@ function FriendsPanel({ open, onClose, t, user }) {
       setActiveId(null)
       setSearchMode(false)
       setSearchResults([])
+      setConfirmRemoveId(null)
     }
   }, [open])
 
@@ -441,16 +443,27 @@ function FriendsPanel({ open, onClose, t, user }) {
     setActionLoading(null)
   }
 
-  async function handleRemoveFriend(friendId) {
-    if (actionLoading) return
+  function handleRemoveFriend(friendId) {
     haptic('medium')
-    setActionLoading(friendId)
-    const result = await removeFriend(user.id, friendId)
+    setConfirmRemoveId(friendId)
+  }
+
+  async function confirmRemove() {
+    if (actionLoading || !confirmRemoveId) return
+    haptic('heavy')
+    setActionLoading(confirmRemoveId)
+    const result = await removeFriend(user.id, confirmRemoveId)
     if (!result?.error) {
-      setFriends(friends.filter(f => f.id !== friendId))
+      setFriends(friends.filter(f => f.id !== confirmRemoveId))
     }
     setActionLoading(null)
     setActiveId(null)
+    setConfirmRemoveId(null)
+  }
+
+  function cancelRemove() {
+    haptic('light')
+    setConfirmRemoveId(null)
   }
 
   async function handleSendRequest(targetUser) {
@@ -656,6 +669,15 @@ function FriendsPanel({ open, onClose, t, user }) {
               })}
             </>
           )}
+        </div>
+
+        {/* Confirm remove bar */}
+        <div className={`friends-confirm-bar ${confirmRemoveId ? 'visible' : ''}`}>
+          <span className="friends-confirm-text">{t.friendsRemoveConfirm}</span>
+          <div className="friends-confirm-actions">
+            <button className="friends-confirm-btn cancel" onClick={cancelRemove}>{t.friendsRemoveCancel}</button>
+            <button className="friends-confirm-btn confirm" disabled={actionLoading === confirmRemoveId} onClick={confirmRemove}>{t.friendsRemoveYes}</button>
+          </div>
         </div>
       </div>
     </>
