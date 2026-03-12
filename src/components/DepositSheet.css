@@ -213,6 +213,9 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .deposit-preset-rub {
@@ -258,6 +261,8 @@
 .deposit-custom-star {
   font-size: 16px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .deposit-custom-input {
@@ -304,6 +309,10 @@
   font-family: inherit;
   transition: transform 0.1s, background 0.15s;
   margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 .deposit-buy-btn:active {

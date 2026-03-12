@@ -23,25 +23,30 @@ function TonIcon({ size = 22 }) {
 }
 
 function TgStarIcon({ size = 22 }) {
+  const id = `tgs${Math.random().toString(36).slice(2, 6)}`
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+    <svg width={size} height={size} viewBox="0 0 120 120" fill="none" style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
       <defs>
-        <linearGradient id="tgstar-grad" x1="12" y1="4" x2="36" y2="44" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#FFD700"/>
-          <stop offset="50%" stopColor="#F5A623"/>
-          <stop offset="100%" stopColor="#D4860B"/>
+        <linearGradient id={`${id}-border`} x1="20" y1="10" x2="100" y2="110" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#F5A623"/>
+          <stop offset="100%" stopColor="#E8780A"/>
         </linearGradient>
-        <linearGradient id="tgstar-shadow" x1="24" y1="20" x2="24" y2="46" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#E89D0E"/>
-          <stop offset="100%" stopColor="#C47A08"/>
+        <linearGradient id={`${id}-body`} x1="30" y1="15" x2="90" y2="105" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFDA44"/>
+          <stop offset="50%" stopColor="#FFC933"/>
+          <stop offset="100%" stopColor="#F5B731"/>
+        </linearGradient>
+        <linearGradient id={`${id}-shine`} x1="30" y1="20" x2="70" y2="65" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFF0B8" stopOpacity="0.9"/>
+          <stop offset="100%" stopColor="#FFD644" stopOpacity="0"/>
         </linearGradient>
       </defs>
-      {/* Main star body */}
-      <path d="M24 3L29.8 17.2L45 18.8L33.6 29.2L36.8 44L24 36.8L11.2 44L14.4 29.2L3 18.8L18.2 17.2L24 3Z" fill="url(#tgstar-grad)"/>
-      {/* Swoosh tail */}
-      <path d="M14 29C10 34 8 40 12 44C16 42 22 38 28 36C22 36 16 34 14 29Z" fill="url(#tgstar-shadow)" opacity="0.9"/>
-      {/* Top highlight */}
-      <path d="M24 3L27 12L24 8L21 12L24 3Z" fill="#FFE566" opacity="0.7"/>
+      {/* Orange border layer */}
+      <path d="M60 5 C62 5 64 6 65 8 L76 34 C77 36 79 38 81 38 L109 42 C113 42 115 47 112 50 L91 70 C89 72 88 74 89 77 L95 104 C96 108 92 111 88 109 L64 96 C62 95 59 95 57 96 L33 109 C29 111 25 108 26 104 L32 77 C32 74 32 72 30 70 L9 50 C6 47 8 42 12 42 L40 38 C42 38 44 36 45 34 L56 8 C57 6 59 5 60 5Z" fill={`url(#${id}-border)`}/>
+      {/* Inner golden body */}
+      <path d="M60 14 C61 14 63 15 63.5 16 L73 38 C74 40 76 42 78 42 L103 45 C106 46 107 49 105 51 L87 68 C85 70 85 72 85 74 L90 98 C91 101 88 103 85 102 L63 90 C61 89 59 89 57 90 L36 102 C33 103 30 101 31 98 L36 74 C36 72 36 70 34 68 L16 51 C14 49 15 46 18 45 L43 42 C45 42 47 40 48 38 L57.5 16 C58 15 59.5 14 60 14Z" fill={`url(#${id}-body)`}/>
+      {/* Highlight/shine */}
+      <path d="M60 18 L50 38 C49 40 47 42 45 42 L22 45 L37 60 C39 61 40 62 41 60 L56 20 C57 18 59 18 60 18Z" fill={`url(#${id}-shine)`}/>
     </svg>
   )
 }
