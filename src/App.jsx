@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
-import { getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline } from './lib/supabase'
+import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance } from './lib/supabase'
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
 import './App.css'
@@ -137,6 +137,34 @@ export default function App() {
     }, 2 * 60 * 1000)
     return () => clearInterval(id)
   }, [])
+
+  // Realtime: listen for new deposits → bounce balance
+  useEffect(() => {
+    const uid = useGameStore.getState().user?.id
+    if (!uid || uid === 'dev') return
+
+    const channel = supabase
+      .channel('my-deposits')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'transactions',
+        filter: `user_id=eq.${uid}`,
+      }, (payload) => {
+        if (payload.new?.type === 'deposit') {
+          getUserBalance(uid).then(bal => {
+            if (bal != null) {
+              useGameStore.getState().setBalance(bal)
+              useGameStore.getState().setBalanceBounce(true)
+              setTimeout(() => useGameStore.getState().setBalanceBounce(false), 700)
+            }
+          })
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [phase])
 
   async function bootstrap() {
     const tgUser = getTelegramUser()

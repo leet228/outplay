@@ -1234,6 +1234,56 @@ END;
 $$;
 
 -- ╔═══════════════════════════════════════════╗
+-- ║  18. CRYPTO PROCESSED TXS                ║
+-- ╚═══════════════════════════════════════════╝
+
+CREATE TABLE IF NOT EXISTS crypto_processed_txs (
+  tx_hash    TEXT PRIMARY KEY,
+  chain      TEXT NOT NULL,
+  crypto_amt NUMERIC(20,8) NOT NULL,
+  rub_amount NUMERIC(12,2) NOT NULL,
+  stars      INTEGER NOT NULL,
+  user_id    UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_crypto_tx_user ON crypto_processed_txs(user_id, created_at DESC);
+
+-- process_crypto_deposit — зачисление крипто-депозита с дедупликацией
+CREATE OR REPLACE FUNCTION process_crypto_deposit(
+  p_user_id      UUID,
+  p_stars        INTEGER,
+  p_tx_hash      TEXT,
+  p_chain        TEXT,
+  p_crypto_amt   NUMERIC,
+  p_rub_amount   NUMERIC
+) RETURNS JSONB AS $$
+DECLARE
+  new_bal INTEGER;
+BEGIN
+  IF p_stars < 1 THEN
+    RETURN jsonb_build_object('error', 'stars must be >= 1');
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM crypto_processed_txs WHERE tx_hash = p_tx_hash) THEN
+    SELECT balance INTO new_bal FROM users WHERE id = p_user_id;
+    RETURN jsonb_build_object('new_balance', new_bal, 'duplicate', true);
+  END IF;
+
+  UPDATE users SET balance = balance + p_stars WHERE id = p_user_id
+  RETURNING balance INTO new_bal;
+
+  INSERT INTO transactions (user_id, type, amount, currency_amount, currency_code)
+  VALUES (p_user_id, 'deposit', p_stars, p_rub_amount, 'RUB');
+
+  INSERT INTO crypto_processed_txs (tx_hash, chain, crypto_amt, rub_amount, stars, user_id)
+  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars);
+
+  RETURN jsonb_build_object('new_balance', new_bal, 'credited', true);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ╔═══════════════════════════════════════════╗
 -- ║  TRIGGERS                                 ║
 -- ╚═══════════════════════════════════════════╝
 
@@ -1274,6 +1324,7 @@ ALTER TABLE referral_earnings   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_daily_stats    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_tokens         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crypto_processed_txs ENABLE ROW LEVEL SECURITY;
 
 -- Чтение — открыто
 DROP POLICY IF EXISTS "read_all" ON users;
@@ -1293,6 +1344,7 @@ DROP POLICY IF EXISTS "read_all" ON referral_earnings;
 DROP POLICY IF EXISTS "read_all" ON transactions;
 DROP POLICY IF EXISTS "read_all" ON user_daily_stats;
 DROP POLICY IF EXISTS "read_all" ON push_tokens;
+DROP POLICY IF EXISTS "read_all" ON crypto_processed_txs;
 
 CREATE POLICY "read_all" ON users             FOR SELECT USING (true);
 CREATE POLICY "read_all" ON questions          FOR SELECT USING (true);
@@ -1311,6 +1363,7 @@ CREATE POLICY "read_all" ON referral_earnings  FOR SELECT USING (true);
 CREATE POLICY "read_all" ON transactions       FOR SELECT USING (true);
 CREATE POLICY "read_all" ON user_daily_stats   FOR SELECT USING (true);
 CREATE POLICY "read_all" ON push_tokens        FOR SELECT USING (true);
+CREATE POLICY "read_all" ON crypto_processed_txs FOR SELECT USING (true);
 
 -- Запись — через SECURITY DEFINER RPC
 DROP POLICY IF EXISTS "write_all" ON users;
@@ -1323,6 +1376,7 @@ DROP POLICY IF EXISTS "write_all" ON referrals;
 DROP POLICY IF EXISTS "write_all" ON transactions;
 DROP POLICY IF EXISTS "write_all" ON user_daily_stats;
 DROP POLICY IF EXISTS "write_all" ON push_tokens;
+DROP POLICY IF EXISTS "write_all" ON crypto_processed_txs;
 
 CREATE POLICY "write_all" ON users             FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "write_all" ON duels             FOR ALL USING (true) WITH CHECK (true);
@@ -1334,6 +1388,7 @@ CREATE POLICY "write_all" ON referrals         FOR ALL USING (true) WITH CHECK (
 CREATE POLICY "write_all" ON transactions      FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "write_all" ON user_daily_stats  FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "write_all" ON push_tokens       FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "write_all" ON crypto_processed_txs FOR ALL USING (true) WITH CHECK (true);
 
 -- =============================================
 -- ИТОГО 17 таблиц:
@@ -1354,6 +1409,7 @@ CREATE POLICY "write_all" ON push_tokens       FOR ALL USING (true) WITH CHECK (
 -- 15. transactions        — полная история баланса
 -- 16. user_daily_stats    — дневной PnL (график профиля)
 -- 17. push_tokens         — токены уведомлений
+-- 18. crypto_processed_txs — обработанные крипто-депозиты
 --
 -- 8 RPC функций:
 --  1. increment_balance    — атомарный баланс
@@ -1365,4 +1421,5 @@ CREATE POLICY "write_all" ON push_tokens       FOR ALL USING (true) WITH CHECK (
 --  7. edit_guild           — редактирование (-100)
 --  8. get_referral_stats   — доходы по периодам
 --  9. get_user_profile     — профиль (rank + daily_stats + total_pnl)
+-- 10. process_crypto_deposit — зачисление крипто-депозита
 -- =============================================
