@@ -423,69 +423,69 @@ export default function DepositSheet() {
           const cfg = COIN_CONFIG[selectedCoin.id]
           const address = ADDRESSES[cfg.addressKey]
           const memoTag = user?.telegram_id || user?.id || 'dev'
-          const minFormatted = formatCurrency(100, currency, rates, { approximate: true })
-
-          const CopyIcon = ({ field }) => copiedField === field ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" />
-              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-            </svg>
-          )
+          const minFormatted = formatCurrency(200, currency, rates, { approximate: true })
 
           return (
             <div className="deposit-crypto-detail">
-              {/* Coin badge */}
-              <div className="deposit-crypto-badge" style={{ '--coin-color': selectedCoin.color }}>
-                <div className="deposit-crypto-badge-icon">
+              {/* Coin header */}
+              <div className="deposit-crypto-hero" style={{ '--coin-color': selectedCoin.color }}>
+                <div className="deposit-crypto-hero-icon">
                   <CoinIcon id={selectedCoin.id} color={selectedCoin.color} />
                 </div>
-                <span className="deposit-crypto-badge-name">{cfg.coin}</span>
-                <span className="deposit-crypto-badge-net">{cfg.network}</span>
+                <div className="deposit-crypto-hero-text">
+                  <span className="deposit-crypto-hero-name">{cfg.coin}</span>
+                  <span className="deposit-crypto-hero-net">{cfg.network}</span>
+                </div>
               </div>
 
               {/* Address */}
-              <div className="deposit-field">
-                <div className="deposit-field-top">
-                  <span className="deposit-field-label">{t.depositCryptoAddress}</span>
-                  <button
-                    className={`deposit-copy-btn ${copiedField === 'address' ? 'copied' : ''}`}
-                    onClick={() => handleCopy(address, 'address')}
-                  >
-                    {copiedField === 'address' ? t.depositCryptoCopied : <CopyIcon field="address" />}
-                  </button>
+              <div className="deposit-field" onClick={() => handleCopy(address, 'address')}>
+                <span className="deposit-field-label">{t.depositCryptoAddress}</span>
+                <div className="deposit-field-row">
+                  <span className="deposit-field-mono">{address}</span>
+                  <span className={`deposit-field-copy ${copiedField === 'address' ? 'copied' : ''}`}>
+                    {copiedField === 'address' ? t.depositCryptoCopied : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" />
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                      </svg>
+                    )}
+                  </span>
                 </div>
-                <span className="deposit-field-value deposit-field-mono">{address}</span>
               </div>
 
               {/* Memo / Tag */}
-              <div className="deposit-field">
-                <div className="deposit-field-top">
-                  <span className="deposit-field-label">{t.depositCryptoMemo}</span>
-                  <button
-                    className={`deposit-copy-btn ${copiedField === 'memo' ? 'copied' : ''}`}
-                    onClick={() => handleCopy(String(memoTag), 'memo')}
-                  >
-                    {copiedField === 'memo' ? t.depositCryptoCopied : <CopyIcon field="memo" />}
-                  </button>
+              <div className="deposit-field" onClick={() => handleCopy(String(memoTag), 'memo')}>
+                <span className="deposit-field-label">{t.depositCryptoMemo}</span>
+                <div className="deposit-field-row">
+                  <span className="deposit-field-memo">{memoTag}</span>
+                  <span className={`deposit-field-copy ${copiedField === 'memo' ? 'copied' : ''}`}>
+                    {copiedField === 'memo' ? t.depositCryptoCopied : (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" />
+                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                      </svg>
+                    )}
+                  </span>
                 </div>
-                <span className="deposit-field-value deposit-field-memo">{memoTag}</span>
-                <span className="deposit-field-hint">{t.depositCryptoMemoHint}</span>
               </div>
 
-              {/* Min + auto credit */}
-              <div className="deposit-crypto-info">
-                <span>{t.depositCryptoMin}: <strong>{minFormatted}</strong></span>
-                <span>{t.depositCryptoWarn3}</span>
+              {/* Info block */}
+              <div className="deposit-crypto-info-block">
+                <div className="deposit-crypto-info-row">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                  <span>{t.depositCryptoMin}: <strong>{minFormatted}</strong></span>
+                </div>
+                <div className="deposit-crypto-info-row">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                  <span>{t.depositCryptoWarn3}</span>
+                </div>
               </div>
 
               {/* Warnings */}
-              <div className="deposit-crypto-notes">
-                <span>{t.depositCryptoWarn1.replace('{coin}', cfg.coin).replace('{network}', cfg.network)}</span>
-                <span>{t.depositCryptoWarn2}</span>
+              <div className="deposit-crypto-warnings-block">
+                <p>{t.depositCryptoWarn1.replace('{coin}', cfg.coin).replace('{network}', cfg.network)}</p>
+                <p>{t.depositCryptoWarn2}</p>
               </div>
             </div>
           )

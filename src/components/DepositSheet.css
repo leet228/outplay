@@ -381,64 +381,68 @@
 .deposit-crypto-detail {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  animation: deposit-fade-in 0.25s ease;
+  gap: 14px;
+  animation: deposit-fade-in 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 @keyframes deposit-fade-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Badge */
-.deposit-crypto-badge {
+/* Hero — coin identity */
+.deposit-crypto-hero {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 0 4px;
+  gap: 12px;
+  padding: 2px 0 6px;
 }
 
-.deposit-crypto-badge-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+.deposit-crypto-hero-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
   background: color-mix(in srgb, var(--coin-color) 12%, transparent);
-  border: 1.5px solid color-mix(in srgb, var(--coin-color) 20%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--coin-color) 18%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.deposit-crypto-badge-name {
-  font-size: 17px;
+.deposit-crypto-hero-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.deposit-crypto-hero-name {
+  font-size: 18px;
   font-weight: 800;
   color: var(--text);
+  letter-spacing: -0.3px;
 }
 
-.deposit-crypto-badge-net {
-  font-size: 12px;
+.deposit-crypto-hero-net {
+  font-size: 13px;
   color: var(--text-muted);
-  background: var(--surface);
-  padding: 3px 8px;
-  border-radius: 6px;
 }
 
-/* Field (address / memo) */
+/* Field — address / memo (clickable) */
 .deposit-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  border-radius: 12px;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.deposit-field-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.deposit-field:active {
+  background: var(--border);
 }
 
 .deposit-field-label {
@@ -446,79 +450,92 @@
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
 }
 
-.deposit-copy-btn {
-  border: none;
-  background: none;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 2px 0;
+.deposit-field-row {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: opacity 0.15s;
-}
-
-.deposit-copy-btn:active { opacity: 0.6; }
-
-.deposit-copy-btn.copied {
-  color: #22c55e;
-}
-
-.deposit-field-value {
-  color: var(--text);
-  line-height: 1.45;
-  user-select: all;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .deposit-field-mono {
-  font-size: 12.5px;
+  flex: 1;
+  font-size: 13px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  color: var(--text);
   word-break: break-all;
+  line-height: 1.5;
+  user-select: all;
 }
 
 .deposit-field-memo {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
+  color: var(--text);
+  user-select: all;
 }
 
-.deposit-field-hint {
-  font-size: 11.5px;
+.deposit-field-copy {
+  flex-shrink: 0;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  transition: color 0.2s;
+  padding-top: 1px;
+}
+
+.deposit-field-copy.copied {
+  color: #22c55e;
+}
+
+/* Info block */
+.deposit-crypto-info-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.1);
+}
+
+.deposit-crypto-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.deposit-crypto-info-row svg {
+  flex-shrink: 0;
+  color: var(--accent);
   opacity: 0.7;
 }
 
-/* Info line */
-.deposit-crypto-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12.5px;
-  color: var(--text-muted);
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: rgba(59, 130, 246, 0.06);
-}
-
-.deposit-crypto-info strong {
+.deposit-crypto-info-row strong {
   color: var(--accent);
   font-weight: 700;
 }
 
-/* Notes / warnings */
-.deposit-crypto-notes {
+/* Warnings */
+.deposit-crypto-warnings-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.deposit-crypto-warnings-block p {
+  margin: 0;
   font-size: 11.5px;
   color: var(--text-muted);
-  opacity: 0.6;
+  opacity: 0.5;
   line-height: 1.4;
-  padding: 0 2px;
 }
 
 /* === Success view === */
