@@ -64,8 +64,10 @@ async function pollBalance(userId, prevBalance, maxRetries = 4) {
 }
 
 export default function DepositSheet() {
-  const { depositOpen, setDepositOpen, lang, currency, rates, user, balance, setBalance, setBalanceBounce } = useGameStore()
+  const { depositOpen, setDepositOpen, lang, currency, rates, user, balance, setBalance, setBalanceBounce, appSettings } = useGameStore()
   const t = translations[lang]
+  const starsEnabled = appSettings.stars_deposits !== false
+  const cryptoEnabled = appSettings.crypto_deposits !== false
 
   const [view, setView] = useState('main')
   const [selected, setSelected] = useState(100)
@@ -288,29 +290,37 @@ export default function DepositSheet() {
         {/* ── Main ── */}
         {status === 'idle' && view === 'main' && (
           <div className="deposit-options">
-            <button className="deposit-option deposit-option--stars" onClick={() => { haptic('medium'); setView('stars') }}>
-              <div className="deposit-option-icon">⭐</div>
-              <div className="deposit-option-info">
-                <span className="deposit-option-title">{t.depositStars}</span>
-                <span className="deposit-option-sub">{t.depositStarsSub}</span>
+            {!starsEnabled && !cryptoEnabled && (
+              <div className="deposit-unavailable">
+                <span>{lang === 'ru' ? 'Пополнение временно недоступно' : 'Deposits temporarily unavailable'}</span>
               </div>
-              <svg className="deposit-option-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
-
-            <button className="deposit-option deposit-option--crypto" onClick={() => { haptic('medium'); setView('crypto') }}>
-              <div className="deposit-option-icon">
-                <TonIcon size={20} />
-              </div>
-              <div className="deposit-option-info">
-                <span className="deposit-option-title">{t.depositCrypto}</span>
-                <span className="deposit-option-sub">{t.depositCryptoSub}</span>
-              </div>
-              <svg className="deposit-option-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </button>
+            )}
+            {starsEnabled && (
+              <button className="deposit-option deposit-option--stars" onClick={() => { haptic('medium'); setView('stars') }}>
+                <div className="deposit-option-icon">⭐</div>
+                <div className="deposit-option-info">
+                  <span className="deposit-option-title">{t.depositStars}</span>
+                  <span className="deposit-option-sub">{t.depositStarsSub}</span>
+                </div>
+                <svg className="deposit-option-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+            )}
+            {cryptoEnabled && (
+              <button className="deposit-option deposit-option--crypto" onClick={() => { haptic('medium'); setView('crypto') }}>
+                <div className="deposit-option-icon">
+                  <TonIcon size={20} />
+                </div>
+                <div className="deposit-option-info">
+                  <span className="deposit-option-title">{t.depositCrypto}</span>
+                  <span className="deposit-option-sub">{t.depositCryptoSub}</span>
+                </div>
+                <svg className="deposit-option-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+            )}
           </div>
         )}
 

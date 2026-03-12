@@ -1393,8 +1393,108 @@ CREATE POLICY "write_all" ON user_daily_stats  FOR ALL USING (true) WITH CHECK (
 CREATE POLICY "write_all" ON push_tokens       FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "write_all" ON crypto_processed_txs FOR ALL USING (true) WITH CHECK (true);
 
+-- ╔═══════════════════════════════════════════╗
+-- ║  19. APP SETTINGS (feature flags)         ║
+-- ╚═══════════════════════════════════════════╝
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      JSONB NOT NULL DEFAULT 'true'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO app_settings (key, value) VALUES
+  ('stars_deposits',  'true'::jsonb),
+  ('crypto_deposits', 'true'::jsonb),
+  ('withdrawals',     'true'::jsonb),
+  ('game_creation',   'true'::jsonb),
+  ('subscriptions',   'true'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read_all" ON app_settings;
+CREATE POLICY "read_all" ON app_settings FOR SELECT USING (true);
+DROP POLICY IF EXISTS "write_all" ON app_settings;
+CREATE POLICY "write_all" ON app_settings FOR ALL USING (true) WITH CHECK (true);
+
+-- get_app_settings — все настройки одним запросом
+CREATE OR REPLACE FUNCTION get_app_settings()
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  RETURN (SELECT jsonb_object_agg(key, value) FROM app_settings);
+END;
+$$;
+
+-- update_app_setting — обновить одну настройку
+CREATE OR REPLACE FUNCTION update_app_setting(p_key TEXT, p_value JSONB)
+RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  UPDATE app_settings SET value = p_value, updated_at = NOW() WHERE key = p_key;
+END;
+$$;
+
+-- get_admin_stats — вся статистика одним запросом
+CREATE OR REPLACE FUNCTION get_admin_stats()
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE r JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'total_users',       (SELECT COUNT(*) FROM users),
+    'online_now',        (SELECT COUNT(*) FROM users WHERE last_seen > NOW() - INTERVAL '5 minutes'),
+    'new_today',         (SELECT COUNT(*) FROM users WHERE created_at >= CURRENT_DATE),
+    'new_week',          (SELECT COUNT(*) FROM users WHERE created_at >= DATE_TRUNC('week', NOW())),
+    'new_month',         (SELECT COUNT(*) FROM users WHERE created_at >= DATE_TRUNC('month', NOW())),
+    'total_games',       (SELECT COUNT(*) FROM duels WHERE status = 'finished'),
+    'games_today',       (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= CURRENT_DATE),
+    'games_week',        (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= DATE_TRUNC('week', NOW())),
+    'games_month',       (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= DATE_TRUNC('month', NOW())),
+    'active_duels',      (SELECT COUNT(*) FROM duels WHERE status IN ('waiting', 'active')),
+    'total_deposits',    (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit'),
+    'total_withdrawals', (SELECT COALESCE(ABS(SUM(amount)), 0) FROM transactions WHERE type = 'withdrawal'),
+    'deposits_today',    (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= CURRENT_DATE),
+    'deposits_week',     (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= DATE_TRUNC('week', NOW())),
+    'deposits_month',    (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= DATE_TRUNC('month', NOW())),
+    'total_user_balances', (SELECT COALESCE(SUM(balance), 0) FROM users),
+    'total_pro_users',   (SELECT COUNT(*) FROM users WHERE is_pro = true AND pro_expires > NOW()),
+    'total_guilds',      (SELECT COUNT(*) FROM guilds)
+  ) INTO r;
+  RETURN r;
+END;
+$$;
+
+-- admin_search_user — поиск юзера + его транзакции
+CREATE OR REPLACE FUNCTION admin_search_user(p_query TEXT)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_user JSONB;
+  v_txs  JSONB;
+  v_uid  UUID;
+BEGIN
+  -- Ищем по telegram_id или username
+  SELECT id INTO v_uid FROM users
+  WHERE telegram_id::text = p_query
+     OR LOWER(username) = LOWER(p_query)
+     OR LOWER(first_name) ILIKE '%' || LOWER(p_query) || '%'
+  LIMIT 1;
+
+  IF v_uid IS NULL THEN
+    RETURN jsonb_build_object('error', 'not_found');
+  END IF;
+
+  SELECT row_to_json(u)::jsonb INTO v_user
+  FROM (SELECT id, telegram_id, username, first_name, avatar_url, balance, wins, losses,
+               is_pro, pro_expires, currency, lang, last_seen, created_at FROM users WHERE id = v_uid) u;
+
+  SELECT COALESCE(jsonb_agg(t), '[]'::jsonb) INTO v_txs
+  FROM (SELECT type, amount, currency_amount, currency_code, created_at
+        FROM transactions WHERE user_id = v_uid ORDER BY created_at DESC LIMIT 50) t;
+
+  RETURN jsonb_build_object('user', v_user, 'transactions', v_txs);
+END;
+$$;
+
 -- =============================================
--- ИТОГО 17 таблиц:
+-- ИТОГО 19 таблиц (+ app_settings):
 --  1. users              — профили, балансы, настройки
 --  2. questions           — вопросы по категориям
 --  3. duels               — дуэли и результаты

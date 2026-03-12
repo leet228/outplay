@@ -112,6 +112,10 @@ const useGameStore = create((set, get) => ({
   // Deposit sheet
   depositOpen: false,
   setDepositOpen: (v) => set({ depositOpen: v }),
+
+  // App settings (feature flags)
+  appSettings: {},
+  setAppSettings: (s) => set({ appSettings: s }),
 }))
 
 export default useGameStore

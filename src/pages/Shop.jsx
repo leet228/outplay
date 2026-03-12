@@ -51,7 +51,7 @@ function avatarColor(name) {
 }
 
 /* ── Plan Sheet ── */
-function PlanSheet({ plan, t, currency, rates, onClose }) {
+function PlanSheet({ plan, t, currency, rates, onClose, appSettings }) {
   useEffect(() => {
     if (plan) {
       document.body.style.overflow = 'hidden'
@@ -75,6 +75,7 @@ function PlanSheet({ plan, t, currency, rates, onClose }) {
   }, [plan, onClose])
 
   function handleSubscribe() {
+    if (appSettings?.subscriptions === false) return alert('Подписки временно отключены')
     haptic('medium')
     // TODO: Telegram Stars payment
   }
@@ -360,7 +361,7 @@ function ReferralSection({ t, currency, rates, user }) {
 
 /* ── Shop ── */
 export default function Shop() {
-  const { lang, currency, rates, user, plans } = useGameStore()
+  const { lang, currency, rates, user, plans, appSettings } = useGameStore()
   const t = translations[lang]
   const PLANS = plans.length > 0 ? mergePlans(plans) : STATIC_PLANS
   const [active, setActive] = useState(1)
@@ -494,6 +495,7 @@ export default function Shop() {
         currency={currency}
         rates={rates}
         onClose={closeSheet}
+        appSettings={appSettings}
       />
     </div>
   )

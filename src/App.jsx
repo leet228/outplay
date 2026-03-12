@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
-import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance } from './lib/supabase'
+import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings } from './lib/supabase'
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
 import './App.css'
@@ -138,6 +138,14 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
+  // Refresh app settings every 60s (feature flags)
+  useEffect(() => {
+    const id = setInterval(() => {
+      getAppSettings().then(s => { if (s) useGameStore.getState().setAppSettings(s) })
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [])
+
   // Realtime: listen for new deposits → bounce balance
   const userIdRef = useRef(null)
   useEffect(() => {
@@ -254,7 +262,8 @@ export default function App() {
         { request_id: 'req2', from_user: { id: '6', first_name: 'Сергей',  username: 'serg_bet', avatar_url: null }, created_at: new Date(Date.now() - 7200000).toISOString() },
       ])
       store.setSentRequestIds(['4'])
-      // Fetch exchange rates (dev mode too)
+      // Dev defaults
+      store.setAppSettings({ stars_deposits: true, crypto_deposits: true, withdrawals: true, game_creation: true, subscriptions: true })
       fetchRates().then(r => store.setRates(r)).catch(() => {})
       return
     }
@@ -264,8 +273,8 @@ export default function App() {
     setUser(user)
     setBalance(user.balance ?? 0)
 
-    // 7 parallel fetches — all data for the entire app
-    const [profile, plans, leaderboard, guildData, opponents, friendsData, rates] = await Promise.all([
+    // 8 parallel fetches — all data for the entire app
+    const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] = await Promise.all([
       getUserProfile(user.id),
       getPlans(),
       getLeaderboard(50),
@@ -273,10 +282,14 @@ export default function App() {
       getRecentOpponents(user.id),
       getFriendsData(user.id),
       fetchRates(),
+      getAppSettings(),
     ])
 
     // Exchange rates
     if (rates) store.setRates(rates)
+
+    // App settings (feature flags)
+    if (settings) store.setAppSettings(settings)
 
     // Profile
     if (profile && !profile.error) {

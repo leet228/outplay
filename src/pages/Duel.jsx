@@ -23,7 +23,7 @@ const STAKES = [
 
 export default function Duel() {
   const navigate = useNavigate()
-  const { user, balance } = useGameStore()
+  const { user, balance, appSettings } = useGameStore()
   const [tab, setTab] = useState('find') // 'find' | 'create'
   const [category, setCategory] = useState('general')
   const [stake, setStake] = useState(10)
@@ -44,6 +44,7 @@ export default function Duel() {
   }
 
   async function joinDuel(duel) {
+    if (appSettings.game_creation === false) return alert('Игры временно отключены')
     if (balance < duel.stake) return alert('Недостаточно Stars')
     setLoading(true)
     haptic('medium')
@@ -59,6 +60,7 @@ export default function Duel() {
   }
 
   async function createDuel() {
+    if (appSettings.game_creation === false) return alert('Игры временно отключены')
     if (balance < stake) return alert('Недостаточно Stars')
     setLoading(true)
     haptic('medium')

@@ -284,3 +284,39 @@ export async function processDeposit(userId, amount, txId, currencyAmount, curre
   if (error) { console.error('processDeposit error:', error); return null }
   return data
 }
+
+// ── Admin ──
+
+export async function getAppSettings() {
+  const { data, error } = await supabase.rpc('get_app_settings')
+  if (error) { console.error('getAppSettings error:', error); return null }
+  return data
+}
+
+export async function updateAppSetting(key, value) {
+  const { error } = await supabase.rpc('update_app_setting', { p_key: key, p_value: JSON.stringify(value) })
+  if (error) { console.error('updateAppSetting error:', error); return false }
+  return true
+}
+
+export async function getAdminStats() {
+  const { data, error } = await supabase.rpc('get_admin_stats')
+  if (error) { console.error('getAdminStats error:', error); return null }
+  return data
+}
+
+export async function adminSearchUser(query) {
+  const { data, error } = await supabase.rpc('admin_search_user', { p_query: query })
+  if (error) { console.error('adminSearchUser error:', error); return null }
+  return data
+}
+
+export async function getRecentCryptoDeposits(limit = 10) {
+  const { data, error } = await supabase
+    .from('crypto_processed_txs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) { console.error('getRecentCryptoDeposits error:', error); return [] }
+  return data
+}
