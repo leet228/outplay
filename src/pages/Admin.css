@@ -509,22 +509,63 @@
   letter-spacing: -0.5px;
   color: #22c55e;
 }
+.admin-revenue-value.negative {
+  color: #ef4444;
+}
 
 .admin-revenue-breakdown {
   width: 100%;
   margin-top: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   border-top: 1px solid var(--border);
   padding-top: 12px;
+}
+
+.admin-revenue-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 2px;
 }
 
 .admin-revenue-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 13px;
   color: var(--text-muted);
+}
+
+.admin-revenue-row-sub {
+  font-size: 11px;
+  opacity: 0.6;
+  padding-left: 20px;
+}
+
+.admin-revenue-highlight {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.admin-revenue-negative {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.admin-revenue-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 /* ── User search ── */

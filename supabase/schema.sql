@@ -1440,24 +1440,25 @@ RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE r JSONB;
 BEGIN
   SELECT jsonb_build_object(
-    'total_users',       (SELECT COUNT(*) FROM users),
-    'online_now',        (SELECT COUNT(*) FROM users WHERE last_seen > NOW() - INTERVAL '5 minutes'),
-    'new_today',         (SELECT COUNT(*) FROM users WHERE created_at >= CURRENT_DATE),
-    'new_week',          (SELECT COUNT(*) FROM users WHERE created_at >= DATE_TRUNC('week', NOW())),
-    'new_month',         (SELECT COUNT(*) FROM users WHERE created_at >= DATE_TRUNC('month', NOW())),
-    'total_games',       (SELECT COUNT(*) FROM duels WHERE status = 'finished'),
-    'games_today',       (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= CURRENT_DATE),
-    'games_week',        (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= DATE_TRUNC('week', NOW())),
-    'games_month',       (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= DATE_TRUNC('month', NOW())),
-    'active_duels',      (SELECT COUNT(*) FROM duels WHERE status IN ('waiting', 'active')),
-    'total_deposits',    (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit'),
-    'total_withdrawals', (SELECT COALESCE(ABS(SUM(amount)), 0) FROM transactions WHERE type = 'withdrawal'),
-    'deposits_today',    (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= CURRENT_DATE),
-    'deposits_week',     (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= DATE_TRUNC('week', NOW())),
-    'deposits_month',    (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= DATE_TRUNC('month', NOW())),
-    'total_user_balances', (SELECT COALESCE(SUM(balance), 0) FROM users),
-    'total_pro_users',   (SELECT COUNT(*) FROM users WHERE is_pro = true AND pro_expires > NOW()),
-    'total_guilds',      (SELECT COUNT(*) FROM guilds)
+    'total_users',           (SELECT COUNT(*) FROM users),
+    'online_now',            (SELECT COUNT(*) FROM users WHERE last_seen > NOW() - INTERVAL '5 minutes'),
+    'new_today',             (SELECT COUNT(*) FROM users WHERE created_at >= CURRENT_DATE),
+    'new_week',              (SELECT COUNT(*) FROM users WHERE created_at >= DATE_TRUNC('week', NOW())),
+    'new_month',             (SELECT COUNT(*) FROM users WHERE created_at >= DATE_TRUNC('month', NOW())),
+    'total_games',           (SELECT COUNT(*) FROM duels WHERE status = 'finished'),
+    'games_today',           (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= CURRENT_DATE),
+    'games_week',            (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= DATE_TRUNC('week', NOW())),
+    'games_month',           (SELECT COUNT(*) FROM duels WHERE status = 'finished' AND finished_at >= DATE_TRUNC('month', NOW())),
+    'active_games',          (SELECT COUNT(*) FROM duels WHERE status IN ('waiting', 'active')),
+    'deposits_total',        (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit'),
+    'withdrawals_total',     (SELECT COALESCE(ABS(SUM(amount)), 0) FROM transactions WHERE type = 'withdrawal'),
+    'deposits_today',        (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= CURRENT_DATE),
+    'deposits_week',         (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= DATE_TRUNC('week', NOW())),
+    'deposits_month',        (SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE type = 'deposit' AND created_at >= DATE_TRUNC('month', NOW())),
+    'total_user_balances',   (SELECT COALESCE(SUM(balance), 0) FROM users),
+    'total_pro',             (SELECT COUNT(*) FROM users WHERE is_pro = true AND pro_expires > NOW()),
+    'total_guilds',          (SELECT COUNT(*) FROM guilds),
+    'crypto_deposits_stars', (SELECT COALESCE(SUM(stars), 0) FROM crypto_processed_txs)
   ) INTO r;
   RETURN r;
 END;

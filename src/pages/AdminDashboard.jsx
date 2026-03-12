@@ -92,12 +92,19 @@ export default function AdminDashboard() {
         if (statsData) {
           const walletRub = tonBal * tonPriceRub
           const depositsTotal = statsData.deposits_total ?? 0
+          const cryptoStars = statsData.crypto_deposits_stars ?? 0
+          const botStars = depositsTotal - cryptoStars // actual Telegram Stars bot holds
           const userBalances = statsData.total_user_balances ?? 0
+          const totalAssetsRub = botStars + walletRub // 1 star ≈ 1 RUB
+          const netRevenue = totalAssetsRub - userBalances
           setRevenue({
-            walletRub,
+            botStars,
+            cryptoStars,
             depositsTotal,
+            walletRub,
             userBalances,
-            profit: walletRub + depositsTotal - userBalances,
+            totalAssetsRub,
+            netRevenue,
             tonBal,
             tonPriceRub,
           })
@@ -318,20 +325,51 @@ export default function AdminDashboard() {
       {revenue && (
         <div className="admin-revenue-card">
           <div className="admin-revenue-glow" />
-          <span className="admin-revenue-label">Estimated Revenue</span>
-          <span className="admin-revenue-value">{fmtRub(revenue.profit)}</span>
+          <span className="admin-revenue-label">Net Revenue</span>
+          <span className={`admin-revenue-value ${revenue.netRevenue >= 0 ? '' : 'negative'}`}>
+            {fmtRub(revenue.netRevenue)}
+          </span>
+
+          {/* Assets */}
           <div className="admin-revenue-breakdown">
+            <div className="admin-revenue-group-title">Assets</div>
+
             <div className="admin-revenue-row">
-              <span>TON Wallet</span>
-              <span>{revenue.tonBal.toFixed(2)} TON = {fmtRub(revenue.walletRub)}</span>
+              <span>{'\u2B50'} Bot Stars Balance</span>
+              <span className="admin-revenue-highlight">{fmtNum(revenue.botStars)} {'\u2B50'}</span>
             </div>
-            <div className="admin-revenue-row">
-              <span>+ Deposits</span>
-              <span>{fmtNum(revenue.depositsTotal)} {'\u2B50'}</span>
+            <div className="admin-revenue-row admin-revenue-row-sub">
+              <span>Stars deposits</span>
+              <span>{fmtNum(revenue.depositsTotal - revenue.cryptoStars)}</span>
             </div>
+            {revenue.cryptoStars > 0 && (
+              <div className="admin-revenue-row admin-revenue-row-sub">
+                <span>Crypto deposits (not in bot)</span>
+                <span>{fmtNum(revenue.cryptoStars)}</span>
+              </div>
+            )}
+
+            <div className="admin-revenue-row" style={{ marginTop: 6 }}>
+              <span>{'\uD83D\uDC8E'} TON Wallet</span>
+              <span className="admin-revenue-highlight">{fmtRub(revenue.walletRub)}</span>
+            </div>
+            <div className="admin-revenue-row admin-revenue-row-sub">
+              <span>{revenue.tonBal.toFixed(4)} TON × {fmtNum(Math.round(revenue.tonPriceRub))} {'\u20BD'}</span>
+              <span></span>
+            </div>
+
+            <div className="admin-revenue-total-row">
+              <span>Total Assets</span>
+              <span>{fmtRub(revenue.totalAssetsRub)}</span>
+            </div>
+          </div>
+
+          {/* Liabilities */}
+          <div className="admin-revenue-breakdown">
+            <div className="admin-revenue-group-title">Liabilities</div>
             <div className="admin-revenue-row">
-              <span>- User Balances</span>
-              <span>{fmtNum(revenue.userBalances)} {'\u2B50'}</span>
+              <span>{'\uD83D\uDC64'} Player Balances</span>
+              <span className="admin-revenue-negative">{fmtNum(revenue.userBalances)} {'\u2B50'}</span>
             </div>
           </div>
         </div>
