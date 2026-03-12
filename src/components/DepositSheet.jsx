@@ -22,6 +22,30 @@ function TonIcon({ size = 22 }) {
   )
 }
 
+function TgStarIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <defs>
+        <linearGradient id="tgstar-grad" x1="12" y1="4" x2="36" y2="44" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFD700"/>
+          <stop offset="50%" stopColor="#F5A623"/>
+          <stop offset="100%" stopColor="#D4860B"/>
+        </linearGradient>
+        <linearGradient id="tgstar-shadow" x1="24" y1="20" x2="24" y2="46" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#E89D0E"/>
+          <stop offset="100%" stopColor="#C47A08"/>
+        </linearGradient>
+      </defs>
+      {/* Main star body */}
+      <path d="M24 3L29.8 17.2L45 18.8L33.6 29.2L36.8 44L24 36.8L11.2 44L14.4 29.2L3 18.8L18.2 17.2L24 3Z" fill="url(#tgstar-grad)"/>
+      {/* Swoosh tail */}
+      <path d="M14 29C10 34 8 40 12 44C16 42 22 38 28 36C22 36 16 34 14 29Z" fill="url(#tgstar-shadow)" opacity="0.9"/>
+      {/* Top highlight */}
+      <path d="M24 3L27 12L24 8L21 12L24 3Z" fill="#FFE566" opacity="0.7"/>
+    </svg>
+  )
+}
+
 /** Raw numeric currency amount for DB (e.g. 100.10) — 1 Star = 1 RUB */
 function toCurrencyRaw(stars, curCode, rates) {
   const amount = convertFromRub(stars, curCode, rates)
@@ -297,7 +321,9 @@ export default function DepositSheet() {
             )}
             {starsEnabled && (
               <button className="deposit-option deposit-option--stars" onClick={() => { haptic('medium'); setView('stars') }}>
-                <div className="deposit-option-icon">⭐</div>
+                <div className="deposit-option-icon">
+                  <TgStarIcon size={28} />
+                </div>
                 <div className="deposit-option-info">
                   <span className="deposit-option-title">{t.depositStars}</span>
                   <span className="deposit-option-sub">{t.depositStarsSub}</span>
@@ -310,7 +336,7 @@ export default function DepositSheet() {
             {cryptoEnabled && (
               <button className="deposit-option deposit-option--crypto" onClick={() => { haptic('medium'); setView('crypto') }}>
                 <div className="deposit-option-icon">
-                  <TonIcon size={20} />
+                  <TonIcon size={28} />
                 </div>
                 <div className="deposit-option-info">
                   <span className="deposit-option-title">{t.depositCrypto}</span>
