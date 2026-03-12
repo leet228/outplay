@@ -294,7 +294,7 @@ export async function getAppSettings() {
 }
 
 export async function updateAppSetting(key, value) {
-  const { error } = await supabase.rpc('update_app_setting', { p_key: key, p_value: JSON.stringify(value) })
+  const { error } = await supabase.rpc('update_app_setting', { p_key: key, p_value: value })
   if (error) { console.error('updateAppSetting error:', error); return false }
   return true
 }

@@ -252,7 +252,8 @@ CREATE INDEX IF NOT EXISTS idx_tx_user ON transactions(user_id, created_at DESC)
 CREATE INDEX IF NOT EXISTS idx_tx_type ON transactions(user_id, type);
 CREATE INDEX IF NOT EXISTS idx_tx_ref  ON transactions(ref_id) WHERE ref_id IS NOT NULL;
 
--- Unique constraint for atomic deposit dedup (used by process_deposit ON CONFLICT)
+-- Unique index for atomic deposit dedup (used by process_deposit ON CONFLICT)
+DROP INDEX IF EXISTS uq_deposit_tx;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_deposit_tx ON transactions(ref_id) WHERE type = 'deposit' AND ref_id IS NOT NULL;
 
 -- ╔═══════════════════════════════════════════╗
@@ -1214,10 +1215,10 @@ BEGIN
     RETURN jsonb_build_object('error', 'amount must be >= 1');
   END IF;
 
-  -- Atomic dedup: try INSERT, if conflict → duplicate
+  -- Atomic dedup: try INSERT, if conflict on ref_id → duplicate
   INSERT INTO transactions (user_id, type, amount, currency_amount, currency_code, ref_id)
   VALUES (p_user_id, 'deposit', p_amount, p_currency_amt, p_currency_code, p_tx_id)
-  ON CONFLICT ON CONSTRAINT uq_deposit_tx DO NOTHING;
+  ON CONFLICT (ref_id) WHERE type = 'deposit' AND ref_id IS NOT NULL DO NOTHING;
 
   IF NOT FOUND THEN
     SELECT balance INTO new_balance FROM users WHERE id = p_user_id;

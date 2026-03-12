@@ -141,6 +141,110 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-dashboard">
+      {/* ── Search bar (top, always visible) ── */}
+      <div className="admin-search-section">
+        <div className="admin-search-wrap">
+          <svg className="admin-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            className="admin-search-input"
+            type="text"
+            placeholder="Telegram ID, @username or name..."
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+            inputMode="search"
+          />
+          {searching && <div className="admin-search-spinner" />}
+          {searchQuery && !searching && (
+            <button className="admin-search-clear" onClick={() => { setSearchQuery(''); setSearchResult(null) }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* User result */}
+        {searchResult && searchResult.user && (
+          <div className="admin-user-result">
+            <div className="admin-user-info">
+              <div className="admin-user-info-header">
+                <div className="admin-user-avatar">
+                  {searchResult.user.first_name?.[0]?.toUpperCase() || '?'}
+                </div>
+                <div className="admin-user-info-main">
+                  <span className="admin-user-name">
+                    {searchResult.user.first_name}
+                    {searchResult.user.is_pro && <span className="admin-user-pro">PRO</span>}
+                  </span>
+                  <span className="admin-user-username">
+                    {searchResult.user.username ? `@${searchResult.user.username}` : 'no username'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="admin-user-details">
+                <div className="admin-user-detail-row">
+                  <span>Telegram ID</span>
+                  <span>{searchResult.user.telegram_id}</span>
+                </div>
+                <div className="admin-user-detail-row">
+                  <span>Balance</span>
+                  <span>{fmtNum(searchResult.user.balance)} {'\u2B50'}</span>
+                </div>
+                <div className="admin-user-detail-row">
+                  <span>Wins / Losses</span>
+                  <span className="admin-user-wl">
+                    <span className="admin-user-wins">{searchResult.user.wins ?? 0}W</span>
+                    {' / '}
+                    <span className="admin-user-losses">{searchResult.user.losses ?? 0}L</span>
+                  </span>
+                </div>
+                <div className="admin-user-detail-row">
+                  <span>Created</span>
+                  <span>{formatDate(searchResult.user.created_at)}</span>
+                </div>
+                <div className="admin-user-detail-row">
+                  <span>Last Seen</span>
+                  <span>{timeAgo(searchResult.user.last_seen)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Transactions */}
+            {searchResult.transactions && searchResult.transactions.length > 0 && (
+              <div className="admin-tx-section">
+                <h4 className="admin-tx-title">
+                  Last {searchResult.transactions.length} Transactions
+                </h4>
+                <div className="admin-tx-list">
+                  {searchResult.transactions.map((tx, i) => (
+                    <div key={tx.id || i} className="admin-tx-item">
+                      <TxIcon type={tx.type} />
+                      <div className="admin-tx-info">
+                        <span className="admin-tx-type">{tx.type?.replace(/_/g, ' ')}</span>
+                        <span className="admin-tx-date">{timeAgo(tx.created_at)}</span>
+                      </div>
+                      <span className={`admin-tx-amount ${tx.amount >= 0 ? 'positive' : 'negative'}`}>
+                        {tx.amount >= 0 ? '+' : ''}{fmtNum(tx.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* No result */}
+        {searchResult && !searchResult.user && searchQuery.trim() && !searching && (
+          <div className="admin-search-empty">
+            No user found
+          </div>
+        )}
+      </div>
+
       {/* Stats grid */}
       {loading && (
         <div className="admin-stats-grid">
@@ -233,102 +337,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* User search */}
-      <div className="admin-search-section">
-        <h3 className="admin-section-title">User Search</h3>
-        <div className="admin-search-wrap">
-          <svg className="admin-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-          </svg>
-          <input
-            className="admin-search-input"
-            type="text"
-            placeholder="Search by ID, username, or name..."
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-          {searching && <div className="admin-search-spinner" />}
-        </div>
-
-        {/* User result */}
-        {searchResult && searchResult.user && (
-          <div className="admin-user-result">
-            <div className="admin-user-info">
-              <div className="admin-user-info-header">
-                <div className="admin-user-avatar">
-                  {searchResult.user.first_name?.[0]?.toUpperCase() || '?'}
-                </div>
-                <div className="admin-user-info-main">
-                  <span className="admin-user-name">
-                    {searchResult.user.first_name}
-                    {searchResult.user.is_pro && <span className="admin-user-pro">PRO</span>}
-                  </span>
-                  <span className="admin-user-username">
-                    {searchResult.user.username ? `@${searchResult.user.username}` : 'no username'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="admin-user-details">
-                <div className="admin-user-detail-row">
-                  <span>Telegram ID</span>
-                  <span>{searchResult.user.telegram_id}</span>
-                </div>
-                <div className="admin-user-detail-row">
-                  <span>Balance</span>
-                  <span>{fmtNum(searchResult.user.balance)} {'\u2B50'}</span>
-                </div>
-                <div className="admin-user-detail-row">
-                  <span>Wins / Losses</span>
-                  <span className="admin-user-wl">
-                    <span className="admin-user-wins">{searchResult.user.wins ?? 0}W</span>
-                    {' / '}
-                    <span className="admin-user-losses">{searchResult.user.losses ?? 0}L</span>
-                  </span>
-                </div>
-                <div className="admin-user-detail-row">
-                  <span>Created</span>
-                  <span>{formatDate(searchResult.user.created_at)}</span>
-                </div>
-                <div className="admin-user-detail-row">
-                  <span>Last Seen</span>
-                  <span>{timeAgo(searchResult.user.last_seen)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Transactions */}
-            {searchResult.transactions && searchResult.transactions.length > 0 && (
-              <div className="admin-tx-section">
-                <h4 className="admin-tx-title">
-                  Last {searchResult.transactions.length} Transactions
-                </h4>
-                <div className="admin-tx-list">
-                  {searchResult.transactions.map((tx, i) => (
-                    <div key={tx.id || i} className="admin-tx-item">
-                      <TxIcon type={tx.type} />
-                      <div className="admin-tx-info">
-                        <span className="admin-tx-type">{tx.type?.replace(/_/g, ' ')}</span>
-                        <span className="admin-tx-date">{timeAgo(tx.created_at)}</span>
-                      </div>
-                      <span className={`admin-tx-amount ${tx.amount >= 0 ? 'positive' : 'negative'}`}>
-                        {tx.amount >= 0 ? '+' : ''}{fmtNum(tx.amount)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* No result */}
-        {searchResult && !searchResult.user && searchQuery.trim() && !searching && (
-          <div className="admin-search-empty">
-            No user found
-          </div>
-        )}
-      </div>
     </div>
   )
 }
