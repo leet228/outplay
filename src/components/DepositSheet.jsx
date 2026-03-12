@@ -362,7 +362,7 @@ export default function DepositSheet() {
                   className={`deposit-preset ${selected === amount && custom === '' ? 'active' : ''}`}
                   onClick={() => handlePreset(amount)}
                 >
-                  <span className="deposit-preset-stars">⭐ {amount}</span>
+                  <span className="deposit-preset-stars"><TgStarIcon size={16} /> {amount}</span>
                   <span className="deposit-preset-rub">{formatCurrency(amount, currency, rates, { approximate: true })}</span>
                 </button>
               ))}
@@ -371,7 +371,7 @@ export default function DepositSheet() {
             <div className="deposit-custom-wrap">
               <span className="deposit-custom-label">{t.depositCustom}</span>
               <div className={`deposit-custom-input-wrap ${custom !== '' && !isCustomValid ? 'error' : ''} ${custom !== '' && isCustomValid ? 'filled' : ''}`}>
-                <span className="deposit-custom-star">⭐</span>
+                <span className="deposit-custom-star"><TgStarIcon size={16} /></span>
                 <input
                   className="deposit-custom-input"
                   type="number"
@@ -391,7 +391,8 @@ export default function DepositSheet() {
               {loading ? (
                 <div className="deposit-btn-spinner" />
               ) : (
-                <>{t.depositBuy} {activeAmount >= MIN_STARS ? activeAmount : '—'} ⭐</>
+                <>{t.depositBuy} {activeAmount >= MIN_STARS ? activeAmount : '—'} <TgStarIcon size={18} /></>
+
               )}
             </button>
           </div>
