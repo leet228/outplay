@@ -162,14 +162,19 @@ export default function AdminControl() {
           <div className="admin-deposits-list">
             <h4 className="admin-deposits-title">Recent Deposits</h4>
             {deposits.map((dep, i) => (
-              <div key={dep.id || i} className="admin-deposit-item">
+              <div key={dep.tx_hash || i} className="admin-deposit-item">
                 <div className="admin-deposit-left">
                   <span className="admin-deposit-time">{formatTime(dep.created_at)}</span>
                   <span className="admin-deposit-user">User {truncId(dep.user_id)}</span>
                 </div>
-                <span className="admin-deposit-amount">
-                  +{dep.amount ?? dep.ton_amount ?? '?'}
-                </span>
+                <div className="admin-deposit-right">
+                  <span className="admin-deposit-amount">
+                    +{dep.stars ?? '?'} {'\u2B50'}
+                  </span>
+                  <span className="admin-deposit-crypto">
+                    {Number(dep.crypto_amt).toFixed(4)} TON
+                  </span>
+                </div>
               </div>
             ))}
           </div>

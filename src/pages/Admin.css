@@ -6,7 +6,7 @@
   min-height: 100svh;
   background: var(--bg);
   color: var(--text);
-  padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px 80px;
+  padding: calc(env(safe-area-inset-top, 0px) + 56px) 16px 80px;
 }
 
 /* ── Access denied ── */
@@ -986,9 +986,22 @@
   color: var(--text-muted);
 }
 
+.admin-deposit-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
 .admin-deposit-amount {
   font-weight: 600;
   color: #22c55e;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-deposit-crypto {
+  font-size: 11px;
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 
