@@ -32,7 +32,12 @@ serve(async (req) => {
 
       try {
         const payload = JSON.parse(payment.invoice_payload)
-        const { user_id, amount, tx_id, currency_amount, currency_code } = payload
+        // Short keys: u=user_id, a=amount, t=tx_id, ca=currency_amount, cc=currency_code
+        const user_id = payload.u ?? payload.user_id
+        const amount = payload.a ?? payload.amount
+        const tx_id = payload.t ?? payload.tx_id
+        const currency_amount = payload.ca ?? payload.currency_amount
+        const currency_code = payload.cc ?? payload.currency_code
 
         if (user_id && amount && tx_id) {
           const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)

@@ -31,8 +31,12 @@ serve(async (req) => {
     }
 
     // Generate a single tx_id used by BOTH webhook and client for dedup
+    // Payload MUST be ≤128 bytes (Telegram limit) — use short keys
     const txId = crypto.randomUUID()
-    const payload = JSON.stringify({ user_id, amount, tx_id: txId, currency_amount, currency_code })
+    const p: Record<string, unknown> = { u: user_id, a: amount, t: txId }
+    if (currency_amount != null) p.ca = currency_amount
+    if (currency_code) p.cc = currency_code
+    const payload = JSON.stringify(p)
 
     const res = await fetch(`${TELEGRAM_API}/createInvoiceLink`, {
       method: 'POST',
