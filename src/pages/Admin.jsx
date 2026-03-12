@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
+import { ADDRESSES } from '../lib/addresses'
 import './Admin.css'
 
 // ── Admin Telegram IDs ──
@@ -14,13 +15,6 @@ const WALLETS = [
   { chain: 'btc',  name: 'Bitcoin',        symbol: 'BTC',  color: '#F7931A', gradient: 'linear-gradient(135deg, #F7931A 0%, #FFB84D 100%)' },
   { chain: 'eth',  name: 'Ethereum',       symbol: 'ETH',  color: '#627EEA', gradient: 'linear-gradient(135deg, #627EEA 0%, #9FB0F5 100%)' },
 ]
-
-const ADDRESSES = {
-  ton:  'UQBMTQ2VRSwRbvthtGTIB7Tip37yqueFw8SnVvWB7y18F47t',
-  tron: 'TVx8PrnGgqHc7hyE4fZicofS673AzqwjGA',
-  btc:  'bc1qu75zk4x2sl3k8s0hhq2pt9793m8lpxyryrvyvv',
-  eth:  '0xE20B131dadaf7f9e393b555d14e13aa2CD6034Db',
-}
 
 // ── Chain icons (SVG) ──
 function TonIcon() {

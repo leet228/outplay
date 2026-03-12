@@ -377,6 +377,150 @@
   color: var(--text-muted);
 }
 
+/* === Crypto Detail view === */
+.deposit-crypto-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: deposit-fade-in 0.25s ease;
+}
+
+@keyframes deposit-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Badge */
+.deposit-crypto-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 4px;
+}
+
+.deposit-crypto-badge-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--coin-color) 12%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--coin-color) 20%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.deposit-crypto-badge-name {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.deposit-crypto-badge-net {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+/* Field (address / memo) */
+.deposit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.deposit-field-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.deposit-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.deposit-copy-btn {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: opacity 0.15s;
+}
+
+.deposit-copy-btn:active { opacity: 0.6; }
+
+.deposit-copy-btn.copied {
+  color: #22c55e;
+}
+
+.deposit-field-value {
+  color: var(--text);
+  line-height: 1.45;
+  user-select: all;
+}
+
+.deposit-field-mono {
+  font-size: 12.5px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  word-break: break-all;
+}
+
+.deposit-field-memo {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.deposit-field-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* Info line */
+.deposit-crypto-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.deposit-crypto-info strong {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Notes / warnings */
+.deposit-crypto-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  line-height: 1.4;
+  padding: 0 2px;
+}
+
 /* === Success view === */
 .deposit-success {
   display: flex;

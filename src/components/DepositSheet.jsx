@@ -4,6 +4,7 @@ import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
 import { createStarsInvoice, processDeposit, getUserBalance } from '../lib/supabase'
 import { formatCurrency, convertFromRub } from '../lib/currency'
 import { translations } from '../lib/i18n'
+import { ADDRESSES, COIN_CONFIG } from '../lib/addresses'
 import './DepositSheet.css'
 
 const PRESETS = [100, 500, 1000]
@@ -97,6 +98,8 @@ export default function DepositSheet() {
   const [custom, setCustom] = useState('')
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('idle')
+  const [selectedCoin, setSelectedCoin] = useState(null)
+  const [copiedField, setCopiedField] = useState(null) // 'address' | 'memo'
   const successAmountRef = useRef(0)
   const invoiceTxRef = useRef(null) // shared tx_id between webhook & client
 
@@ -114,6 +117,10 @@ export default function DepositSheet() {
     if (status !== 'idle') {
       setStatus('idle')
       setView('stars')
+    } else if (view === 'crypto-detail') {
+      setView('crypto')
+      setSelectedCoin(null)
+      setCopiedField(null)
     } else {
       setView('main')
     }
@@ -128,6 +135,8 @@ export default function DepositSheet() {
         setSelected(100)
         setLoading(false)
         setStatus('idle')
+        setSelectedCoin(null)
+        setCopiedField(null)
         invoiceTxRef.current = null
       }, 300)
     }
@@ -255,6 +264,17 @@ export default function DepositSheet() {
 
   function handleCoinSelect(coin) {
     haptic('medium')
+    setSelectedCoin(coin)
+    setCopiedField(null)
+    setView('crypto-detail')
+  }
+
+  function handleCopy(text, field) {
+    navigator.clipboard.writeText(text).then(() => {
+      haptic('light')
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(null), 2000)
+    })
   }
 
   return (
@@ -397,6 +417,79 @@ export default function DepositSheet() {
             </div>
           </div>
         )}
+
+        {/* ── Crypto Detail ── */}
+        {status === 'idle' && view === 'crypto-detail' && selectedCoin && (() => {
+          const cfg = COIN_CONFIG[selectedCoin.id]
+          const address = ADDRESSES[cfg.addressKey]
+          const memoTag = user?.telegram_id || user?.id || 'dev'
+          const minFormatted = formatCurrency(100, currency, rates, { approximate: true })
+
+          const CopyIcon = ({ field }) => copiedField === field ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
+          )
+
+          return (
+            <div className="deposit-crypto-detail">
+              {/* Coin badge */}
+              <div className="deposit-crypto-badge" style={{ '--coin-color': selectedCoin.color }}>
+                <div className="deposit-crypto-badge-icon">
+                  <CoinIcon id={selectedCoin.id} color={selectedCoin.color} />
+                </div>
+                <span className="deposit-crypto-badge-name">{cfg.coin}</span>
+                <span className="deposit-crypto-badge-net">{cfg.network}</span>
+              </div>
+
+              {/* Address */}
+              <div className="deposit-field">
+                <div className="deposit-field-top">
+                  <span className="deposit-field-label">{t.depositCryptoAddress}</span>
+                  <button
+                    className={`deposit-copy-btn ${copiedField === 'address' ? 'copied' : ''}`}
+                    onClick={() => handleCopy(address, 'address')}
+                  >
+                    {copiedField === 'address' ? t.depositCryptoCopied : <CopyIcon field="address" />}
+                  </button>
+                </div>
+                <span className="deposit-field-value deposit-field-mono">{address}</span>
+              </div>
+
+              {/* Memo / Tag */}
+              <div className="deposit-field">
+                <div className="deposit-field-top">
+                  <span className="deposit-field-label">{t.depositCryptoMemo}</span>
+                  <button
+                    className={`deposit-copy-btn ${copiedField === 'memo' ? 'copied' : ''}`}
+                    onClick={() => handleCopy(String(memoTag), 'memo')}
+                  >
+                    {copiedField === 'memo' ? t.depositCryptoCopied : <CopyIcon field="memo" />}
+                  </button>
+                </div>
+                <span className="deposit-field-value deposit-field-memo">{memoTag}</span>
+                <span className="deposit-field-hint">{t.depositCryptoMemoHint}</span>
+              </div>
+
+              {/* Min + auto credit */}
+              <div className="deposit-crypto-info">
+                <span>{t.depositCryptoMin}: <strong>{minFormatted}</strong></span>
+                <span>{t.depositCryptoWarn3}</span>
+              </div>
+
+              {/* Warnings */}
+              <div className="deposit-crypto-notes">
+                <span>{t.depositCryptoWarn1.replace('{coin}', cfg.coin).replace('{network}', cfg.network)}</span>
+                <span>{t.depositCryptoWarn2}</span>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </>
   )

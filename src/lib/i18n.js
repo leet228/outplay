@@ -114,6 +114,14 @@ export const translations = {
     depositBack: 'Назад',
     depositCryptoTitle: 'Выбери монету',
     depositCryptoSoon: 'Скоро',
+    depositCryptoAddress: 'Адрес кошелька',
+    depositCryptoMemo: 'Memo / Tag',
+    depositCryptoMemoHint: 'Укажите при переводе',
+    depositCryptoMin: 'Минимальная сумма',
+    depositCryptoCopied: 'Скопировано!',
+    depositCryptoWarn1: 'Отправляйте только {coin} в сети {network}',
+    depositCryptoWarn2: 'Обязательно укажите Memo / Tag, иначе средства не будут зачислены',
+    depositCryptoWarn3: 'Баланс пополнится автоматически при поступлении средств',
 
     // Guilds
     guilds: 'Гильдии',
@@ -309,6 +317,14 @@ export const translations = {
     depositBack: 'Back',
     depositCryptoTitle: 'Choose coin',
     depositCryptoSoon: 'Coming soon',
+    depositCryptoAddress: 'Wallet address',
+    depositCryptoMemo: 'Memo / Tag',
+    depositCryptoMemoHint: 'Include with your transfer',
+    depositCryptoMin: 'Minimum amount',
+    depositCryptoCopied: 'Copied!',
+    depositCryptoWarn1: 'Send only {coin} on the {network} network',
+    depositCryptoWarn2: 'You must include the Memo / Tag or funds will not be credited',
+    depositCryptoWarn3: 'Balance will be credited automatically upon receipt',
 
     // Guilds
     guilds: 'Guilds',
