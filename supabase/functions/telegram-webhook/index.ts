@@ -7,8 +7,19 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+// Webhook secret token (set via setWebhook API: secret_token param)
+const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') || ''
+
 serve(async (req) => {
-  // Telegram always sends POST, no CORS needed for webhook
+  // ── Security: verify Telegram signature ──
+  if (WEBHOOK_SECRET) {
+    const signature = req.headers.get('x-telegram-bot-api-secret-token')
+    if (signature !== WEBHOOK_SECRET) {
+      console.warn('Invalid webhook signature, rejecting')
+      return new Response('unauthorized', { status: 401 })
+    }
+  }
+
   try {
     const update = await req.json()
 
@@ -52,7 +63,13 @@ serve(async (req) => {
 
           const { data, error } = await supabase.rpc('process_deposit', params)
 
-          console.log('process_deposit:', JSON.stringify(data), error?.message)
+          if (error) {
+            console.error('process_deposit RPC error:', error.message, { user_id, amount, tx_id })
+          } else {
+            console.log('process_deposit OK:', JSON.stringify(data))
+          }
+        } else {
+          console.warn('Missing required payload fields:', { user_id, amount, tx_id })
         }
       } catch (e) {
         console.error('Webhook deposit error:', e)

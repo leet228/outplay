@@ -250,6 +250,10 @@ CREATE TABLE IF NOT EXISTS transactions (
 
 CREATE INDEX IF NOT EXISTS idx_tx_user ON transactions(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tx_type ON transactions(user_id, type);
+CREATE INDEX IF NOT EXISTS idx_tx_ref  ON transactions(ref_id) WHERE ref_id IS NOT NULL;
+
+-- Unique constraint for atomic deposit dedup (used by process_deposit ON CONFLICT)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_deposit_tx ON transactions(ref_id) WHERE type = 'deposit' AND ref_id IS NOT NULL;
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  9. USER DAILY STATS (PnL-график)        ║
@@ -1210,11 +1214,12 @@ BEGIN
     RETURN jsonb_build_object('error', 'amount must be >= 1');
   END IF;
 
-  -- Deduplication
-  IF EXISTS (
-    SELECT 1 FROM transactions
-    WHERE user_id = p_user_id AND type = 'deposit' AND ref_id = p_tx_id
-  ) THEN
+  -- Atomic dedup: try INSERT, if conflict → duplicate
+  INSERT INTO transactions (user_id, type, amount, currency_amount, currency_code, ref_id)
+  VALUES (p_user_id, 'deposit', p_amount, p_currency_amt, p_currency_code, p_tx_id)
+  ON CONFLICT ON CONSTRAINT uq_deposit_tx DO NOTHING;
+
+  IF NOT FOUND THEN
     SELECT balance INTO new_balance FROM users WHERE id = p_user_id;
     RETURN jsonb_build_object('new_balance', new_balance, 'duplicate', true);
   END IF;
@@ -1224,10 +1229,6 @@ BEGIN
   SET balance = balance + p_amount
   WHERE id = p_user_id
   RETURNING balance INTO new_balance;
-
-  -- Log transaction with currency info
-  INSERT INTO transactions (user_id, type, amount, currency_amount, currency_code, ref_id)
-  VALUES (p_user_id, 'deposit', p_amount, p_currency_amt, p_currency_code, p_tx_id);
 
   RETURN jsonb_build_object('new_balance', new_balance);
 END;
@@ -1265,7 +1266,12 @@ BEGIN
     RETURN jsonb_build_object('error', 'stars must be >= 1');
   END IF;
 
-  IF EXISTS (SELECT 1 FROM crypto_processed_txs WHERE tx_hash = p_tx_hash) THEN
+  -- Atomic dedup: INSERT ON CONFLICT eliminates race condition
+  INSERT INTO crypto_processed_txs (tx_hash, chain, crypto_amt, rub_amount, stars, user_id)
+  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars, p_user_id)
+  ON CONFLICT (tx_hash) DO NOTHING;
+
+  IF NOT FOUND THEN
     SELECT balance INTO new_bal FROM users WHERE id = p_user_id;
     RETURN jsonb_build_object('new_balance', new_bal, 'duplicate', true);
   END IF;
@@ -1275,9 +1281,6 @@ BEGIN
 
   INSERT INTO transactions (user_id, type, amount, currency_amount, currency_code)
   VALUES (p_user_id, 'deposit', p_stars, p_rub_amount, 'RUB');
-
-  INSERT INTO crypto_processed_txs (tx_hash, chain, crypto_amt, rub_amount, stars, user_id)
-  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars, p_user_id);
 
   RETURN jsonb_build_object('new_balance', new_bal, 'credited', true);
 END;

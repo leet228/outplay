@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS crypto_processed_txs (
 
 CREATE INDEX IF NOT EXISTS idx_crypto_tx_user ON crypto_processed_txs(user_id, created_at DESC);
 
--- RPC: credit a crypto deposit with dedup by tx_hash
+-- RPC: credit a crypto deposit with ATOMIC dedup by tx_hash
 CREATE OR REPLACE FUNCTION process_crypto_deposit(
   p_user_id      UUID,
   p_stars        INTEGER,
@@ -26,28 +26,31 @@ CREATE OR REPLACE FUNCTION process_crypto_deposit(
 ) RETURNS JSONB AS $$
 DECLARE
   new_bal INTEGER;
+  inserted BOOLEAN;
 BEGIN
   IF p_stars < 1 THEN
     RETURN jsonb_build_object('error', 'stars must be >= 1');
   END IF;
 
-  -- Deduplication by tx_hash
-  IF EXISTS (SELECT 1 FROM crypto_processed_txs WHERE tx_hash = p_tx_hash) THEN
+  -- Atomic dedup: INSERT ON CONFLICT eliminates race condition
+  INSERT INTO crypto_processed_txs (tx_hash, chain, crypto_amt, rub_amount, stars, user_id)
+  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars, p_user_id)
+  ON CONFLICT (tx_hash) DO NOTHING;
+
+  GET DIAGNOSTICS inserted = ROW_COUNT;
+
+  IF NOT inserted THEN
     SELECT balance INTO new_bal FROM users WHERE id = p_user_id;
     RETURN jsonb_build_object('new_balance', new_bal, 'duplicate', true);
   END IF;
 
-  -- Credit balance
+  -- Credit balance (UPDATE ... SET balance = balance + X is atomic per row)
   UPDATE users SET balance = balance + p_stars WHERE id = p_user_id
   RETURNING balance INTO new_bal;
 
   -- Log in transactions
   INSERT INTO transactions (user_id, type, amount, currency_amount, currency_code)
   VALUES (p_user_id, 'deposit', p_stars, p_rub_amount, 'RUB');
-
-  -- Record processed tx
-  INSERT INTO crypto_processed_txs (tx_hash, chain, crypto_amt, rub_amount, stars, user_id)
-  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars, p_user_id);
 
   RETURN jsonb_build_object('new_balance', new_bal, 'credited', true);
 END;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser } from './lib/telegram'
 import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance } from './lib/supabase'
@@ -139,12 +139,16 @@ export default function App() {
   }, [])
 
   // Realtime: listen for new deposits → bounce balance
+  const userIdRef = useRef(null)
   useEffect(() => {
     const uid = useGameStore.getState().user?.id
     if (!uid || uid === 'dev') return
+    // Avoid re-subscribing for the same user
+    if (userIdRef.current === uid) return
+    userIdRef.current = uid
 
     const channel = supabase
-      .channel('my-deposits')
+      .channel(`deposits-${uid}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -161,9 +165,16 @@ export default function App() {
           })
         }
       })
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('Realtime channel error, will retry on next phase change')
+        }
+      })
 
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      userIdRef.current = null
+      supabase.removeChannel(channel)
+    }
   }, [phase])
 
   async function bootstrap() {

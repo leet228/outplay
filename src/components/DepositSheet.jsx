@@ -228,17 +228,23 @@ export default function DepositSheet() {
             setBalance(polled)
           } else {
             // 2. Webhook didn't process in time — client calls process_deposit as backup
-            // Same tx_id → dedup prevents double credit
+            // Same tx_id → atomic dedup prevents double credit
             try {
               const curAmt = toCurrencyRaw(activeAmount, currency.code, rates)
               const result = await processDeposit(userId, activeAmount, invoiceTxRef.current, curAmt, currency.code)
               if (result?.new_balance != null) {
                 setBalance(result.new_balance)
               } else {
-                setBalance(prevBalance + activeAmount)
+                // RPC returned no balance — refetch from DB instead of guessing
+                const fresh = await getUserBalance(userId)
+                setBalance(fresh ?? prevBalance)
               }
             } catch {
-              setBalance(prevBalance + activeAmount)
+              // Network error — refetch real balance, never fake it
+              try {
+                const fresh = await getUserBalance(userId)
+                setBalance(fresh ?? prevBalance)
+              } catch { /* keep prev balance, Realtime will catch up */ }
             }
           }
 
