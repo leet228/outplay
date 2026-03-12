@@ -1277,7 +1277,7 @@ BEGIN
   VALUES (p_user_id, 'deposit', p_stars, p_rub_amount, 'RUB');
 
   INSERT INTO crypto_processed_txs (tx_hash, chain, crypto_amt, rub_amount, stars, user_id)
-  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars);
+  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars, p_user_id);
 
   RETURN jsonb_build_object('new_balance', new_bal, 'credited', true);
 END;

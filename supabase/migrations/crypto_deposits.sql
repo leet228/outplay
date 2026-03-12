@@ -47,7 +47,7 @@ BEGIN
 
   -- Record processed tx
   INSERT INTO crypto_processed_txs (tx_hash, chain, crypto_amt, rub_amount, stars, user_id)
-  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars);
+  VALUES (p_tx_hash, p_chain, p_crypto_amt, p_rub_amount, p_stars, p_user_id);
 
   RETURN jsonb_build_object('new_balance', new_bal, 'credited', true);
 END;
