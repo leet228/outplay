@@ -39,7 +39,7 @@ interface TonTx {
 async function getTonTransactions(): Promise<TonTx[]> {
   try {
     const res = await fetch(
-      `https://toncenter.com/api/v2/getTransactions?address=${TON_ADDRESS}&limit=20`
+      `https://toncenter.com/api/v2/getTransactions?address=${TON_ADDRESS}&limit=100`
     )
     const data = await res.json()
     if (!data.ok) {
