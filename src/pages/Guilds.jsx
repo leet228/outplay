@@ -25,7 +25,7 @@ function guildColor(name) {
 }
 
 /* ── Guild Detail Sheet ── */
-function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, isMember, user, onKick, onEdit, onLeave, onJoin, onDelete }) {
+function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, isMember, hasGuild, user, onKick, onEdit, onLeave, onJoin, onDelete }) {
   const open = !!guild
   const [kickTarget, setKickTarget] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -226,8 +226,8 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
               </>
             )}
 
-            {/* Join button (non-member, not already in a guild) */}
-            {!isMember && !isOwner && (
+            {/* Join button (only if user has no guild at all) */}
+            {!hasGuild && !isMember && !isOwner && (
               <>
                 {canJoin ? (
                   <button className="gd-join" onClick={() => { haptic('medium'); onJoin?.(guild.id) }}>
@@ -602,7 +602,7 @@ function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds
                 </div>
                 {isMyGuild ? (
                   <span className="gf-your-label">{t.guildsYourGuild}</span>
-                ) : isJoinTarget && canJoin ? (
+                ) : !userGuildId && isJoinTarget && canJoin ? (
                   <button
                     className="gf-join-btn"
                     onClick={e => { e.stopPropagation(); handleJoin(g.id) }}
@@ -610,7 +610,7 @@ function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds
                   >
                     {t.guildsJoin}
                   </button>
-                ) : isJoinTarget && !canJoin ? (
+                ) : !userGuildId && isJoinTarget && !canJoin ? (
                   <span className="gf-full-label">{t.guildsFull}</span>
                 ) : (
                   <span className={`guild-pnl ${isPositive ? 'positive' : 'negative'}`}>
@@ -704,6 +704,10 @@ export default function Guilds() {
 
   async function handleJoinFromFind(guildId) {
     if (!user?.id || user.id === 'dev') return
+    if (hasGuild) {
+      showToast(t.guildsAlreadyInGuild)
+      return
+    }
     const result = await joinGuild(user.id, guildId)
     if (result?.error) {
       showToast(result.error)
@@ -969,6 +973,7 @@ export default function Guilds() {
         rates={rates}
         isOwner={isDetailOwner}
         isMember={isDetailMember}
+        hasGuild={hasGuild}
         user={user}
         onKick={handleKickMember}
         onEdit={handleEditGuild}
