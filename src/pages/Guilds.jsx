@@ -25,7 +25,7 @@ function guildColor(name) {
 }
 
 /* ── Guild Detail Sheet ── */
-function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, isMember, hasGuild, user, onKick, onEdit, onLeave, onJoin, onDelete }) {
+function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, isMember, hasGuild, balance, user, onKick, onEdit, onLeave, onJoin, onDelete }) {
   const open = !!guild
   const [kickTarget, setKickTarget] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -37,6 +37,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
   const [deleting, setDeleting] = useState(false)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const [editError, setEditError] = useState('')
   const editFileRef = useRef(null)
 
   useEffect(() => {
@@ -53,6 +54,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
       setDeleting(false)
       setConfirmLeave(false)
       setLeaving(false)
+      setEditError('')
     }
     return () => { document.body.style.overflow = '' }
   }, [open])
@@ -80,8 +82,15 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
 
   async function handleSaveEdit() {
     if (saving || !guild) return
+    if (balance < EDIT_COST) {
+      haptic('light')
+      setEditError(t.guildsNotEnoughBalance)
+      setTimeout(() => setEditError(''), 2500)
+      return
+    }
     haptic('medium')
     setSaving(true)
+    setEditError('')
     await onEdit(editName || null, editDesc || null, editAvatar || null)
     setSaving(false)
     setEditing(false)
@@ -190,6 +199,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
                       <span className="gd-edit-cost-label">{t.guildsEditCost}</span>
                       <span className="gd-edit-cost-amount">{formatCurrency(EDIT_COST, currency, rates)}</span>
                     </div>
+                    {editError && <div className="guilds-sheet-error">{editError}</div>}
                     <button className="gd-edit-save" onClick={handleSaveEdit} disabled={saving}>
                       {t.guildsEditSave}
                     </button>
@@ -974,6 +984,7 @@ export default function Guilds() {
         isOwner={isDetailOwner}
         isMember={isDetailMember}
         hasGuild={hasGuild}
+        balance={balance}
         user={user}
         onKick={handleKickMember}
         onEdit={handleEditGuild}
