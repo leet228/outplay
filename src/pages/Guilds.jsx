@@ -35,6 +35,8 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmLeave, setConfirmLeave] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const editFileRef = useRef(null)
 
   useEffect(() => {
@@ -49,6 +51,8 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
       setEditAvatar(null)
       setConfirmDelete(false)
       setDeleting(false)
+      setConfirmLeave(false)
+      setLeaving(false)
     }
     return () => { document.body.style.overflow = '' }
   }, [open])
@@ -261,12 +265,36 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
 
             {/* Leave button (for members who aren't the creator) */}
             {isMember && !isOwner && (
-              <button
-                className="gd-leave-btn"
-                onClick={() => { haptic('medium'); onLeave() }}
-              >
-                {t.guildsLeave}
-              </button>
+              <>
+                <button
+                  className="gd-leave-btn"
+                  onClick={() => { haptic('light'); setConfirmLeave(true) }}
+                >
+                  {t.guildsLeave}
+                </button>
+
+                {confirmLeave && (
+                  <div className="gd-confirm-overlay" onClick={() => setConfirmLeave(false)}>
+                    <div className="gd-confirm-dialog" onClick={e => e.stopPropagation()}>
+                      <p className="gd-confirm-text">{t.guildsLeaveConfirm}</p>
+                      <div className="gd-confirm-actions">
+                        <button className="gd-confirm-no" onClick={() => setConfirmLeave(false)}>
+                          {t.guildsDeleteNo}
+                        </button>
+                        <button className="gd-confirm-yes" onClick={async () => {
+                          if (leaving) return
+                          haptic('heavy')
+                          setLeaving(true)
+                          await onLeave()
+                          setLeaving(false)
+                        }} disabled={leaving}>
+                          {t.guildsLeaveYes}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Members list */}
