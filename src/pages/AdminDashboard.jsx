@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getAdminStats, adminSearchUser } from '../lib/supabase'
+import { getAdminStats, adminSearchUser, getBotStarsBalance } from '../lib/supabase'
 import { TON_ADDRESS } from '../lib/addresses'
 
 // ── Blockchain fetchers (same as wallet, but lightweight here) ──
@@ -81,10 +81,11 @@ export default function AdminDashboard() {
     async function load() {
       setLoading(true)
       try {
-        const [statsData, tonBal, tonPriceRub] = await Promise.all([
+        const [statsData, tonBal, tonPriceRub, realBotStars] = await Promise.all([
           getAdminStats(),
           fetchTonBalance(TON_ADDRESS),
           fetchTonPriceRub(),
+          getBotStarsBalance(),
         ])
         if (cancelled) return
         setStats(statsData)
@@ -93,7 +94,7 @@ export default function AdminDashboard() {
           const walletRub = tonBal * tonPriceRub
           const depositsTotal = statsData.deposits_total ?? 0
           const cryptoStars = statsData.crypto_deposits_stars ?? 0
-          const botStars = depositsTotal - cryptoStars // actual Telegram Stars bot holds
+          const botStars = realBotStars // real balance from Telegram API
           const userBalances = statsData.total_user_balances ?? 0
           const totalAssetsRub = botStars + walletRub // 1 star ≈ 1 RUB
           const netRevenue = totalAssetsRub - userBalances

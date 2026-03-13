@@ -343,6 +343,16 @@ export async function getAdminServerInfo() {
   return data
 }
 
+export async function getBotStarsBalance() {
+  try {
+    const res = await supabase.functions.invoke('get-bot-stars-balance')
+    return res.data?.balance ?? 0
+  } catch (e) {
+    console.error('getBotStarsBalance error:', e)
+    return 0
+  }
+}
+
 export async function getRecentCryptoDeposits(limit = 10) {
   const { data, error } = await supabase
     .from('crypto_processed_txs')
