@@ -19,11 +19,17 @@ function getRankDisplay(rank) {
 }
 
 // Fill missing days with zeros for chart rendering
-function buildChartData(dailyStats, days = 7) {
+// Shows days from registration date (or max 7 days)
+function buildChartData(dailyStats, createdAt) {
   const statsMap = new Map()
   for (const s of dailyStats) statsMap.set(s.date, s)
-  const result = []
   const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const regDate = createdAt ? new Date(createdAt) : today
+  regDate.setHours(0, 0, 0, 0)
+  const daysSinceReg = Math.floor((today - regDate) / 86400000) + 1 // +1 to include today
+  const days = Math.min(Math.max(daysSinceReg, 1), 7)
+  const result = []
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
@@ -93,7 +99,7 @@ export default function Profile() {
       ? Math.round((user.wins / (user.wins + user.losses)) * 100)
       : 0
 
-  const chartData = buildChartData(dailyStats, 7)
+  const chartData = buildChartData(dailyStats, user?.created_at)
   const startBalance = balance - totalPnl
   const totalPct = startBalance > 0
     ? ((totalPnl / startBalance) * 100).toFixed(1)
