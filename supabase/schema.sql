@@ -401,6 +401,9 @@ BEGIN
   PERFORM update_guild_pnl_after_duel(v_loser, -payout);
 
   RETURN jsonb_build_object('result', 'win', 'winner', v_winner);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:finalize_duel', SQLERRM, jsonb_build_object('duel_id', p_duel_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -443,7 +446,7 @@ LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 DECLARE
   v_guild_id UUID;
-  v_cost     INTEGER := 5000;
+  v_cost     INTEGER := 2000;
   v_balance  INTEGER;
 BEGIN
   SELECT balance INTO v_balance FROM users WHERE id = p_user_id;
@@ -466,6 +469,9 @@ BEGIN
   INSERT INTO transactions (user_id, type, amount, ref_id) VALUES (p_user_id, 'guild_create', -v_cost, v_guild_id);
 
   RETURN jsonb_build_object('guild_id', v_guild_id);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:create_guild', SQLERRM, jsonb_build_object('user_id', p_user_id, 'name', p_name));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -492,6 +498,9 @@ BEGIN
   INSERT INTO guild_members (guild_id, user_id, role) VALUES (p_guild_id, p_user_id, 'member');
 
   RETURN jsonb_build_object('ok', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:join_guild', SQLERRM, jsonb_build_object('user_id', p_user_id, 'guild_id', p_guild_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -510,6 +519,9 @@ BEGIN
   DELETE FROM guild_members WHERE guild_id = p_guild_id AND user_id = p_target_id AND role = 'member';
 
   RETURN jsonb_build_object('ok', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:kick_from_guild', SQLERRM, jsonb_build_object('creator_id', p_creator_id, 'target_id', p_target_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -551,6 +563,9 @@ BEGIN
   INSERT INTO transactions (user_id, type, amount, ref_id) VALUES (p_user_id, 'guild_edit', -v_cost, p_guild_id);
 
   RETURN jsonb_build_object('ok', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:edit_guild', SQLERRM, jsonb_build_object('user_id', p_user_id, 'guild_id', p_guild_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -950,6 +965,9 @@ BEGIN
   END IF;
 
   RETURN jsonb_build_object('ok', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:leave_guild', SQLERRM, jsonb_build_object('user_id', p_user_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -982,6 +1000,9 @@ BEGIN
   DELETE FROM guilds WHERE id = p_guild_id;
 
   RETURN jsonb_build_object('ok', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:delete_guild', SQLERRM, jsonb_build_object('user_id', p_user_id, 'guild_id', p_guild_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -1142,6 +1163,9 @@ BEGIN
   INSERT INTO friend_requests (from_id, to_id) VALUES (p_from_id, p_to_id);
 
   RETURN jsonb_build_object('ok', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:send_friend_request', SQLERRM, jsonb_build_object('from_id', p_from_id, 'to_id', p_to_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -1172,6 +1196,9 @@ BEGIN
   INSERT INTO friends (user_id, friend_id) VALUES (v_from_id, p_user_id) ON CONFLICT DO NOTHING;
 
   RETURN jsonb_build_object('ok', true, 'friend_id', v_from_id);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:accept_friend_request', SQLERRM, jsonb_build_object('user_id', p_user_id, 'request_id', p_request_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -1196,6 +1223,9 @@ BEGIN
   UPDATE friend_requests SET status = 'rejected' WHERE id = p_request_id;
 
   RETURN jsonb_build_object('ok', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:reject_friend_request', SQLERRM, jsonb_build_object('user_id', p_user_id, 'request_id', p_request_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -1219,6 +1249,9 @@ BEGIN
      OR (from_id = p_friend_id AND to_id = p_user_id);
 
   RETURN jsonb_build_object('ok', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:remove_friend', SQLERRM, jsonb_build_object('user_id', p_user_id, 'friend_id', p_friend_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -1263,6 +1296,9 @@ BEGIN
   RETURNING balance INTO new_balance;
 
   RETURN jsonb_build_object('new_balance', new_balance);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:process_deposit', SQLERRM, jsonb_build_object('user_id', p_user_id, 'amount', p_amount, 'tx_id', p_tx_id));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$;
 
@@ -1315,6 +1351,9 @@ BEGIN
   VALUES (p_user_id, 'deposit', p_stars, p_rub_amount, 'RUB');
 
   RETURN jsonb_build_object('new_balance', new_bal, 'credited', true);
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:process_crypto_deposit', SQLERRM, jsonb_build_object('user_id', p_user_id, 'stars', p_stars, 'tx_hash', p_tx_hash));
+  RETURN jsonb_build_object('error', 'internal_error');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -1703,7 +1742,7 @@ $$;
 --  1. increment_balance    — атомарный баланс
 --  2. finalize_duel        — результат дуэли + рефбонус + гильдии
 --  3. update_guild_pnl_after_duel — PnL гильдии/участника
---  4. create_guild         — создание гильдии (-5000)
+--  4. create_guild         — создание гильдии (-2000)
 --  5. join_guild           — вступление
 --  6. kick_from_guild      — исключение
 --  7. edit_guild           — редактирование (-100)

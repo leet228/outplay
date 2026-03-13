@@ -15,7 +15,7 @@ function getTimeLeft(endDate) {
   return { days, hours, minutes }
 }
 
-const CREATE_COST = 5000
+const CREATE_COST = 2000
 const EDIT_COST = 100
 
 const GUILD_COLORS = ['#6366f1', '#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#ec4899', '#a855f7', '#14b8a6']

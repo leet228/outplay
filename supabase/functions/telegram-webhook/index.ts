@@ -10,12 +10,27 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 // Webhook secret token (set via setWebhook API: secret_token param)
 const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') || ''
 
+async function logToAdmin(level: string, message: string, details: Record<string, unknown> = {}) {
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    await supabase.rpc('admin_log', {
+      p_level: level,
+      p_source: 'edge:telegram-webhook',
+      p_message: message,
+      p_details: details,
+    })
+  } catch (e) {
+    console.error('Failed to write admin log:', e)
+  }
+}
+
 serve(async (req) => {
   // ── Security: verify Telegram signature ──
   if (WEBHOOK_SECRET) {
     const signature = req.headers.get('x-telegram-bot-api-secret-token')
     if (signature !== WEBHOOK_SECRET) {
       console.warn('Invalid webhook signature, rejecting')
+      await logToAdmin('warn', 'Invalid webhook signature rejected')
       return new Response('unauthorized', { status: 401 })
     }
   }
@@ -33,7 +48,11 @@ serve(async (req) => {
           ok: true,
         }),
       })
-      console.log('answerPreCheckoutQuery:', (await res.json()).ok)
+      const result = await res.json()
+      console.log('answerPreCheckoutQuery:', result.ok)
+      if (!result.ok) {
+        await logToAdmin('error', 'answerPreCheckoutQuery failed', { result })
+      }
       return new Response('ok')
     }
 
@@ -65,14 +84,20 @@ serve(async (req) => {
 
           if (error) {
             console.error('process_deposit RPC error:', error.message, { user_id, amount, tx_id })
+            await logToAdmin('error', 'process_deposit RPC failed: ' + error.message, { user_id, amount, tx_id })
           } else {
             console.log('process_deposit OK:', JSON.stringify(data))
+            if (data?.duplicate) {
+              await logToAdmin('warn', 'Duplicate deposit detected', { user_id, amount, tx_id })
+            }
           }
         } else {
           console.warn('Missing required payload fields:', { user_id, amount, tx_id })
+          await logToAdmin('warn', 'Missing payload fields in successful_payment', { user_id, amount, tx_id, raw_payload: payment.invoice_payload })
         }
       } catch (e) {
         console.error('Webhook deposit error:', e)
+        await logToAdmin('error', 'Webhook deposit processing error: ' + (e as Error).message, { payment_payload: payment.invoice_payload })
       }
 
       return new Response('ok')
@@ -81,6 +106,7 @@ serve(async (req) => {
     return new Response('ok')
   } catch (err) {
     console.error('Webhook error:', err)
+    await logToAdmin('error', 'Unhandled webhook exception: ' + (err as Error).message, { stack: (err as Error).stack })
     return new Response('ok')
   }
 })

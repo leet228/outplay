@@ -10,6 +10,26 @@ const TON_ADDRESS = 'UQBMTQ2VRSwRbvthtGTIB7Tip37yqueFw8SnVvWB7y18F47t'
 // Minimum deposit in RUB (1 star = 1 RUB)
 const MIN_RUB = 200
 
+let supabase: ReturnType<typeof createClient>
+
+function getSupabase() {
+  if (!supabase) supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  return supabase
+}
+
+async function logToAdmin(level: string, message: string, details: Record<string, unknown> = {}) {
+  try {
+    await getSupabase().rpc('admin_log', {
+      p_level: level,
+      p_source: 'edge:check-crypto-deposits',
+      p_message: message,
+      p_details: details,
+    })
+  } catch (e) {
+    console.error('Failed to write admin log:', e)
+  }
+}
+
 // ── Fetch with retry ──
 
 async function fetchWithRetry(url: string, retries = 3, delayMs = 500): Promise<Response> {
@@ -36,17 +56,20 @@ async function getTonPrice(): Promise<number> {
     )
     if (!res.ok) {
       console.error(`CoinGecko HTTP ${res.status}`)
+      await logToAdmin('warn', `CoinGecko HTTP ${res.status}`)
       return 0
     }
     const data = await res.json()
     const price = data['the-open-network']?.rub
     if (typeof price !== 'number' || price <= 0) {
       console.error('CoinGecko returned invalid price:', price)
+      await logToAdmin('warn', 'CoinGecko invalid price', { price })
       return 0
     }
     return price
   } catch (e) {
     console.error('CoinGecko error:', e)
+    await logToAdmin('error', 'CoinGecko fetch failed: ' + (e as Error).message)
     return 0
   }
 }
@@ -69,16 +92,19 @@ async function getTonTransactions(): Promise<TonTx[]> {
     )
     if (!res.ok) {
       console.error(`TonCenter HTTP ${res.status}`)
+      await logToAdmin('warn', `TonCenter HTTP ${res.status}`)
       return []
     }
     const data = await res.json()
     if (!data.ok) {
       console.error('TonCenter API error:', data.error)
+      await logToAdmin('error', 'TonCenter API error: ' + (data.error || 'unknown'))
       return []
     }
     return data.result ?? []
   } catch (e) {
     console.error('TonCenter fetch error:', e)
+    await logToAdmin('error', 'TonCenter fetch failed: ' + (e as Error).message)
     return []
   }
 }
@@ -114,7 +140,7 @@ serve(async (_req) => {
   const startTime = Date.now()
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    const sb = getSupabase()
 
     // 1. Get TON price in RUB
     const tonPriceRub = await getTonPrice()
@@ -168,7 +194,7 @@ serve(async (_req) => {
       }
 
       // Find user by telegram_id
-      const { data: user, error: userErr } = await supabase
+      const { data: user, error: userErr } = await sb
         .from('users')
         .select('id')
         .eq('telegram_id', telegramId)
@@ -182,7 +208,7 @@ serve(async (_req) => {
 
       // Credit deposit (atomic dedup inside RPC)
       const stars = Math.round(rubAmount)
-      const { data: result, error } = await supabase.rpc('process_crypto_deposit', {
+      const { data: result, error } = await sb.rpc('process_crypto_deposit', {
         p_user_id: user.id,
         p_stars: stars,
         p_tx_hash: txHash,
@@ -193,6 +219,7 @@ serve(async (_req) => {
 
       if (error) {
         console.error(`RPC error tx ${txHash.slice(0, 16)}:`, error.message)
+        await logToAdmin('error', 'process_crypto_deposit failed: ' + error.message, { tx_hash: txHash, user_id: user.id, stars })
         errors++
       } else if (result?.duplicate) {
         // Already processed — silent skip
@@ -206,11 +233,17 @@ serve(async (_req) => {
     const summary = { credited, skipped, errors, total: txs.length, ton_price_rub: tonPriceRub, elapsed_ms: elapsed }
     console.log('Summary:', JSON.stringify(summary))
 
+    // Log errors summary if any occurred
+    if (errors > 0) {
+      await logToAdmin('warn', `Crypto deposit run completed with ${errors} errors`, summary)
+    }
+
     return new Response(JSON.stringify(summary), {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (err) {
     console.error('Worker error:', err)
+    await logToAdmin('error', 'Unhandled exception: ' + (err as Error).message, { stack: (err as Error).stack })
     return new Response(JSON.stringify({ error: 'internal_error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
