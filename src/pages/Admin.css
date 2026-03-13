@@ -1011,3 +1011,336 @@
   font-size: 13px;
   padding: 20px 0;
 }
+
+/* ══════════════════════════════════════════
+   Server Info Sections
+   ══════════════════════════════════════════ */
+
+/* PostgreSQL version mono text */
+.admin-info-mono {
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin-top: 8px;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+/* ── DB Stats Grid ── */
+.admin-db-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.admin-db-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-db-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.admin-db-count {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-db-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Chevron for expandable sections ── */
+.admin-chevron {
+  transition: transform 0.25s ease;
+  color: var(--text-muted);
+}
+
+.admin-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* ── Error Log ── */
+.admin-error-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #ef4444;
+  padding: 2px 7px;
+  border-radius: 8px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.admin-warn-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #000;
+  background: #eab308;
+  padding: 2px 7px;
+  border-radius: 8px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.admin-log-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-log-empty-icon {
+  font-size: 20px;
+}
+
+.admin-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-log-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--border);
+}
+
+.admin-log-item--error { border-left-color: #ef4444; }
+.admin-log-item--warn  { border-left-color: #eab308; }
+.admin-log-item--info  { border-left-color: #3b82f6; }
+
+.admin-log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.admin-log-level {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.admin-log-source {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.admin-log-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.admin-log-message {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.admin-log-details {
+  font-size: 10px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-muted);
+  opacity: 0.6;
+  margin-top: 4px;
+  word-break: break-all;
+  max-height: 60px;
+  overflow: hidden;
+}
+
+.admin-log-more {
+  width: 100%;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+
+.admin-log-more:active {
+  background: var(--border);
+}
+
+/* ── Edge Functions ── */
+.admin-edge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-edge-row:last-child {
+  border-bottom: none;
+}
+
+.admin-edge-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-edge-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.admin-edge-name {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-edge-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.admin-edge-calls {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-edge-last {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── RPC Functions ── */
+.admin-rpc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 4px;
+}
+
+.admin-rpc-name {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--text);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  margin-right: 10px;
+}
+
+.admin-rpc-stats {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.admin-rpc-calls {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-rpc-avg {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  min-width: 50px;
+  text-align: right;
+}
+
+/* ── Version badge ── */
+.admin-version-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-dim, rgba(59, 130, 246, 0.12));
+  padding: 3px 10px;
+  border-radius: 8px;
+}
+
+/* ── Refresh all button ── */
+.admin-refresh-all {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s, border-color 0.15s;
+  margin-top: 8px;
+}
+
+.admin-refresh-all:active {
+  transform: scale(0.97);
+  border-color: var(--text-muted);
+}
+
+.admin-refresh-all:disabled {
+  opacity: 0.5;
+}
+
+.admin-refresh-all .spinning {
+  animation: admin-spin 0.8s linear infinite;
+}

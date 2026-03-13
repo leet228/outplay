@@ -320,6 +320,12 @@ export async function adminSearchUser(query) {
   return data
 }
 
+export async function getAdminServerInfo() {
+  const { data, error } = await supabase.rpc('get_admin_server_info')
+  if (error) { console.error('getAdminServerInfo error:', error); return null }
+  return data
+}
+
 export async function getRecentCryptoDeposits(limit = 10) {
   const { data, error } = await supabase
     .from('crypto_processed_txs')

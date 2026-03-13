@@ -1527,6 +1527,158 @@ END;
 $$;
 
 -- =============================================
+-- ╔═══════════════════════════════════════════╗
+-- ║  ADMIN LOGS (error/event tracking)        ║
+-- ╚═══════════════════════════════════════════╝
+
+CREATE TABLE IF NOT EXISTS admin_logs (
+  id          BIGSERIAL PRIMARY KEY,
+  level       TEXT NOT NULL DEFAULT 'error',   -- error | warn | info
+  source      TEXT NOT NULL,                    -- rpc:function_name | edge:function_name | client
+  message     TEXT NOT NULL,
+  details     JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_logs_created ON admin_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_logs_level ON admin_logs(level);
+
+-- Auto-cleanup: keep only last 1000 logs
+CREATE OR REPLACE FUNCTION cleanup_admin_logs()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  DELETE FROM admin_logs
+  WHERE id NOT IN (
+    SELECT id FROM admin_logs ORDER BY created_at DESC LIMIT 1000
+  );
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_cleanup_admin_logs ON admin_logs;
+CREATE TRIGGER trg_cleanup_admin_logs
+  AFTER INSERT ON admin_logs
+  FOR EACH STATEMENT
+  WHEN (pg_trigger_depth() = 0)
+  EXECUTE FUNCTION cleanup_admin_logs();
+
+-- Helper to write a log entry from any RPC/Edge function
+CREATE OR REPLACE FUNCTION admin_log(p_level TEXT, p_source TEXT, p_message TEXT, p_details JSONB DEFAULT '{}')
+RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  INSERT INTO admin_logs (level, source, message, details) VALUES (p_level, p_source, p_message, p_details);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  GET ADMIN SERVER INFO                    ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS get_admin_server_info();
+
+CREATE OR REPLACE FUNCTION get_admin_server_info()
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_db_stats JSONB;
+  v_table_counts JSONB;
+  v_recent_logs JSONB;
+  v_rpc_stats JSONB;
+  v_edge_stats JSONB;
+  v_pg_version TEXT;
+  v_db_size TEXT;
+  v_uptime INTERVAL;
+BEGIN
+  -- PostgreSQL version
+  SELECT version() INTO v_pg_version;
+
+  -- DB size
+  SELECT pg_size_pretty(pg_database_size(current_database())) INTO v_db_size;
+
+  -- Server uptime
+  SELECT NOW() - pg_postmaster_start_time() INTO v_uptime;
+
+  -- Table row counts (approximate for speed)
+  SELECT jsonb_build_object(
+    'users',              (SELECT COUNT(*) FROM users),
+    'duels',              (SELECT COUNT(*) FROM duels),
+    'questions',          (SELECT COUNT(*) FROM questions),
+    'guilds',             (SELECT COUNT(*) FROM guilds),
+    'guild_members',      (SELECT COUNT(*) FROM guild_members),
+    'transactions',       (SELECT COUNT(*) FROM transactions),
+    'friends',            (SELECT COUNT(*) FROM friends),
+    'friend_requests',    (SELECT COUNT(*) FROM friend_requests),
+    'referrals',          (SELECT COUNT(*) FROM referrals),
+    'subscriptions',      (SELECT COUNT(*) FROM subscriptions),
+    'crypto_processed_txs', (SELECT COUNT(*) FROM crypto_processed_txs)
+  ) INTO v_table_counts;
+
+  -- Recent logs (last 30)
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'id',         l.id,
+      'level',      l.level,
+      'source',     l.source,
+      'message',    l.message,
+      'details',    l.details,
+      'created_at', l.created_at
+    ) ORDER BY l.created_at DESC
+  ), '[]'::JSONB) INTO v_recent_logs
+  FROM (SELECT * FROM admin_logs ORDER BY created_at DESC LIMIT 30) l;
+
+  -- RPC function stats from pg_stat_user_functions
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object(
+      'name',       f.funcname,
+      'calls',      f.calls,
+      'total_ms',   ROUND(EXTRACT(EPOCH FROM f.total_time) * 1000),
+      'avg_ms',     CASE WHEN f.calls > 0 THEN ROUND(EXTRACT(EPOCH FROM f.total_time) * 1000 / f.calls) ELSE 0 END
+    ) ORDER BY f.calls DESC
+  ), '[]'::JSONB) INTO v_rpc_stats
+  FROM pg_stat_user_functions f
+  WHERE f.schemaname = 'public';
+
+  -- Edge function stats (derived from data)
+  SELECT jsonb_build_object(
+    'create_stars_invoice', jsonb_build_object(
+      'last_call', (SELECT MAX(created_at) FROM transactions WHERE type = 'deposit'),
+      'calls_today', (SELECT COUNT(*) FROM transactions WHERE type = 'deposit' AND created_at >= CURRENT_DATE)
+    ),
+    'check_crypto_deposits', jsonb_build_object(
+      'last_call', (SELECT MAX(created_at) FROM crypto_processed_txs),
+      'calls_today', (SELECT COUNT(*) FROM crypto_processed_txs WHERE created_at >= CURRENT_DATE)
+    ),
+    'telegram_webhook', jsonb_build_object(
+      'last_call', (SELECT MAX(created_at) FROM users),
+      'calls_today', (SELECT COUNT(*) FROM users WHERE last_seen >= CURRENT_DATE)
+    )
+  ) INTO v_edge_stats;
+
+  -- DB connection stats
+  SELECT jsonb_build_object(
+    'active_connections', (SELECT COUNT(*) FROM pg_stat_activity WHERE state = 'active'),
+    'idle_connections',   (SELECT COUNT(*) FROM pg_stat_activity WHERE state = 'idle'),
+    'total_connections',  (SELECT COUNT(*) FROM pg_stat_activity)
+  ) INTO v_db_stats;
+
+  RETURN jsonb_build_object(
+    'pg_version',     v_pg_version,
+    'db_size',        v_db_size,
+    'uptime_seconds', EXTRACT(EPOCH FROM v_uptime)::BIGINT,
+    'db_stats',       v_db_stats,
+    'table_counts',   v_table_counts,
+    'recent_logs',    v_recent_logs,
+    'rpc_stats',      v_rpc_stats,
+    'edge_stats',     v_edge_stats
+  );
+END;
+$$;
+
 -- ИТОГО 19 таблиц (+ app_settings):
 --  1. users              — профили, балансы, настройки
 --  2. questions           — вопросы по категориям
