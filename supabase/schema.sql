@@ -1636,8 +1636,8 @@ BEGIN
     jsonb_build_object(
       'name',       f.funcname,
       'calls',      f.calls,
-      'total_ms',   ROUND(EXTRACT(EPOCH FROM f.total_time) * 1000),
-      'avg_ms',     CASE WHEN f.calls > 0 THEN ROUND(EXTRACT(EPOCH FROM f.total_time) * 1000 / f.calls) ELSE 0 END
+      'total_ms',   ROUND(f.total_time::NUMERIC),
+      'avg_ms',     CASE WHEN f.calls > 0 THEN ROUND((f.total_time / f.calls)::NUMERIC) ELSE 0 END
     ) ORDER BY f.calls DESC
   ), '[]'::JSONB) INTO v_rpc_stats
   FROM pg_stat_user_functions f
