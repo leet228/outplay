@@ -326,9 +326,13 @@ function ReferralSection({ t, currency, rates, user }) {
                 const color = avatarColor(r.first_name)
                 return (
                   <div key={r.id} className="ref-row">
-                    <div className="ref-avatar" style={{ background: `${color}22`, color }}>
-                      {r.first_name[0]}
-                    </div>
+                    {r.avatar_url ? (
+                      <img className="ref-avatar-img" src={r.avatar_url} alt="" />
+                    ) : (
+                      <div className="ref-avatar" style={{ background: `${color}22`, color }}>
+                        {r.first_name[0]}
+                      </div>
+                    )}
                     <div className="ref-info">
                       <span className="ref-name">{r.first_name}</span>
                       <span className="ref-username">@{r.username}</span>

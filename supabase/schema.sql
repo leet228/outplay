@@ -785,6 +785,7 @@ BEGIN
       'id',           sub.uid,
       'first_name',   sub.first_name,
       'username',     sub.username,
+      'avatar_url',   sub.avatar_url,
       'earned_day',   sub.earned_day,
       'earned_week',  sub.earned_week,
       'earned_month', sub.earned_month,
@@ -797,6 +798,7 @@ BEGIN
       u.id        AS uid,
       u.first_name,
       u.username,
+      u.avatar_url,
       COALESCE(SUM(CASE WHEN re.created_at >= CURRENT_DATE THEN re.amount ELSE 0 END), 0)                    AS earned_day,
       COALESCE(SUM(CASE WHEN re.created_at >= CURRENT_DATE - INTERVAL '7 days' THEN re.amount ELSE 0 END), 0) AS earned_week,
       COALESCE(SUM(CASE WHEN re.created_at >= CURRENT_DATE - INTERVAL '30 days' THEN re.amount ELSE 0 END), 0) AS earned_month,
@@ -806,7 +808,7 @@ BEGIN
     LEFT JOIN referral_earnings re
       ON re.from_user_id = r.referred_user_id AND re.referrer_id = p_user_id
     WHERE r.referrer_id = p_user_id
-    GROUP BY u.id, u.first_name, u.username
+    GROUP BY u.id, u.first_name, u.username, u.avatar_url
     ORDER BY earned_all DESC
     LIMIT p_limit OFFSET p_offset
   ) sub;

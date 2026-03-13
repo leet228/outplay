@@ -673,6 +673,14 @@
   flex-shrink: 0;
 }
 
+.ref-avatar-img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .ref-info {
   display: flex;
   flex-direction: column;
