@@ -11,7 +11,7 @@ export async function getOrCreateUser(telegramUser, referrerId = null) {
     .from('users')
     .select('*')
     .eq('telegram_id', telegramUser.id)
-    .single()
+    .maybeSingle()
 
   if (existing) {
     // Синхронизируем профиль — имя/username/аватар могли смениться

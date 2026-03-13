@@ -7,6 +7,8 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
+const MINI_APP_URL = Deno.env.get('MINI_APP_URL') || 'https://t.me/outplaymoneybot/app'
+
 // Webhook secret token (set via setWebhook API: secret_token param)
 const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') || ''
 
@@ -99,6 +101,37 @@ serve(async (req) => {
         console.error('Webhook deposit error:', e)
         await logToAdmin('error', 'Webhook deposit processing error: ' + (e as Error).message, { payment_payload: payment.invoice_payload })
       }
+
+      return new Response('ok')
+    }
+
+    // ── /start command → open Mini App (with referral param if present) ──
+    if (update.message?.text?.startsWith('/start')) {
+      const chatId = update.message.chat.id
+      const parts = update.message.text.split(' ')
+      const startParam = parts[1] || '' // e.g. "ref_UUID"
+
+      const appUrl = startParam
+        ? `${MINI_APP_URL}?startapp=${startParam}`
+        : MINI_APP_URL
+
+      const text = startParam.startsWith('ref_')
+        ? '🎁 Тебя пригласил друг! Открой приложение и получи бонус 100 ⭐'
+        : '🎮 Добро пожаловать в Outplay! Играй, побеждай, зарабатывай.'
+
+      await fetch(`${TELEGRAM_API}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          reply_markup: {
+            inline_keyboard: [[
+              { text: '🚀 Открыть Outplay', url: appUrl }
+            ]]
+          }
+        }),
+      })
 
       return new Response('ok')
     }

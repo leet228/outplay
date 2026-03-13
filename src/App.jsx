@@ -190,6 +190,40 @@ export default function App() {
     const store = useGameStore.getState()
 
     if (!tgUser) {
+      // ── Try cached user from localStorage ──
+      const cached = localStorage.getItem('outplay_user')
+      if (cached) {
+        try {
+          const cachedUser = JSON.parse(cached)
+          if (cachedUser?.telegram_id) {
+            const user = await getOrCreateUser({ id: cachedUser.telegram_id, first_name: cachedUser.first_name, username: cachedUser.username })
+            if (user && user.id !== 'dev') {
+              setUser(user)
+              setBalance(user.balance ?? 0)
+              localStorage.setItem('outplay_user', JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, username: user.username }))
+              // Continue with real user bootstrap below
+              const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] = await Promise.all([
+                getUserProfile(user.id), getPlans(), getLeaderboard(50), getGuildData(user.id),
+                getRecentOpponents(user.id), getFriendsData(user.id), fetchRates(), getAppSettings(),
+              ])
+              store.setRank(profile?.rank ?? 0)
+              store.setTotalPnl(profile?.total_pnl ?? 0)
+              store.setDailyStats(profile?.daily_stats ?? [])
+              store.setRefEarnings(profile?.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
+              store.setPlans(plans ?? [])
+              store.setLeaderboard(leaderboard ?? [])
+              if (guildData?.guild) { store.setGuild(guildData.guild); store.setGuildMembers(guildData.members ?? []) }
+              store.setTopGuilds(guildData?.top ?? [])
+              store.setGuildSeason(guildData?.season ?? null)
+              store.setRecentOpponents(opponents ?? [])
+              if (friendsData) { store.setFriends(friendsData.friends ?? []); store.setFriendRequests(friendsData.requests ?? []); store.setSentRequestIds(friendsData.sent_ids ?? []) }
+              store.setRates(rates ?? {})
+              store.setAppSettings(settings ?? {})
+              return
+            }
+          }
+        } catch (e) { console.warn('Cached user parse error:', e) }
+      }
       // ── Dev fallback ──
       setUser({ id: 'dev', first_name: 'Dev', username: 'dev', wins: 3, losses: 1 })
       setBalance(500)
@@ -277,6 +311,9 @@ export default function App() {
     const user = await getOrCreateUser(tgUser, referrerId)
     setUser(user)
     setBalance(user.balance ?? 0)
+    // Cache user for fallback if Telegram SDK fails on next load
+    try { localStorage.setItem('outplay_user', JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, username: user.username })) } catch {}
+
 
     // 8 parallel fetches — all data for the entire app
     const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] = await Promise.all([
