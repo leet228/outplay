@@ -14,6 +14,10 @@ export function getTelegramUser() {
   return tg?.initDataUnsafe?.user ?? null
 }
 
+export function getStartParam() {
+  return tg?.initDataUnsafe?.start_param ?? null
+}
+
 export function haptic(style = 'light') {
   tg?.HapticFeedback?.impactOccurred(style)
 }

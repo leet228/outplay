@@ -569,6 +569,66 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
+-- ── Регистрация нового юзера по реферальной ссылке (атомарно) ──
+CREATE OR REPLACE FUNCTION register_with_referral(
+  p_telegram_id BIGINT,
+  p_username    TEXT,
+  p_first_name  TEXT,
+  p_avatar_url  TEXT,
+  p_referrer_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_existing  JSONB;
+  v_user_id   UUID;
+  v_user_row  JSONB;
+  v_ref_valid BOOLEAN := false;
+  v_bonus     INTEGER := 100;
+BEGIN
+  -- 1. Если юзер уже существует — вернуть его (реферал не применяется)
+  SELECT to_jsonb(u.*) INTO v_existing FROM users u WHERE u.telegram_id = p_telegram_id;
+  IF v_existing IS NOT NULL THEN
+    RETURN jsonb_build_object('status', 'existing', 'user', v_existing);
+  END IF;
+
+  -- 2. Проверить реферера
+  IF p_referrer_id IS NOT NULL THEN
+    SELECT EXISTS(SELECT 1 FROM users WHERE id = p_referrer_id) INTO v_ref_valid;
+  END IF;
+
+  -- 3. Создать юзера
+  IF v_ref_valid THEN
+    INSERT INTO users (telegram_id, username, first_name, avatar_url, balance, referred_by)
+    VALUES (p_telegram_id, p_username, p_first_name, p_avatar_url, v_bonus, p_referrer_id)
+    RETURNING id INTO v_user_id;
+
+    -- 4. Записать реферала
+    INSERT INTO referrals (referrer_id, referred_user_id) VALUES (p_referrer_id, v_user_id);
+
+    -- 5. Транзакция бонуса
+    INSERT INTO transactions (user_id, type, amount)
+    VALUES (v_user_id, 'referral_bonus', v_bonus);
+
+    SELECT to_jsonb(u.*) INTO v_user_row FROM users u WHERE u.id = v_user_id;
+    RETURN jsonb_build_object('status', 'new_with_referral', 'user', v_user_row, 'bonus', v_bonus);
+  ELSE
+    -- Реферер невалиден — создать без бонуса
+    INSERT INTO users (telegram_id, username, first_name, avatar_url, balance)
+    VALUES (p_telegram_id, p_username, p_first_name, p_avatar_url, 0)
+    RETURNING id INTO v_user_id;
+
+    SELECT to_jsonb(u.*) INTO v_user_row FROM users u WHERE u.id = v_user_id;
+    RETURN jsonb_build_object('status', 'new_no_referrer', 'user', v_user_row);
+  END IF;
+
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:register_with_referral', SQLERRM, jsonb_build_object('telegram_id', p_telegram_id, 'referrer_id', p_referrer_id));
+  RETURN jsonb_build_object('error', 'internal_error');
+END;
+$$;
+
 -- Статистика рефералов по периодам
 CREATE OR REPLACE FUNCTION get_referral_stats(p_user_id UUID)
 RETURNS JSONB
@@ -742,9 +802,9 @@ BEGIN
       COALESCE(SUM(CASE WHEN re.created_at >= CURRENT_DATE - INTERVAL '30 days' THEN re.amount ELSE 0 END), 0) AS earned_month,
       COALESCE(SUM(re.amount), 0)                                                                              AS earned_all
     FROM referrals r
-    JOIN users u ON u.id = r.referred_id
+    JOIN users u ON u.id = r.referred_user_id
     LEFT JOIN referral_earnings re
-      ON re.from_user_id = r.referred_id AND re.referrer_id = p_user_id
+      ON re.from_user_id = r.referred_user_id AND re.referrer_id = p_user_id
     WHERE r.referrer_id = p_user_id
     GROUP BY u.id, u.first_name, u.username
     ORDER BY earned_all DESC

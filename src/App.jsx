@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { initTelegram, getTelegramUser } from './lib/telegram'
+import { initTelegram, getTelegramUser, getStartParam } from './lib/telegram'
 import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings } from './lib/supabase'
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
@@ -269,7 +269,12 @@ export default function App() {
     }
 
     // ── Real user ──
-    const user = await getOrCreateUser(tgUser)
+    const startParam = getStartParam()
+    let referrerId = null
+    if (startParam && startParam.startsWith('ref_')) {
+      referrerId = startParam.slice(4)
+    }
+    const user = await getOrCreateUser(tgUser, referrerId)
     setUser(user)
     setBalance(user.balance ?? 0)
 

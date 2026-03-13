@@ -182,8 +182,8 @@ function ReferralSection({ t, currency, rates, user }) {
       .finally(() => setReferralsLoading(false))
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refLink = `https://t.me/outplay_bot?start=ref_${user?.id ?? 'dev'}`
-  const shortLink = `t.me/outplay_bot?start=ref_${user?.id ?? 'dev'}`
+  const refLink = `https://t.me/outplaymoneybot?start=ref_${user?.id ?? 'dev'}`
+  const shortLink = `t.me/outplaymoneybot?start=ref_${user?.id ?? 'dev'}`
 
   function handleCopyLink() {
     haptic('light')

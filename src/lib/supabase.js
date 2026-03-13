@@ -6,7 +6,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Users
-export async function getOrCreateUser(telegramUser) {
+export async function getOrCreateUser(telegramUser, referrerId = null) {
   const { data: existing } = await supabase
     .from('users')
     .select('*')
@@ -29,7 +29,24 @@ export async function getOrCreateUser(telegramUser) {
     return updated
   }
 
-  // Новый пользователь
+  // Новый пользователь с реферальной ссылкой — атомарная регистрация
+  if (referrerId) {
+    try {
+      const { data, error } = await supabase.rpc('register_with_referral', {
+        p_telegram_id: telegramUser.id,
+        p_username: telegramUser.username ?? null,
+        p_first_name: telegramUser.first_name,
+        p_avatar_url: telegramUser.photo_url ?? null,
+        p_referrer_id: referrerId,
+      })
+      if (!error && data?.user) return data.user
+      console.error('register_with_referral error:', error)
+    } catch (e) {
+      console.error('register_with_referral exception:', e)
+    }
+  }
+
+  // Новый пользователь без реферала (или fallback)
   const { data: newUser } = await supabase
     .from('users')
     .insert({
