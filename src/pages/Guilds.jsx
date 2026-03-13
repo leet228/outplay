@@ -3,7 +3,7 @@ import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { haptic } from '../lib/telegram'
 import { formatCurrency } from '../lib/currency'
-import { createGuild, joinGuild, kickFromGuild, editGuild, leaveGuild, searchGuilds as searchGuildsApi, getGuildData } from '../lib/supabase'
+import { createGuild, joinGuild, kickFromGuild, editGuild, leaveGuild, deleteGuild, searchGuilds as searchGuildsApi, getGuildData } from '../lib/supabase'
 import './Guilds.css'
 
 function getTimeLeft(endDate) {
@@ -25,7 +25,7 @@ function guildColor(name) {
 }
 
 /* ── Guild Detail Sheet ── */
-function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, isMember, user, onKick, onEdit, onLeave, onJoin }) {
+function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, isMember, user, onKick, onEdit, onLeave, onJoin, onDelete }) {
   const open = !!guild
   const [kickTarget, setKickTarget] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -33,6 +33,8 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
   const [editDesc, setEditDesc] = useState('')
   const [editAvatar, setEditAvatar] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const editFileRef = useRef(null)
 
   useEffect(() => {
@@ -45,6 +47,8 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
       setEditName('')
       setEditDesc('')
       setEditAvatar(null)
+      setConfirmDelete(false)
+      setDeleting(false)
     }
     return () => { document.body.style.overflow = '' }
   }, [open])
@@ -85,6 +89,14 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
     setKickTarget(null)
   }
 
+  async function handleDelete() {
+    if (deleting) return
+    haptic('heavy')
+    setDeleting(true)
+    await onDelete?.()
+    setDeleting(false)
+  }
+
   const color = guild ? guildColor(guild.name) : '#888'
   const canJoin = guild && (guild.member_count ?? 0) < 50
   const tag = guild?.tag || (guild?.name ? guild.name.substring(0, 2).toUpperCase() : '??')
@@ -99,9 +111,13 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
           <>
             {/* Guild header */}
             <div className="gd-header">
-              <div className="gd-avatar" style={{ background: `${color}22`, color }}>
-                {tag[0]}
-              </div>
+              {guild.avatar_url ? (
+                <img src={guild.avatar_url} alt="" className="gd-avatar-img" />
+              ) : (
+                <div className="gd-avatar" style={{ background: `${color}22`, color }}>
+                  {tag[0]}
+                </div>
+              )}
               <div className="gd-header-info">
                 <span className="gd-name">{guild.name}</span>
                 <span className="gd-meta">{guild.member_count ?? members.length}/50</span>
@@ -178,6 +194,34 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
               </>
             )}
 
+            {/* Delete button (owner only) */}
+            {isOwner && !editing && (
+              <>
+                <button
+                  className="gd-delete-btn"
+                  onClick={() => { haptic('light'); setConfirmDelete(true) }}
+                >
+                  {t.guildsDelete}
+                </button>
+
+                {confirmDelete && (
+                  <div className="gd-confirm-overlay" onClick={() => setConfirmDelete(false)}>
+                    <div className="gd-confirm-dialog" onClick={e => e.stopPropagation()}>
+                      <p className="gd-confirm-text">{t.guildsDeleteConfirm}</p>
+                      <div className="gd-confirm-actions">
+                        <button className="gd-confirm-no" onClick={() => setConfirmDelete(false)}>
+                          {t.guildsDeleteNo}
+                        </button>
+                        <button className="gd-confirm-yes" onClick={handleDelete} disabled={deleting}>
+                          {t.guildsDeleteYes}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Join button (non-member, not already in a guild) */}
             {!isMember && !isOwner && (
               <>
@@ -200,9 +244,17 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
                 {t.guildsCreator}
               </span>
               <div className="gd-creator-row">
-                <div className="gd-creator-avatar" style={{ background: `${color}22`, color }}>
-                  {(guild.creator_name || '?')[0]}
-                </div>
+                {(() => {
+                  const creator = members.find(m => m.role === 'creator')
+                  const creatorAvatar = creator?.avatar_url
+                  return creatorAvatar ? (
+                    <img src={creatorAvatar} alt="" className="gd-creator-avatar-img" />
+                  ) : (
+                    <div className="gd-creator-avatar" style={{ background: `${color}22`, color }}>
+                      {(guild.creator_name || '?')[0]}
+                    </div>
+                  )
+                })()}
                 <span className="gd-creator-name">{guild.creator_name || '—'}</span>
               </div>
             </div>
@@ -239,9 +291,13 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
                     }}
                   >
                     <span className="gd-member-rank">{i + 1}</span>
-                    <div className="gd-member-avatar" style={{ background: `${mc}22`, color: mc }}>
-                      {(m.first_name || '?')[0]}
-                    </div>
+                    {m.avatar_url ? (
+                      <img src={m.avatar_url} alt="" className="gd-member-avatar-img" />
+                    ) : (
+                      <div className="gd-member-avatar" style={{ background: `${mc}22`, color: mc }}>
+                        {(m.first_name || '?')[0]}
+                      </div>
+                    )}
                     <div className="gd-member-info">
                       <span className="gd-member-name">{m.first_name}</span>
                       {isOwner && <span className="gd-member-username">@{m.username}</span>}
@@ -404,7 +460,7 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
 }
 
 /* ── Find Guild Sheet ── */
-function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds }) {
+function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds, userGuildId }) {
   const [query, setQuery] = useState('')
   const [joinTarget, setJoinTarget] = useState(null)
   const [results, setResults] = useState([])
@@ -496,6 +552,7 @@ function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds
             const isPositive = (g.pnl ?? 0) >= 0
             const isJoinTarget = joinTarget === g.id
             const canJoin = (g.member_count ?? 0) < (g.max_members ?? 50)
+            const isMyGuild = userGuildId && g.id === userGuildId
             const tag = g.tag || (g.name ? g.name.substring(0, 2).toUpperCase() : '??')
             return (
               <div
@@ -504,14 +561,20 @@ function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds
                 onClick={() => { haptic('light'); setJoinTarget(isJoinTarget ? null : g.id) }}
               >
                 <span className="gf-rank">{rank}</span>
-                <div className="guild-avatar" style={{ background: `${color}22`, color }}>
-                  {tag[0]}
-                </div>
+                {g.avatar_url ? (
+                  <img src={g.avatar_url} alt="" className="guild-avatar-img" />
+                ) : (
+                  <div className="guild-avatar" style={{ background: `${color}22`, color }}>
+                    {tag[0]}
+                  </div>
+                )}
                 <div className="guild-info">
                   <span className="guild-name">{g.name}</span>
                   <span className="guild-members">{g.member_count ?? 0}/50</span>
                 </div>
-                {isJoinTarget && canJoin ? (
+                {isMyGuild ? (
+                  <span className="gf-your-label">{t.guildsYourGuild}</span>
+                ) : isJoinTarget && canJoin ? (
                   <button
                     className="gf-join-btn"
                     onClick={e => { e.stopPropagation(); handleJoin(g.id) }}
@@ -662,6 +725,17 @@ export default function Guilds() {
     setSelectedGuild(null)
   }
 
+  async function handleDeleteGuild() {
+    if (!user?.id || !guild?.id || user.id === 'dev') return
+    const result = await deleteGuild(user.id, guild.id)
+    if (result?.error) { showToast(result.error); return }
+    setGuild(null)
+    setGuildMembers([])
+    setTopGuilds(topGuilds.filter(g => g.id !== guild.id))
+    setSelectedGuild(null)
+    showToast(t.guildsDeleted)
+  }
+
   const hasGuild = guild !== null
   const myGuildRank = guild?.rank ?? 999
   const myGuildInTop5 = hasGuild && myGuildRank <= 5
@@ -752,9 +826,13 @@ export default function Guilds() {
           <div className="my-guild-label">{t.guildsMyGuild}</div>
           <div className="my-guild-row">
             <span className="my-guild-rank">{myGuildRank}</span>
-            <div className="guild-avatar" style={{ background: `${myGuildColor}22`, color: myGuildColor }}>
-              {myGuildTag[0]}
-            </div>
+            {guild.avatar_url ? (
+              <img src={guild.avatar_url} alt="" className="guild-avatar-img" />
+            ) : (
+              <div className="guild-avatar" style={{ background: `${myGuildColor}22`, color: myGuildColor }}>
+                {myGuildTag[0]}
+              </div>
+            )}
             <div className="guild-info">
               <span className="guild-name">{guild.name}</span>
               <span className="guild-members">{guild.member_count ?? guildMembers.length}/50</span>
@@ -785,9 +863,13 @@ export default function Guilds() {
                 onClick={() => { haptic('light'); setSelectedGuild(isMyGuild ? guild : g) }}
               >
                 <span className="guild-rank">{i + 1}</span>
-                <div className="guild-avatar" style={{ background: `${color}22`, color }}>
-                  {tag[0]}
-                </div>
+                {g.avatar_url ? (
+                  <img src={g.avatar_url} alt="" className="guild-avatar-img" />
+                ) : (
+                  <div className="guild-avatar" style={{ background: `${color}22`, color }}>
+                    {tag[0]}
+                  </div>
+                )}
                 <div className="guild-info">
                   <span className="guild-name">{g.name}</span>
                   <span className="guild-members">{g.member_count ?? 0}/50</span>
@@ -849,7 +931,7 @@ export default function Guilds() {
 
       {/* Sheets */}
       <CreateGuildSheet open={createOpen} onClose={closeCreate} onCreated={handleGuildCreated} t={t} currency={currency} rates={rates} balance={balance} />
-      <FindGuildSheet open={findOpen} onClose={closeFind} onJoined={handleJoinFromFind} t={t} currency={currency} rates={rates} topGuilds={topGuilds} />
+      <FindGuildSheet open={findOpen} onClose={closeFind} onJoined={handleJoinFromFind} t={t} currency={currency} rates={rates} topGuilds={topGuilds} userGuildId={guild?.id} />
       <GuildDetailSheet
         guild={selectedGuild}
         members={detailMembers}
@@ -864,6 +946,7 @@ export default function Guilds() {
         onEdit={handleEditGuild}
         onLeave={handleLeaveGuild}
         onJoin={handleJoinFromDetail}
+        onDelete={handleDeleteGuild}
       />
 
     </div>

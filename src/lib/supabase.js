@@ -204,6 +204,15 @@ export async function leaveGuild(userId) {
   return data
 }
 
+export async function deleteGuild(userId, guildId) {
+  const { data, error } = await supabase.rpc('delete_guild', {
+    p_user_id: userId,
+    p_guild_id: guildId,
+  })
+  if (error) { console.error('deleteGuild error:', error); return { error: error.message } }
+  return data
+}
+
 // Friends — single RPC for all friends data (bootstrap)
 export async function getFriendsData(userId) {
   const { data, error } = await supabase.rpc('get_friends_data', { p_user_id: userId })

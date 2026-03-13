@@ -783,15 +783,14 @@ BEGIN
     -- Member count
     SELECT COUNT(*) INTO v_member_count FROM guild_members WHERE guild_id = v_guild_id;
 
-    -- Guild rank among all guilds in season
-    SELECT COALESCE(pos, 0) INTO v_rank
+    -- Guild rank among all guilds in season (include guilds with no stats)
+    SELECT COALESCE(pos, 999) INTO v_rank
     FROM (
-      SELECT guild_id, ROW_NUMBER() OVER (ORDER BY pnl DESC) AS pos
-      FROM guild_season_stats WHERE season_id = v_season_id
+      SELECT g2.id AS guild_id, ROW_NUMBER() OVER (ORDER BY COALESCE(gss2.pnl, 0) DESC) AS pos
+      FROM guilds g2
+      LEFT JOIN guild_season_stats gss2 ON gss2.guild_id = g2.id AND gss2.season_id = v_season_id
     ) ranked
     WHERE guild_id = v_guild_id;
-
-    IF v_rank IS NULL OR v_rank = 0 THEN v_rank := 999; END IF;
 
     -- Members with PnL
     SELECT COALESCE(jsonb_agg(
@@ -949,6 +948,38 @@ BEGIN
   IF NOT FOUND THEN
     RETURN jsonb_build_object('error', 'not_in_guild');
   END IF;
+
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+-- Delete guild (creator only — removes all members & the guild)
+DROP FUNCTION IF EXISTS delete_guild(UUID, UUID);
+
+CREATE OR REPLACE FUNCTION delete_guild(p_user_id UUID, p_guild_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  -- Only creator can delete
+  IF NOT EXISTS (
+    SELECT 1 FROM guild_members
+    WHERE user_id = p_user_id AND guild_id = p_guild_id AND role = 'creator'
+  ) THEN
+    RETURN jsonb_build_object('error', 'not_creator');
+  END IF;
+
+  -- Remove all member stats for this guild
+  DELETE FROM guild_member_stats WHERE guild_id = p_guild_id;
+
+  -- Remove all season stats for this guild
+  DELETE FROM guild_season_stats WHERE guild_id = p_guild_id;
+
+  -- Remove all members
+  DELETE FROM guild_members WHERE guild_id = p_guild_id;
+
+  -- Delete the guild itself
+  DELETE FROM guilds WHERE id = p_guild_id;
 
   RETURN jsonb_build_object('ok', true);
 END;
