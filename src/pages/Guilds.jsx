@@ -774,9 +774,9 @@ export default function Guilds() {
   const myGuildTag = guild?.tag || (guild?.name ? guild.name.substring(0, 2).toUpperCase() : '??')
 
   // When user taps own guild in the leaderboard list, show detail with their own data
-  const isDetailOwner = selectedGuild && hasGuild && selectedGuild.id === guild.id
   const isDetailMember = hasGuild && selectedGuild?.id === guild?.id
-  const detailMembers = isDetailOwner ? guildMembers : (selectedGuild?.members ?? [])
+  const isDetailOwner = isDetailMember && guild?.creator_id === user?.id
+  const detailMembers = isDetailMember ? guildMembers : (selectedGuild?.members ?? [])
 
   return (
     <div className="guilds page">
