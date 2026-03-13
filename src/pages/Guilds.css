@@ -268,6 +268,14 @@
 .guild-row:nth-child(2) .guild-rank { color: #94a3b8; }
 .guild-row:nth-child(3) .guild-rank { color: #cd7f32; }
 
+.guild-row--mine {
+  background: var(--accent-dim, rgba(59, 130, 246, 0.08));
+  border-radius: 14px;
+  padding: 12px 10px;
+  border-top: none !important;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
 .guild-avatar {
   width: 42px;
   height: 42px;
