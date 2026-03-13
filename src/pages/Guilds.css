@@ -1153,3 +1153,80 @@
   transform: translateX(-50%) translateY(0);
   pointer-events: auto;
 }
+
+/* ── Leave guild button ── */
+.gd-leave-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  margin-top: 16px;
+}
+
+.gd-leave-btn:active {
+  transform: scale(0.97);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ── Join button in detail ── */
+.gd-join {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
+  margin-bottom: 16px;
+}
+
+.gd-join:active {
+  transform: scale(0.97);
+}
+
+.gd-full {
+  width: 100%;
+  padding: 14px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  margin-bottom: 16px;
+}
+
+/* ── Create sheet error ── */
+.guilds-sheet-error {
+  width: 100%;
+  text-align: center;
+  color: #ef4444;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 0;
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}

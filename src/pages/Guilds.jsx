@@ -25,7 +25,7 @@ function guildColor(name) {
 }
 
 /* ── Guild Detail Sheet ── */
-function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, user, onKick, onEdit, onLeave }) {
+function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner, isMember, user, onKick, onEdit, onLeave, onJoin }) {
   const open = !!guild
   const [kickTarget, setKickTarget] = useState(null)
   const [editing, setEditing] = useState(false)
@@ -114,8 +114,8 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
             {/* Description */}
             <p className="gd-desc">{guild.description || ''}</p>
 
-            {/* Action button */}
-            {isOwner ? (
+            {/* Action buttons */}
+            {isOwner && (
               <>
                 <button
                   className="gd-edit-btn"
@@ -176,14 +176,16 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
                   </div>
                 )}
               </>
-            ) : (
+            )}
+
+            {/* Join button (non-member, not already in a guild) */}
+            {!isMember && !isOwner && (
               <>
-                {canJoin && (
-                  <button className="gd-join" onClick={() => haptic('medium')}>
+                {canJoin ? (
+                  <button className="gd-join" onClick={() => { haptic('medium'); onJoin?.(guild.id) }}>
                     {t.guildsJoin}
                   </button>
-                )}
-                {!canJoin && (
+                ) : (
                   <div className="gd-full">{t.guildsFull}</div>
                 )}
               </>
@@ -205,13 +207,13 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
               </div>
             </div>
 
-            {/* Leave button (for non-creator members) */}
-            {!isOwner && guild.id && user && onLeave && (
+            {/* Leave button (for members who aren't the creator) */}
+            {isMember && !isOwner && (
               <button
                 className="gd-leave-btn"
                 onClick={() => { haptic('medium'); onLeave() }}
               >
-                {t.guildsLeave || 'Leave Guild'}
+                {t.guildsLeave}
               </button>
             )}
 
@@ -268,11 +270,12 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
 }
 
 /* ── Create Guild Sheet ── */
-function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates }) {
+function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balance }) {
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [avatar, setAvatar] = useState(null)
   const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -280,7 +283,7 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates }) {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
-      setTimeout(() => { setName(''); setDesc(''); setAvatar(null) }, 300)
+      setTimeout(() => { setName(''); setDesc(''); setAvatar(null); setError('') }, 300)
     }
     return () => { document.body.style.overflow = '' }
   }, [open])
@@ -308,8 +311,15 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates }) {
 
   async function handleCreate() {
     if (!canCreate || creating) return
+    if (balance < CREATE_COST) {
+      haptic('light')
+      setError(t.guildsNotEnoughBalance)
+      setTimeout(() => setError(''), 2500)
+      return
+    }
     haptic('medium')
     setCreating(true)
+    setError('')
     await onCreated(name.trim(), desc.trim(), avatar)
     setCreating(false)
   }
@@ -379,6 +389,7 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates }) {
             <span className="guilds-sheet-cost-label">{t.guildsCost}</span>
             <span className="guilds-sheet-cost-amount">{formatCurrency(CREATE_COST, currency, rates)}</span>
           </div>
+          {error && <div className="guilds-sheet-error">{error}</div>}
           <button
             className={`guilds-sheet-submit ${canCreate && !creating ? '' : 'disabled'}`}
             onClick={handleCreate}
@@ -630,6 +641,18 @@ export default function Guilds() {
     await refreshGuildData()
   }
 
+  async function handleJoinFromDetail(guildId) {
+    if (!user?.id || user.id === 'dev') return
+    if (hasGuild) {
+      showToast(t.guildsAlreadyHave)
+      return
+    }
+    const result = await joinGuild(user.id, guildId)
+    if (result?.error) { showToast(result.error); return }
+    await refreshGuildData()
+    setSelectedGuild(null)
+  }
+
   async function handleLeaveGuild() {
     if (!user?.id || user.id === 'dev') return
     const result = await leaveGuild(user.id)
@@ -650,6 +673,7 @@ export default function Guilds() {
 
   // When user taps own guild in the leaderboard list, show detail with their own data
   const isDetailOwner = selectedGuild && hasGuild && selectedGuild.id === guild.id
+  const isDetailMember = hasGuild && selectedGuild?.id === guild?.id
   const detailMembers = isDetailOwner ? guildMembers : (selectedGuild?.members ?? [])
 
   return (
@@ -824,7 +848,7 @@ export default function Guilds() {
       </div>
 
       {/* Sheets */}
-      <CreateGuildSheet open={createOpen} onClose={closeCreate} onCreated={handleGuildCreated} t={t} currency={currency} rates={rates} />
+      <CreateGuildSheet open={createOpen} onClose={closeCreate} onCreated={handleGuildCreated} t={t} currency={currency} rates={rates} balance={balance} />
       <FindGuildSheet open={findOpen} onClose={closeFind} onJoined={handleJoinFromFind} t={t} currency={currency} rates={rates} topGuilds={topGuilds} />
       <GuildDetailSheet
         guild={selectedGuild}
@@ -834,10 +858,12 @@ export default function Guilds() {
         currency={currency}
         rates={rates}
         isOwner={isDetailOwner}
+        isMember={isDetailMember}
         user={user}
         onKick={handleKickMember}
         onEdit={handleEditGuild}
         onLeave={handleLeaveGuild}
+        onJoin={handleJoinFromDetail}
       />
 
     </div>
