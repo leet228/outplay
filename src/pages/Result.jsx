@@ -33,12 +33,6 @@ export default function Result() {
     navigate('/')
   }
 
-  function handlePlayAgain() {
-    haptic('medium')
-    resetGame()
-    navigate('/')
-  }
-
   return (
     <div className={`result ${isWin ? 'result-win' : 'result-lose'}`}>
       {/* Icon */}
@@ -89,10 +83,7 @@ export default function Result() {
 
       {/* Actions */}
       <div className="result-actions">
-        <button className="result-btn primary" onClick={handlePlayAgain}>
-          ⚔️ {tr.resultPlayAgain || 'Играть снова'}
-        </button>
-        <button className="result-btn secondary" onClick={handleHome}>
+        <button className="result-btn primary" onClick={handleHome}>
           {tr.resultHome || 'На главную'}
         </button>
       </div>

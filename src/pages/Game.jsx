@@ -14,7 +14,13 @@ const CIRCLE_C = 2 * Math.PI * CIRCLE_R
 export default function Game() {
   const { duelId } = useParams()
   const navigate = useNavigate()
-  const { user, setLastResult, setActiveDuel, setBalance } = useGameStore()
+  const {
+    user, setLastResult, setActiveDuel, setBalance,
+    setUser, dailyStats, setDailyStats, totalPnl, setTotalPnl,
+    leaderboard, setLeaderboard,
+    guild, setGuild, guildMembers, setGuildMembers, topGuilds, setTopGuilds,
+    guildSeason, setGuildSeason,
+  } = useGameStore()
   const lang = useGameStore((s) => s.lang)
   const tr = translations[lang] || translations.ru
 
@@ -41,16 +47,21 @@ export default function Game() {
     return () => cleanupAll()
   }, [duelId])
 
-  // Timer countdown
+  // Timer countdown — keeps running even after confirm (both players see same timer)
   useEffect(() => {
-    if (loading || finished || confirmed) return
+    if (loading || finished) return
     if (timeLeft <= 0) {
-      handleTimeout()
+      if (!submittingRef.current && !confirmed) {
+        // Not yet answered — auto-submit timeout
+        handleTimeout()
+      }
+      // If already confirmed and timer ran out — do nothing,
+      // onBothAnswered will handle advancing
       return
     }
     timerRef.current = setTimeout(() => setTimeLeft(s => s - 1), 1000)
     return () => clearTimeout(timerRef.current)
-  }, [timeLeft, loading, finished, confirmed])
+  }, [timeLeft, loading, finished])
 
   function cleanupAll() {
     clearTimeout(timerRef.current)
@@ -252,8 +263,85 @@ export default function Game() {
 
     // Refresh balance
     const { data: userData } = await supabase
-      .from('users').select('balance').eq('id', user.id).single()
-    if (userData) setBalance(userData.balance)
+      .from('users').select('balance, wins, losses').eq('id', user.id).single()
+    if (userData) {
+      setBalance(userData.balance)
+      // Update local user wins/losses
+      setUser({ ...user, wins: userData.wins, losses: userData.losses })
+    }
+
+    // --- Local state updates ---
+    const pnlChange = won ? payout : -duel.stake
+
+    // 1. Update dailyStats (profile chart)
+    const today = new Date().toISOString().slice(0, 10)
+    const updatedDailyStats = [...dailyStats]
+    const todayIdx = updatedDailyStats.findIndex(d => d.date === today)
+    if (todayIdx >= 0) {
+      updatedDailyStats[todayIdx] = {
+        ...updatedDailyStats[todayIdx],
+        pnl: updatedDailyStats[todayIdx].pnl + pnlChange,
+        games: (updatedDailyStats[todayIdx].games || 0) + 1,
+        wins: (updatedDailyStats[todayIdx].wins || 0) + (won ? 1 : 0),
+      }
+    } else {
+      updatedDailyStats.push({
+        date: today,
+        pnl: pnlChange,
+        games: 1,
+        wins: won ? 1 : 0,
+      })
+    }
+    setDailyStats(updatedDailyStats)
+
+    // 2. Update totalPnl
+    setTotalPnl(totalPnl + pnlChange)
+
+    // 3. Update leaderboard (find current user and update their PnL)
+    if (leaderboard.length > 0) {
+      const updatedLb = leaderboard.map(p =>
+        p.id === user.id
+          ? {
+              ...p,
+              total_pnl: (p.total_pnl || 0) + pnlChange,
+              wins: won ? (p.wins || 0) + 1 : (p.wins || 0),
+              losses: won ? (p.losses || 0) : (p.losses || 0) + 1,
+            }
+          : p
+      ).sort((a, b) => (b.total_pnl || 0) - (a.total_pnl || 0))
+      setLeaderboard(updatedLb)
+    }
+
+    // 4. Update guild PnL (if user is in a guild)
+    if (guild) {
+      setGuild({ ...guild, pnl: (guild.pnl || 0) + pnlChange })
+
+      // Update current user's member PnL
+      if (guildMembers.length > 0) {
+        const updatedMembers = guildMembers.map(m =>
+          m.user_id === user.id
+            ? { ...m, pnl: (m.pnl || 0) + pnlChange }
+            : m
+        ).sort((a, b) => (b.pnl || 0) - (a.pnl || 0))
+        setGuildMembers(updatedMembers)
+      }
+
+      // Update topGuilds list
+      if (topGuilds.length > 0) {
+        const updatedTopGuilds = topGuilds.map(g =>
+          g.id === guild.id
+            ? { ...g, pnl: (g.pnl || 0) + pnlChange }
+            : g
+        ).sort((a, b) => (b.pnl || 0) - (a.pnl || 0))
+        setTopGuilds(updatedTopGuilds)
+      }
+    }
+
+    // 5. Update guild season prize pool (0.5% of total pot goes to prize pool)
+    if (guildSeason) {
+      const guildFee = Math.floor(duel.stake * 2 * 0.005)
+      setGuildSeason({ ...guildSeason, prize_pool: (guildSeason.prize_pool || 0) + guildFee })
+    }
 
     setLastResult({
       won,
@@ -354,7 +442,7 @@ export default function Game() {
             disabled={selected === null}
             onClick={handleConfirm}
           >
-            ⚡ {tr.gameAnswer || 'Ответить'}
+            {tr.gameAnswer || 'Ответить'}
           </button>
         )}
 

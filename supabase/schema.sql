@@ -353,6 +353,7 @@ DECLARE
   v_bonus        INTEGER;
   v_creator_time REAL;
   v_opp_time     REAL;
+  v_season_id    UUID;
 BEGIN
   SELECT * INTO d FROM duels WHERE id = p_duel_id;
 
@@ -374,6 +375,12 @@ BEGIN
   v_rake      := FLOOR(v_total_pot * 5 / 100);       -- 5% рейк
   v_guild_fee := FLOOR(v_total_pot * 5 / 1000);      -- 0.5% гильдии
   v_bot_fee   := v_rake - v_guild_fee;                -- 4.5% бот
+
+  -- Добавить 0.5% в призовой фонд активного сезона гильдий
+  SELECT id INTO v_season_id FROM guild_seasons WHERE is_active = true LIMIT 1;
+  IF v_season_id IS NOT NULL THEN
+    UPDATE guild_seasons SET prize_pool = prize_pool + v_guild_fee WHERE id = v_season_id;
+  END IF;
 
   IF d.creator_score > d.opponent_score THEN
     v_winner := d.creator_id;
@@ -1026,9 +1033,7 @@ DECLARE
   v_member_count INTEGER;
 BEGIN
   -- Active season
-  SELECT id INTO v_season_id
-  FROM guild_seasons WHERE is_active = true LIMIT 1;
-
+  SELECT id INTO v_season_id FROM guild_seasons WHERE is_active = true LIMIT 1;
   IF v_season_id IS NULL THEN
     SELECT id INTO v_season_id FROM guild_seasons ORDER BY end_date DESC LIMIT 1;
   END IF;
