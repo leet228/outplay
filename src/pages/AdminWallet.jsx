@@ -25,13 +25,22 @@ async function fetchTonBalance(addr) {
 let _priceCache = null
 async function fetchPrices() {
   try {
-    const r = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd,rub'
-    )
+    // CoinLore: TON id=54683, цена в USD
+    const r = await fetch('https://api.coinlore.net/api/ticker/?id=54683')
     if (!r.ok) throw new Error()
     const d = await r.json()
+    const usd = parseFloat(d[0]?.price_usd) || 3
+    // USD → RUB
+    let rubRate = 90
+    try {
+      const rr = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
+      if (rr.ok) {
+        const rd = await rr.json()
+        rubRate = rd.rates?.RUB ?? 90
+      }
+    } catch {}
     _priceCache = {
-      ton: { usd: d['the-open-network']?.usd ?? 3, rub: d['the-open-network']?.rub ?? 270 },
+      ton: { usd, rub: usd * rubRate },
     }
     return _priceCache
   } catch {
@@ -122,7 +131,7 @@ export default function AdminWallet() {
         <div className="admin-refresh-time">
           {'Updated '}
           {lastRefresh.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          {' \u00B7 CoinGecko'}
+          {' \u00B7 CoinLore'}
         </div>
       )}
 

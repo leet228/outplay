@@ -49,27 +49,41 @@ async function fetchWithRetry(url: string, retries = 3, delayMs = 500): Promise<
 
 // ── Helpers ──
 
+async function getUsdRubRate(): Promise<number> {
+  try {
+    const res = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD')
+    if (!res.ok) return 90
+    const data = await res.json()
+    return data?.rates?.RUB ?? 90
+  } catch {
+    return 90 // fallback
+  }
+}
+
 async function getTonPrice(): Promise<number> {
   try {
-    const res = await fetchWithRetry(
-      'https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=rub'
-    )
+    // CoinLore: TON id=54683, без лимитов, без API ключа
+    const res = await fetchWithRetry('https://api.coinlore.net/api/ticker/?id=54683')
     if (!res.ok) {
-      console.error(`CoinGecko HTTP ${res.status}`)
-      await logToAdmin('warn', `CoinGecko HTTP ${res.status}`)
+      console.error(`CoinLore HTTP ${res.status}`)
+      await logToAdmin('warn', `CoinLore HTTP ${res.status}`)
       return 0
     }
     const data = await res.json()
-    const price = data['the-open-network']?.rub
-    if (typeof price !== 'number' || price <= 0) {
-      console.error('CoinGecko returned invalid price:', price)
-      await logToAdmin('warn', 'CoinGecko invalid price', { price })
+    const usdPrice = parseFloat(data?.[0]?.price_usd)
+    if (!usdPrice || usdPrice <= 0) {
+      console.error('CoinLore returned invalid price:', data?.[0]?.price_usd)
+      await logToAdmin('warn', 'CoinLore invalid price', { raw: data?.[0]?.price_usd })
       return 0
     }
-    return price
+    // Конвертируем USD → RUB
+    const rubRate = await getUsdRubRate()
+    const rubPrice = usdPrice * rubRate
+    console.log(`TON: $${usdPrice} × ${rubRate} = ${rubPrice.toFixed(2)} RUB`)
+    return rubPrice
   } catch (e) {
-    console.error('CoinGecko error:', e)
-    await logToAdmin('error', 'CoinGecko fetch failed: ' + (e as Error).message)
+    console.error('CoinLore error:', e)
+    await logToAdmin('error', 'CoinLore fetch failed: ' + (e as Error).message)
     return 0
   }
 }
