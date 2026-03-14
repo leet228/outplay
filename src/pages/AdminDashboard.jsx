@@ -96,14 +96,18 @@ export default function AdminDashboard() {
           const cryptoStars = statsData.crypto_deposits_stars ?? 0
           const botStars = realBotStars // real balance from Telegram API
           const userBalances = statsData.total_user_balances ?? 0
+          const guildPrizePool = statsData.guild_prize_pool ?? 0
           const totalAssetsRub = botStars + walletRub // 1 star ≈ 1 RUB
-          const netRevenue = totalAssetsRub - userBalances
+          const totalLiabilities = userBalances + guildPrizePool
+          const netRevenue = totalAssetsRub - totalLiabilities
           setRevenue({
             botStars,
             cryptoStars,
             depositsTotal,
             walletRub,
             userBalances,
+            guildPrizePool,
+            totalLiabilities,
             totalAssetsRub,
             netRevenue,
             tonBal,
@@ -371,6 +375,16 @@ export default function AdminDashboard() {
             <div className="admin-revenue-row">
               <span>{'\uD83D\uDC64'} Player Balances</span>
               <span className="admin-revenue-negative">{fmtNum(revenue.userBalances)} {'\u2B50'}</span>
+            </div>
+            {revenue.guildPrizePool > 0 && (
+              <div className="admin-revenue-row">
+                <span>{'\uD83C\uDFC6'} Guild Prize Pool</span>
+                <span className="admin-revenue-negative">{fmtNum(revenue.guildPrizePool)} {'\u2B50'}</span>
+              </div>
+            )}
+            <div className="admin-revenue-total-row">
+              <span>Total Liabilities</span>
+              <span>{fmtNum(revenue.totalLiabilities)} {'\u2B50'}</span>
             </div>
           </div>
         </div>

@@ -290,7 +290,11 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
 
   async function handlePlay() {
     if (selectedStakes.length === 0) return
-    if (appSettings?.game_creation === false) return
+    if (appSettings?.game_creation === false) {
+      setError('maintenance')
+      setTimeout(() => setError(null), 3000)
+      return
+    }
     haptic('medium')
 
     // Send all selected stakes — backend tries each one
@@ -429,7 +433,11 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
           </div>
           {!searching && (
             <div className={`sheet-error ${error ? 'visible' : ''}`}>
-              {error === 'balance' ? t.sheetInsufficientBalance : (t.sheetServerError || 'Ошибка сервера, попробуйте позже')}
+              {error === 'balance'
+                ? t.sheetInsufficientBalance
+                : error === 'maintenance'
+                  ? (t.sheetMaintenance || 'Игры временно недоступны ⚙️')
+                  : (t.sheetServerError || 'Ошибка сервера, попробуйте позже')}
             </div>
           )}
         </div>

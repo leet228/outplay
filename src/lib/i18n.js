@@ -36,6 +36,7 @@ export const translations = {
     sheetMatchFound: 'Соперник найден! Готовим вопросы...',
     sheetCancel: 'Отменить',
     sheetInsufficientBalance: 'Недостаточно средств на балансе',
+    sheetMaintenance: 'Игры временно недоступны ⚙️',
 
     // Game
     gameQuestion: 'Вопрос',
@@ -271,6 +272,7 @@ export const translations = {
     sheetCancel: 'Cancel',
     sheetStakeHint: 'Pick multiple stakes — match starts at whichever finds an opponent first',
     sheetInsufficientBalance: 'Insufficient balance',
+    sheetMaintenance: 'Games temporarily unavailable ⚙️',
 
     // Game
     gameQuestion: 'Question',

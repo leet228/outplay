@@ -1783,7 +1783,8 @@ BEGIN
     'total_user_balances',   (SELECT COALESCE(SUM(balance), 0) FROM users),
     'total_pro',             (SELECT COUNT(*) FROM users WHERE is_pro = true AND pro_expires > NOW()),
     'total_guilds',          (SELECT COUNT(*) FROM guilds),
-    'crypto_deposits_stars', (SELECT COALESCE(SUM(stars), 0) FROM crypto_processed_txs)
+    'crypto_deposits_stars', (SELECT COALESCE(SUM(stars), 0) FROM crypto_processed_txs),
+    'guild_prize_pool',      (SELECT COALESCE(prize_pool, 0) FROM guild_seasons WHERE is_active = true LIMIT 1)
   ) INTO r;
   RETURN r;
 END;
