@@ -199,6 +199,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const [searching, setSearching] = useState(false)
   const [matched, setMatched] = useState(false)
   const [searchTime, setSearchTime] = useState(0)
+  const findingRef = useRef(false)
   const errorTimer = useRef(null)
   const channelRef = useRef(null)
   const pollRef = useRef(null)
@@ -290,17 +291,25 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
 
   async function handlePlay() {
     if (selectedStakes.length === 0) return
+    if (findingRef.current || searching) return // Защита от двойного нажатия
     if (appSettings?.game_creation === false) {
       setError('maintenance')
       setTimeout(() => setError(null), 3000)
       return
     }
+    findingRef.current = true
     haptic('medium')
 
     // Send all selected stakes — backend tries each one
     const result = await findMatch(user.id, 'general', selectedStakes)
 
     if (!result || result.status === 'error') {
+      findingRef.current = false
+      if (result?.error === 'opponent_balance_insufficient') {
+        // Оппонент не смог — пробуем ещё раз автоматически
+        setTimeout(() => handlePlay(), 500)
+        return
+      }
       const errType = result?.error === 'insufficient_balance' ? 'balance' : 'server'
       setError(errType)
       setTimeout(() => setError(null), 2000)
@@ -351,6 +360,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (user?.id) await cancelMatchmaking(user.id)
     setSearching(false)
     setSearchTime(0)
+    findingRef.current = false
     haptic('light')
   }
 

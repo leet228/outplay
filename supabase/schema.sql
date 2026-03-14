@@ -30,6 +30,9 @@ CREATE INDEX IF NOT EXISTS idx_users_telegram ON users(telegram_id);
 CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance DESC);
 CREATE INDEX IF NOT EXISTS idx_users_referred_by ON users(referred_by);
 
+-- Баланс НИКОГДА не может уйти в минус — последний рубеж защиты
+ALTER TABLE users ADD CONSTRAINT users_balance_non_negative CHECK (balance >= 0);
+
 -- ╔═══════════════════════════════════════════╗
 -- ║  2. QUESTIONS                             ║
 -- ╚═══════════════════════════════════════════╝
@@ -356,7 +359,8 @@ DECLARE
   v_season_id    UUID;
   v_winner_wins  INTEGER;
 BEGIN
-  SELECT * INTO d FROM duels WHERE id = p_duel_id;
+  -- Блокируем строку дуэли чтобы предотвратить двойную финализацию
+  SELECT * INTO d FROM duels WHERE id = p_duel_id FOR UPDATE;
 
   IF d IS NULL THEN
     RETURN jsonb_build_object('error', 'duel_not_found');
@@ -492,6 +496,7 @@ DECLARE
   v_opp_balance   INTEGER;
   v_stake         INTEGER;
   v_matched       BOOLEAN := false;
+  v_affected      INTEGER;
 BEGIN
   -- Проверяем баланс вызывающего (минимальная ставка)
   SELECT balance INTO v_my_balance FROM users WHERE id = p_user_id;
@@ -520,7 +525,7 @@ BEGIN
     FOR UPDATE SKIP LOCKED;
 
     IF v_opponent IS NOT NULL THEN
-      -- Проверяем баланс соперника
+      -- Проверяем АКТУАЛЬНЫЙ баланс соперника (мог измениться с момента постановки в очередь)
       SELECT balance INTO v_opp_balance FROM users WHERE id = v_opponent.user_id;
       IF v_opp_balance IS NOT NULL AND v_opp_balance >= v_stake THEN
         v_matched := true;
@@ -558,6 +563,13 @@ BEGIN
     LIMIT 5
   ) INTO v_question_ids;
 
+  -- Валидация: проверяем что нашлось ровно 5 вопросов
+  IF v_question_ids IS NULL OR array_length(v_question_ids, 1) IS NULL OR array_length(v_question_ids, 1) < 5 THEN
+    PERFORM admin_log('error', 'rpc:find_match', 'Not enough questions for category',
+      jsonb_build_object('category', p_category, 'found', COALESCE(array_length(v_question_ids, 1), 0)));
+    RETURN jsonb_build_object('status', 'error', 'error', 'not_enough_questions');
+  END IF;
+
   -- Создаём дуэль
   INSERT INTO duels (creator_id, opponent_id, category, stake, status, question_ids)
   VALUES (v_opponent.user_id, p_user_id, p_category, v_stake, 'active', v_question_ids)
@@ -566,9 +578,29 @@ BEGIN
   -- Удаляем ВСЕ записи обоих из очереди
   DELETE FROM matchmaking_queue WHERE user_id IN (p_user_id, v_opponent.user_id);
 
-  -- Списываем ставку с обоих
-  UPDATE users SET balance = balance - v_stake WHERE id = p_user_id;
-  UPDATE users SET balance = balance - v_stake WHERE id = v_opponent.user_id;
+  -- Атомарное списание ставки: AND balance >= v_stake гарантирует что баланс не уйдёт в минус
+  UPDATE users SET balance = balance - v_stake WHERE id = p_user_id AND balance >= v_stake;
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  IF v_affected = 0 THEN
+    -- Баланс упал пока искали — откатываем дуэль
+    DELETE FROM duels WHERE id = v_duel_id;
+    PERFORM admin_log('warn', 'rpc:find_match', 'Caller balance insufficient at deduction',
+      jsonb_build_object('user_id', p_user_id, 'stake', v_stake));
+    RETURN jsonb_build_object('status', 'error', 'error', 'insufficient_balance');
+  END IF;
+
+  UPDATE users SET balance = balance - v_stake WHERE id = v_opponent.user_id AND balance >= v_stake;
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  IF v_affected = 0 THEN
+    -- Баланс оппонента упал — возвращаем ставку вызывающему, удаляем дуэль
+    UPDATE users SET balance = balance + v_stake WHERE id = p_user_id;
+    DELETE FROM duels WHERE id = v_duel_id;
+    -- Удаляем оппонента из очереди (баланс не позволяет играть)
+    DELETE FROM matchmaking_queue WHERE user_id = v_opponent.user_id AND stake = v_stake;
+    PERFORM admin_log('warn', 'rpc:find_match', 'Opponent balance insufficient at deduction',
+      jsonb_build_object('opponent_id', v_opponent.user_id, 'stake', v_stake));
+    RETURN jsonb_build_object('status', 'error', 'error', 'opponent_balance_insufficient');
+  END IF;
 
   -- Транзакции
   INSERT INTO transactions (user_id, type, amount, ref_id)
@@ -1706,7 +1738,9 @@ CREATE POLICY "read_all" ON user_daily_stats   FOR SELECT USING (true);
 CREATE POLICY "read_all" ON push_tokens        FOR SELECT USING (true);
 CREATE POLICY "read_all" ON crypto_processed_txs FOR SELECT USING (true);
 
--- Запись — через SECURITY DEFINER RPC
+-- Запись — ТОЛЬКО через SECURITY DEFINER RPC функции (они обходят RLS)
+-- Прямая запись с клиента заблокирована для чувствительных таблиц
+-- users — единственная таблица с прямой записью (регистрация, профиль, ping)
 DROP POLICY IF EXISTS "write_all" ON users;
 DROP POLICY IF EXISTS "write_all" ON duels;
 DROP POLICY IF EXISTS "write_all" ON friends;
@@ -1719,17 +1753,10 @@ DROP POLICY IF EXISTS "write_all" ON user_daily_stats;
 DROP POLICY IF EXISTS "write_all" ON push_tokens;
 DROP POLICY IF EXISTS "write_all" ON crypto_processed_txs;
 
-CREATE POLICY "write_all" ON users             FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON duels             FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON friends           FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON friend_requests   FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON guild_members     FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON subscriptions     FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON referrals         FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON transactions      FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON user_daily_stats  FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON push_tokens       FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "write_all" ON crypto_processed_txs FOR ALL USING (true) WITH CHECK (true);
+-- users: клиент может INSERT (регистрация) и UPDATE (профиль, last_seen, настройки)
+-- Баланс защищён CHECK constraint (>= 0), критические операции через SECURITY DEFINER
+CREATE POLICY "users_insert" ON users FOR INSERT WITH CHECK (true);
+CREATE POLICY "users_update" ON users FOR UPDATE USING (true) WITH CHECK (true);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  19. APP SETTINGS (feature flags)         ║
@@ -1753,7 +1780,7 @@ ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "read_all" ON app_settings;
 CREATE POLICY "read_all" ON app_settings FOR SELECT USING (true);
 DROP POLICY IF EXISTS "write_all" ON app_settings;
-CREATE POLICY "write_all" ON app_settings FOR ALL USING (true) WITH CHECK (true);
+-- app_settings: запись только через SECURITY DEFINER update_app_setting()
 
 -- get_app_settings — все настройки одним запросом
 CREATE OR REPLACE FUNCTION get_app_settings()
@@ -2041,9 +2068,13 @@ CREATE TABLE IF NOT EXISTS duel_answers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_duel_answers_duel ON duel_answers(duel_id);
+CREATE INDEX IF NOT EXISTS idx_duel_answers_duel_qi ON duel_answers(duel_id, question_index);
+CREATE INDEX IF NOT EXISTS idx_duel_answers_duel_user ON duel_answers(duel_id, user_id);
 
 ALTER TABLE duel_answers ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "duel_answers_all" ON duel_answers FOR ALL USING (true) WITH CHECK (true);
+-- duel_answers: чтение открыто, запись только через submit_answer() SECURITY DEFINER
+CREATE POLICY "duel_answers_read" ON duel_answers FOR SELECT USING (true);
+DROP POLICY IF EXISTS "duel_answers_all" ON duel_answers;
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  RPC: submit_answer                       ║
@@ -2063,13 +2094,42 @@ RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 DECLARE
-  v_both_count INTEGER;
+  v_both_count    INTEGER;
   v_total_answers INTEGER;
-  v_duel duels%ROWTYPE;
+  v_duel          duels%ROWTYPE;
+  v_creator_score INTEGER;
+  v_opp_score     INTEGER;
+  v_safe_time     REAL;
 BEGIN
-  -- Записываем ответ
+  -- Валидация входных данных
+  IF p_question_index < 0 OR p_question_index > 4 THEN
+    RETURN jsonb_build_object('error', 'invalid_question_index');
+  END IF;
+  IF p_answer_index IS NOT NULL AND (p_answer_index < 0 OR p_answer_index > 3) THEN
+    RETURN jsonb_build_object('error', 'invalid_answer_index');
+  END IF;
+  -- Clamp time_spent в допустимых пределах
+  v_safe_time := LEAST(GREATEST(COALESCE(p_time_spent, 15.0), 0), 15);
+
+  -- Блокируем строку дуэли — ключевая защита от гонки двойной финализации
+  SELECT * INTO v_duel FROM duels WHERE id = p_duel_id FOR UPDATE;
+
+  IF v_duel IS NULL THEN
+    RETURN jsonb_build_object('error', 'duel_not_found');
+  END IF;
+
+  IF v_duel.status != 'active' THEN
+    RETURN jsonb_build_object('error', 'duel_not_active');
+  END IF;
+
+  -- Проверка что пользователь — участник дуэли
+  IF p_user_id != v_duel.creator_id AND p_user_id != v_duel.opponent_id THEN
+    RETURN jsonb_build_object('error', 'not_participant');
+  END IF;
+
+  -- Записываем ответ (ON CONFLICT = защита от дублей)
   INSERT INTO duel_answers (duel_id, user_id, question_index, answer_index, is_correct, time_spent)
-  VALUES (p_duel_id, p_user_id, p_question_index, p_answer_index, p_is_correct, p_time_spent)
+  VALUES (p_duel_id, p_user_id, p_question_index, p_answer_index, p_is_correct, v_safe_time)
   ON CONFLICT (duel_id, user_id, question_index) DO NOTHING;
 
   -- Сколько игроков ответили на ЭТОТ вопрос
@@ -2082,18 +2142,21 @@ BEGIN
   FROM duel_answers
   WHERE duel_id = p_duel_id;
 
-  -- Если оба ответили на все 5 вопросов (10 ответов) — обновляем scores
-  IF v_total_answers >= 10 THEN
-    SELECT * INTO v_duel FROM duels WHERE id = p_duel_id;
-    IF v_duel.status = 'active' THEN
-      -- Считаем очки каждого
-      UPDATE duels SET
-        creator_score = (SELECT COUNT(*) FROM duel_answers WHERE duel_id = p_duel_id AND user_id = v_duel.creator_id AND is_correct = true),
-        opponent_score = (SELECT COUNT(*) FROM duel_answers WHERE duel_id = p_duel_id AND user_id = v_duel.opponent_id AND is_correct = true)
-      WHERE id = p_duel_id;
-      -- Финализируем
-      PERFORM finalize_duel(p_duel_id);
-    END IF;
+  -- Если оба ответили на все 5 вопросов (10 ответов) — финализируем
+  IF v_total_answers >= 10 AND v_duel.status = 'active' THEN
+    -- Считаем очки каждого
+    SELECT COUNT(*) INTO v_creator_score
+    FROM duel_answers WHERE duel_id = p_duel_id AND user_id = v_duel.creator_id AND is_correct = true;
+
+    SELECT COUNT(*) INTO v_opp_score
+    FROM duel_answers WHERE duel_id = p_duel_id AND user_id = v_duel.opponent_id AND is_correct = true;
+
+    -- Обновляем scores перед финализацией
+    UPDATE duels SET creator_score = v_creator_score, opponent_score = v_opp_score
+    WHERE id = p_duel_id;
+
+    -- Финализируем (дуэль уже заблокирована — finalize_duel увидит обновлённые данные)
+    PERFORM finalize_duel(p_duel_id);
   END IF;
 
   RETURN jsonb_build_object(
@@ -2101,6 +2164,8 @@ BEGIN
     'total_answers', v_total_answers
   );
 EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:submit_answer', SQLERRM,
+    jsonb_build_object('duel_id', p_duel_id, 'user_id', p_user_id, 'q_index', p_question_index));
   RETURN jsonb_build_object('error', SQLERRM);
 END;
 $$;
