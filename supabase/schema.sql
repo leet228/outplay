@@ -354,6 +354,7 @@ DECLARE
   v_creator_time REAL;
   v_opp_time     REAL;
   v_season_id    UUID;
+  v_winner_wins  INTEGER;
 BEGIN
   SELECT * INTO d FROM duels WHERE id = p_duel_id;
 
@@ -369,12 +370,11 @@ BEGIN
     RETURN jsonb_build_object('error', 'scores_incomplete');
   END IF;
 
-  -- Экономика: total_pot = 2 * stake, rake 5% (0.5% гильдии + 4.5% бот)
+  -- Экономика: total_pot = 2 * stake, rake 5% (0.5% гильдии + бот + реферал)
   -- Ставки УЖЕ списаны при матчинге (find_match)
   v_total_pot := d.stake * 2;
   v_rake      := FLOOR(v_total_pot * 5 / 100);       -- 5% рейк
   v_guild_fee := FLOOR(v_total_pot * 5 / 1000);      -- 0.5% гильдии
-  v_bot_fee   := v_rake - v_guild_fee;                -- 4.5% бот
 
   -- Добавить 0.5% в призовой фонд активного сезона гильдий
   SELECT id INTO v_season_id FROM guild_seasons WHERE is_active = true LIMIT 1;
@@ -405,12 +405,37 @@ BEGIN
     END IF;
   END IF;
 
+  -- Обновляем статистику (wins/losses) ДО подсчёта реферального бонуса
+  UPDATE users SET wins = wins + 1 WHERE id = v_winner;
+  UPDATE users SET losses = losses + 1 WHERE id = v_loser;
+
+  -- Реферальный бонус: каждая 3-я победа реферала → 1% от total_pot рефоводу
+  -- Если 3-я победа: бот получает 3.5%, реферовод 1%
+  -- Если нет: бот получает 4.5%, бонуса нет
+  SELECT referrer_id INTO v_ref_id FROM referrals WHERE referred_user_id = v_winner;
+  IF v_ref_id IS NOT NULL THEN
+    SELECT wins INTO v_winner_wins FROM users WHERE id = v_winner;
+    IF v_winner_wins % 3 = 0 THEN
+      -- Каждая 3-я победа: 1% от total_pot рефоводу (из доли бота)
+      v_bonus := GREATEST(1, FLOOR(v_total_pot * 1 / 100));
+      v_bot_fee := v_rake - v_guild_fee - v_bonus;  -- 5% - 0.5% - 1% = 3.5%
+      UPDATE users SET balance = balance + v_bonus WHERE id = v_ref_id;
+      INSERT INTO referral_earnings (referrer_id, from_user_id, duel_id, amount)
+      VALUES (v_ref_id, v_winner, p_duel_id, v_bonus);
+      INSERT INTO transactions (user_id, type, amount, ref_id)
+      VALUES (v_ref_id, 'referral_bonus', v_bonus, p_duel_id);
+    ELSE
+      v_bot_fee := v_rake - v_guild_fee;  -- 4.5%
+    END IF;
+  ELSE
+    v_bot_fee := v_rake - v_guild_fee;  -- 4.5%
+  END IF;
+
   -- Победитель получает pot - rake (ставка уже списана, так что += payout)
   payout := v_total_pot - v_rake;
 
-  -- Обновляем балансы и статистику
-  UPDATE users SET balance = balance + payout, wins = wins + 1 WHERE id = v_winner;
-  UPDATE users SET losses = losses + 1 WHERE id = v_loser;
+  -- Обновляем баланс победителя
+  UPDATE users SET balance = balance + payout WHERE id = v_winner;
 
   -- Обновляем дуэль
   UPDATE duels SET status = 'finished', winner_id = v_winner, finished_at = NOW() WHERE id = p_duel_id;
@@ -419,8 +444,6 @@ BEGIN
   INSERT INTO transactions (user_id, type, amount, ref_id)
   VALUES (v_winner, 'duel_win', payout, p_duel_id),
          (v_loser, 'duel_loss', -d.stake, p_duel_id);
-
-  -- Комиссия бота (записываем как часть duel_win, уже вычтена из payout)
 
   -- Дневная статистика (winner: +payout - stake = чистый выигрыш)
   INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
@@ -432,17 +455,6 @@ BEGIN
   VALUES (v_loser, CURRENT_DATE, -d.stake, 1, 0)
   ON CONFLICT (user_id, date)
   DO UPDATE SET pnl = user_daily_stats.pnl - d.stake, games = user_daily_stats.games + 1;
-
-  -- Реферальный бонус (2% от выигрыша → рефоводу)
-  SELECT referrer_id INTO v_ref_id FROM referrals WHERE referred_user_id = v_winner;
-  IF v_ref_id IS NOT NULL THEN
-    v_bonus := GREATEST(1, payout * 2 / 100);
-    UPDATE users SET balance = balance + v_bonus WHERE id = v_ref_id;
-    INSERT INTO referral_earnings (referrer_id, from_user_id, duel_id, amount)
-    VALUES (v_ref_id, v_winner, p_duel_id, v_bonus);
-    INSERT INTO transactions (user_id, type, amount, ref_id)
-    VALUES (v_ref_id, 'referral_bonus', v_bonus, p_duel_id);
-  END IF;
 
   -- Обновляем PnL гильдий
   PERFORM update_guild_pnl_after_duel(v_winner, payout - d.stake);
