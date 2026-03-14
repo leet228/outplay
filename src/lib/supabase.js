@@ -369,6 +369,25 @@ export async function cancelMatchmaking(userId) {
   if (error) console.error('cancelMatchmaking error:', error)
 }
 
+export async function submitAnswer(duelId, userId, questionIndex, answerIndex, isCorrect, timeSpent) {
+  const { data, error } = await supabase.rpc('submit_answer', {
+    p_duel_id: duelId,
+    p_user_id: userId,
+    p_question_index: questionIndex,
+    p_answer_index: answerIndex,
+    p_is_correct: isCorrect,
+    p_time_spent: timeSpent,
+  })
+  if (error) { console.error('submitAnswer error:', error); return null }
+  return data
+}
+
+export async function finalizeDuel(duelId) {
+  const { data, error } = await supabase.rpc('finalize_duel', { p_duel_id: duelId })
+  if (error) { console.error('finalizeDuel error:', error); return null }
+  return data
+}
+
 export async function getRecentCryptoDeposits(limit = 10) {
   const { data, error } = await supabase
     .from('crypto_processed_txs')

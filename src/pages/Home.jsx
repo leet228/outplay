@@ -197,6 +197,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const [selectedStakes, setSelectedStakes] = useState([])
   const [error, setError] = useState(null) // null | 'balance' | 'server'
   const [searching, setSearching] = useState(false)
+  const [matched, setMatched] = useState(false)
   const [searchTime, setSearchTime] = useState(0)
   const errorTimer = useRef(null)
   const channelRef = useRef(null)
@@ -207,6 +208,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     setSelectedStakes([])
     setError(null)
     setSearching(false)
+    setMatched(false)
     setSearchTime(0)
     cleanupSearch()
   }, [game?.id])
@@ -262,9 +264,13 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
 
   function handleMatchFound(duelId) {
     cleanupSearch()
-    setSearching(false)
+    setMatched(true)
     haptic('heavy')
-    navigate(`/game/${duelId}`)
+    setTimeout(() => {
+      setSearching(false)
+      setMatched(false)
+      navigate(`/game/${duelId}`)
+    }, 1500)
   }
 
   function toggleStake(amount) {
@@ -374,7 +380,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
             </div>
             <div className="sheet-stat-div" />
             <div className="sheet-stat">
-              <span className="sheet-stat-val">30</span>
+              <span className="sheet-stat-val">15</span>
               <span className="sheet-stat-lbl">{t.sheetStatSec}</span>
             </div>
             <div className="sheet-stat-div" />
@@ -432,18 +438,26 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
         {searching && (
           <div className="sheet-search-state">
             <div className="sheet-search-timer">{mm}:{ss}</div>
-            <div className="sheet-search-pulse">{t.sheetSearching || 'Ищем соперника...'}</div>
-            <div className="sheet-search-dots">
-              <span className="sheet-dot" />
-              <span className="sheet-dot" />
-              <span className="sheet-dot" />
+            <div className={`sheet-search-pulse ${matched ? 'matched' : ''}`}>
+              {matched ? (t.sheetMatchFound || 'Соперник найден! Готовим вопросы...') : (t.sheetSearching || 'Ищем соперника...')}
             </div>
+            {!matched && (
+              <div className="sheet-search-dots">
+                <span className="sheet-dot" />
+                <span className="sheet-dot" />
+                <span className="sheet-dot" />
+              </div>
+            )}
           </div>
         )}
 
         {/* CTA */}
         {searching ? (
-          <button className="sheet-cancel-btn" onClick={() => handleCancel(false)}>
+          <button
+            className={`sheet-cancel-btn ${matched ? 'disabled' : ''}`}
+            onClick={() => !matched && handleCancel(false)}
+            disabled={matched}
+          >
             {t.sheetCancel || 'Отменить'}
           </button>
         ) : (

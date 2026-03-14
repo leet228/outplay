@@ -1,20 +1,31 @@
 import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
+import { translations } from '../lib/i18n'
 import './Result.css'
 
 export default function Result() {
   const navigate = useNavigate()
   const { lastResult, resetGame } = useGameStore()
+  const lang = useGameStore((s) => s.lang)
+  const currency = useGameStore((s) => s.currency)
+  const rates = useGameStore((s) => s.rates)
+  const tr = translations[lang] || translations.ru
 
   if (!lastResult) {
     navigate('/')
     return null
   }
 
-  const { score, total } = lastResult
-  const pct = Math.round((score / total) * 100)
-  const isGood = pct >= 70
+  const { won, myScore, oppScore, total, payout, stake, tiebreak, timeDiff } = lastResult
+
+  const isWin = won === true
+
+  function formatCurrency(amount) {
+    const rate = rates[currency?.code] || 1
+    const converted = Math.round(amount * rate)
+    return `${converted} ${currency?.symbol || '⭐'}`
+  }
 
   function handleHome() {
     haptic('light')
@@ -22,36 +33,67 @@ export default function Result() {
     navigate('/')
   }
 
-  function handleRematch() {
+  function handlePlayAgain() {
     haptic('medium')
     resetGame()
-    navigate('/duel')
+    navigate('/')
   }
 
   return (
-    <div className="result">
-      <div className="result-icon">{isGood ? '🏆' : '💀'}</div>
-      <h1 className="result-title">{isGood ? 'Отличный результат!' : 'Не повезло...'}</h1>
-
-      <div className="score-circle">
-        <span className="score-num">{score}</span>
-        <span className="score-total">/ {total}</span>
+    <div className={`result ${isWin ? 'result-win' : 'result-lose'}`}>
+      {/* Icon */}
+      <div className="result-icon">
+        {isWin ? '🏆' : '💀'}
       </div>
 
-      <p className="score-pct">{pct}% правильных ответов</p>
+      {/* Title */}
+      <h1 className="result-title">
+        {isWin ? (tr.resultWin || 'Победа!') : (tr.resultLose || 'Поражение')}
+      </h1>
 
-      <p className="result-note">
-        {isGood
-          ? 'Ждём результата соперника — Stars начислятся автоматически'
-          : 'Ждём результата соперника — итог появится в профиле'}
-      </p>
+      {/* Amount */}
+      <div className={`result-amount ${isWin ? 'win' : 'lose'}`}>
+        {isWin ? `+${formatCurrency(payout)}` : `-${formatCurrency(stake)}`}
+      </div>
 
+      {/* Tiebreak info */}
+      {tiebreak && timeDiff > 0 && (
+        <div className={`result-tiebreak ${isWin ? 'win' : 'lose'}`}>
+          <span className="result-tiebreak-title">
+            Одинаковое количество правильных ответов!
+          </span>
+          <span className="result-tiebreak-detail">
+            {isWin
+              ? `Вы были быстрее на ${timeDiff} сек ⚡`
+              : `Вам не хватило ${timeDiff} сек до победы ⏱️`
+            }
+          </span>
+        </div>
+      )}
+
+      {/* Score */}
+      <div className="result-score-card">
+        <div className="result-score-row">
+          <span className="result-score-label">Вы</span>
+          <div className="result-score-dots" />
+          <span className="result-score-val">{myScore}/{total}</span>
+        </div>
+        {oppScore !== null && oppScore !== undefined && (
+          <div className="result-score-row">
+            <span className="result-score-label">Соперник</span>
+            <div className="result-score-dots" />
+            <span className="result-score-val">{oppScore}/{total}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
       <div className="result-actions">
-        <button className="btn-primary" onClick={handleRematch}>
-          ⚔️ Ещё дуэль
+        <button className="result-btn primary" onClick={handlePlayAgain}>
+          ⚔️ {tr.resultPlayAgain || 'Играть снова'}
         </button>
-        <button className="btn-secondary" onClick={handleHome}>
-          На главную
+        <button className="result-btn secondary" onClick={handleHome}>
+          {tr.resultHome || 'На главную'}
         </button>
       </div>
     </div>

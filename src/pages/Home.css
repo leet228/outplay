@@ -928,6 +928,14 @@
   transform: scale(0.97);
   background: #dc2626;
 }
+.sheet-cancel-btn.disabled {
+  background: #555;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.sheet-search-pulse.matched {
+  color: #22c55e;
+}
 
 /* Play button */
 .sheet-play-btn {

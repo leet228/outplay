@@ -341,12 +341,18 @@ RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 DECLARE
-  d         duels%ROWTYPE;
-  v_winner  UUID;
-  v_loser   UUID;
-  payout    INTEGER;
-  v_ref_id  UUID;
-  v_bonus   INTEGER;
+  d              duels%ROWTYPE;
+  v_winner       UUID;
+  v_loser        UUID;
+  payout         INTEGER;
+  v_total_pot    INTEGER;
+  v_rake         INTEGER;
+  v_guild_fee    INTEGER;
+  v_bot_fee      INTEGER;
+  v_ref_id       UUID;
+  v_bonus        INTEGER;
+  v_creator_time REAL;
+  v_opp_time     REAL;
 BEGIN
   SELECT * INTO d FROM duels WHERE id = p_duel_id;
 
@@ -362,7 +368,12 @@ BEGIN
     RETURN jsonb_build_object('error', 'scores_incomplete');
   END IF;
 
-  payout := d.stake;
+  -- Экономика: total_pot = 2 * stake, rake 5% (0.5% гильдии + 4.5% бот)
+  -- Ставки УЖЕ списаны при матчинге (find_match)
+  v_total_pot := d.stake * 2;
+  v_rake      := FLOOR(v_total_pot * 5 / 100);       -- 5% рейк
+  v_guild_fee := FLOOR(v_total_pot * 5 / 1000);      -- 0.5% гильдии
+  v_bot_fee   := v_rake - v_guild_fee;                -- 4.5% бот
 
   IF d.creator_score > d.opponent_score THEN
     v_winner := d.creator_id;
@@ -371,17 +382,28 @@ BEGIN
     v_winner := d.opponent_id;
     v_loser  := d.creator_id;
   ELSE
-    -- Ничья — ставки возвращаются
-    UPDATE duels SET status = 'finished', finished_at = NOW() WHERE id = p_duel_id;
-    INSERT INTO transactions (user_id, type, amount, ref_id)
-    VALUES (d.creator_id, 'duel_draw', 0, p_duel_id),
-           (d.opponent_id, 'duel_draw', 0, p_duel_id);
-    RETURN jsonb_build_object('result', 'draw');
+    -- Одинаковый счёт — тайбрейк по суммарному времени ответов (быстрее = победа)
+    SELECT COALESCE(SUM(time_spent), 75) INTO v_creator_time
+    FROM duel_answers WHERE duel_id = p_duel_id AND user_id = d.creator_id;
+
+    SELECT COALESCE(SUM(time_spent), 75) INTO v_opp_time
+    FROM duel_answers WHERE duel_id = p_duel_id AND user_id = d.opponent_id;
+
+    IF v_creator_time <= v_opp_time THEN
+      v_winner := d.creator_id;
+      v_loser  := d.opponent_id;
+    ELSE
+      v_winner := d.opponent_id;
+      v_loser  := d.creator_id;
+    END IF;
   END IF;
+
+  -- Победитель получает pot - rake (ставка уже списана, так что += payout)
+  payout := v_total_pot - v_rake;
 
   -- Обновляем балансы и статистику
   UPDATE users SET balance = balance + payout, wins = wins + 1 WHERE id = v_winner;
-  UPDATE users SET balance = balance - payout, losses = losses + 1 WHERE id = v_loser;
+  UPDATE users SET losses = losses + 1 WHERE id = v_loser;
 
   -- Обновляем дуэль
   UPDATE duels SET status = 'finished', winner_id = v_winner, finished_at = NOW() WHERE id = p_duel_id;
@@ -389,18 +411,22 @@ BEGIN
   -- Транзакции
   INSERT INTO transactions (user_id, type, amount, ref_id)
   VALUES (v_winner, 'duel_win', payout, p_duel_id),
-         (v_loser, 'duel_loss', -payout, p_duel_id);
+         (v_loser, 'duel_loss', -d.stake, p_duel_id);
 
-  -- Дневная статистика
+  -- Комиссия бота
+  INSERT INTO transactions (user_id, type, amount, ref_id, description)
+  VALUES (v_winner, 'platform_fee', -v_bot_fee, p_duel_id, 'Комиссия платформы 4.5%');
+
+  -- Дневная статистика (winner: +payout - stake = чистый выигрыш)
   INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
-  VALUES (v_winner, CURRENT_DATE, payout, 1, 1)
+  VALUES (v_winner, CURRENT_DATE, payout - d.stake, 1, 1)
   ON CONFLICT (user_id, date)
-  DO UPDATE SET pnl = user_daily_stats.pnl + payout, games = user_daily_stats.games + 1, wins = user_daily_stats.wins + 1;
+  DO UPDATE SET pnl = user_daily_stats.pnl + (payout - d.stake), games = user_daily_stats.games + 1, wins = user_daily_stats.wins + 1;
 
   INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
-  VALUES (v_loser, CURRENT_DATE, -payout, 1, 0)
+  VALUES (v_loser, CURRENT_DATE, -d.stake, 1, 0)
   ON CONFLICT (user_id, date)
-  DO UPDATE SET pnl = user_daily_stats.pnl - payout, games = user_daily_stats.games + 1;
+  DO UPDATE SET pnl = user_daily_stats.pnl - d.stake, games = user_daily_stats.games + 1;
 
   -- Реферальный бонус (2% от выигрыша → рефоводу)
   SELECT referrer_id INTO v_ref_id FROM referrals WHERE referred_user_id = v_winner;
@@ -414,10 +440,16 @@ BEGIN
   END IF;
 
   -- Обновляем PnL гильдий
-  PERFORM update_guild_pnl_after_duel(v_winner, payout);
-  PERFORM update_guild_pnl_after_duel(v_loser, -payout);
+  PERFORM update_guild_pnl_after_duel(v_winner, payout - d.stake);
+  PERFORM update_guild_pnl_after_duel(v_loser, -d.stake);
 
-  RETURN jsonb_build_object('result', 'win', 'winner', v_winner);
+  RETURN jsonb_build_object(
+    'result', 'win',
+    'winner', v_winner,
+    'tiebreak', (d.creator_score = d.opponent_score),
+    'creator_time', v_creator_time,
+    'opponent_time', v_opp_time
+  );
 EXCEPTION WHEN OTHERS THEN
   PERFORM admin_log('error', 'rpc:finalize_duel', SQLERRM, jsonb_build_object('duel_id', p_duel_id));
   RETURN jsonb_build_object('error', 'internal_error');
@@ -449,6 +481,9 @@ BEGIN
   IF v_my_balance IS NULL THEN
     RETURN jsonb_build_object('status', 'error', 'error', 'user_not_found');
   END IF;
+
+  -- Сортируем ставки по убыванию (приоритет — самая большая)
+  SELECT ARRAY(SELECT unnest(p_stakes) ORDER BY 1 DESC) INTO p_stakes;
 
   -- Перебираем каждую ставку — ищем матч
   FOREACH v_stake IN ARRAY p_stakes LOOP
@@ -498,12 +533,12 @@ BEGIN
   END IF;
 
   -- Матч найден! v_opponent и v_stake заполнены
-  -- Выбираем 10 случайных вопросов
+  -- Выбираем 5 случайных вопросов
   SELECT ARRAY(
     SELECT id FROM questions
     WHERE category = p_category
     ORDER BY RANDOM()
-    LIMIT 10
+    LIMIT 5
   ) INTO v_question_ids;
 
   -- Создаём дуэль
@@ -1970,4 +2005,106 @@ $$;
 -- 11. find_match             — атомарный поиск соперника
 -- 12. cancel_matchmaking     — отмена поиска
 -- 13. cleanup_matchmaking_queue — очистка зависших
+-- 14. submit_answer             — запись ответа + авто-финализация
 -- =============================================
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  DUEL ANSWERS                             ║
+-- ╚═══════════════════════════════════════════╝
+
+CREATE TABLE IF NOT EXISTS duel_answers (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  duel_id         UUID NOT NULL REFERENCES duels(id) ON DELETE CASCADE,
+  user_id         UUID NOT NULL REFERENCES users(id),
+  question_index  INTEGER NOT NULL CHECK (question_index BETWEEN 0 AND 4),
+  answer_index    INTEGER,                     -- null = таймаут
+  is_correct      BOOLEAN NOT NULL DEFAULT false,
+  time_spent      REAL NOT NULL DEFAULT 15.0,  -- секунды на ответ
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(duel_id, user_id, question_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_duel_answers_duel ON duel_answers(duel_id);
+
+ALTER TABLE duel_answers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "duel_answers_all" ON duel_answers FOR ALL USING (true) WITH CHECK (true);
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  RPC: submit_answer                       ║
+-- ╚═══════════════════════════════════════════╝
+
+DROP FUNCTION IF EXISTS submit_answer(UUID, UUID, INTEGER, INTEGER, BOOLEAN, REAL);
+
+CREATE OR REPLACE FUNCTION submit_answer(
+  p_duel_id        UUID,
+  p_user_id        UUID,
+  p_question_index INTEGER,
+  p_answer_index   INTEGER,     -- null для таймаута
+  p_is_correct     BOOLEAN,
+  p_time_spent     REAL
+)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_both_count INTEGER;
+  v_total_answers INTEGER;
+  v_duel duels%ROWTYPE;
+BEGIN
+  -- Записываем ответ
+  INSERT INTO duel_answers (duel_id, user_id, question_index, answer_index, is_correct, time_spent)
+  VALUES (p_duel_id, p_user_id, p_question_index, p_answer_index, p_is_correct, p_time_spent)
+  ON CONFLICT (duel_id, user_id, question_index) DO NOTHING;
+
+  -- Сколько игроков ответили на ЭТОТ вопрос
+  SELECT COUNT(*) INTO v_both_count
+  FROM duel_answers
+  WHERE duel_id = p_duel_id AND question_index = p_question_index;
+
+  -- Всего ответов в дуэли (оба игрока, все вопросы)
+  SELECT COUNT(*) INTO v_total_answers
+  FROM duel_answers
+  WHERE duel_id = p_duel_id;
+
+  -- Если оба ответили на все 5 вопросов (10 ответов) — обновляем scores
+  IF v_total_answers >= 10 THEN
+    SELECT * INTO v_duel FROM duels WHERE id = p_duel_id;
+    IF v_duel.status = 'active' THEN
+      -- Считаем очки каждого
+      UPDATE duels SET
+        creator_score = (SELECT COUNT(*) FROM duel_answers WHERE duel_id = p_duel_id AND user_id = v_duel.creator_id AND is_correct = true),
+        opponent_score = (SELECT COUNT(*) FROM duel_answers WHERE duel_id = p_duel_id AND user_id = v_duel.opponent_id AND is_correct = true)
+      WHERE id = p_duel_id;
+      -- Финализируем
+      PERFORM finalize_duel(p_duel_id);
+    END IF;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'answered_count', v_both_count,
+    'total_answers', v_total_answers
+  );
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('error', SQLERRM);
+END;
+$$;
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  5 тестовых вопросов (general, ru)        ║
+-- ╚═══════════════════════════════════════════╝
+
+INSERT INTO questions (category, question, options, correct_index, difficulty, lang) VALUES
+('general', 'Какая планета Солнечной системы самая большая?',
+ '["Сатурн", "Юпитер", "Нептун", "Уран"]'::JSONB, 1, 1, 'ru'),
+
+('general', 'Сколько костей в теле взрослого человека?',
+ '["186", "206", "226", "256"]'::JSONB, 1, 2, 'ru'),
+
+('general', 'Какой химический элемент обозначается символом Au?',
+ '["Серебро", "Алюминий", "Золото", "Аргон"]'::JSONB, 2, 1, 'ru'),
+
+('general', 'В каком году человек впервые побывал на Луне?',
+ '["1965", "1967", "1969", "1971"]'::JSONB, 2, 1, 'ru'),
+
+('general', 'Какой океан самый глубокий?',
+ '["Атлантический", "Индийский", "Тихий", "Северный Ледовитый"]'::JSONB, 2, 1, 'ru');

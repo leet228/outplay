@@ -5,67 +5,170 @@
   align-items: center;
   justify-content: center;
   padding: 24px 20px;
-  padding-top: calc(var(--safe-top) + 24px);
-  padding-bottom: calc(var(--safe-bottom) + 24px);
+  padding-top: calc(var(--safe-top, 0px) + 24px);
+  padding-bottom: calc(var(--safe-bottom, 0px) + 24px);
   gap: 20px;
   text-align: center;
+  animation: resultFadeIn 0.5s ease;
 }
 
+@keyframes resultFadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Icon */
 .result-icon {
   font-size: 72px;
+  animation: resultBounce 0.6s ease;
 }
 
+@keyframes resultBounce {
+  0%   { transform: scale(0); }
+  50%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Title */
 .result-title {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 800;
   margin: 0;
+  color: var(--text);
 }
 
-.score-circle {
-  width: 140px;
-  height: 140px;
-  border-radius: 50%;
-  border: 4px solid var(--accent);
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 4px;
-}
-
-.score-num {
-  font-size: 52px;
+.result-win .result-title { color: #22c55e; }
+.result-lose .result-title { color: #ef4444; }
+/* Amount */
+.result-amount {
+  font-size: 32px;
   font-weight: 900;
-  color: var(--accent);
-  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  animation: resultSlideUp 0.5s ease 0.2s both;
 }
 
-.score-total {
-  font-size: 22px;
+.result-amount.win { color: #22c55e; }
+.result-amount.lose { color: #ef4444; }
+
+@keyframes resultSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Tiebreak */
+.result-tiebreak {
+  width: 100%;
+  max-width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+  animation: resultSlideUp 0.5s ease 0.25s both;
+}
+
+.result-tiebreak.win {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.result-tiebreak.lose {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.result-tiebreak-title {
+  font-size: 13px;
   color: var(--text-muted);
-  line-height: 1;
+  font-weight: 500;
 }
 
-.score-pct {
-  font-size: 16px;
-  color: var(--text-muted);
-  margin: 0;
+.result-tiebreak-detail {
+  font-size: 15px;
+  font-weight: 700;
 }
 
-.result-note {
+.result-tiebreak.win .result-tiebreak-detail { color: #22c55e; }
+.result-tiebreak.lose .result-tiebreak-detail { color: #ef4444; }
+
+/* Score Card */
+.result-score-card {
+  width: 100%;
+  max-width: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: resultSlideUp 0.5s ease 0.3s both;
+}
+
+.result-score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-score-label {
   font-size: 14px;
   color: var(--text-muted);
-  max-width: 280px;
-  line-height: 1.5;
-  background: var(--surface);
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin: 0;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
+.result-score-dots {
+  flex: 1;
+  border-bottom: 1px dashed var(--border);
+  margin-bottom: 2px;
+}
+
+.result-score-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Actions */
 .result-actions {
   width: 100%;
+  max-width: 300px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 8px;
+  animation: resultSlideUp 0.5s ease 0.4s both;
+}
+
+.result-btn {
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.result-btn:active {
+  transform: scale(0.97);
+}
+
+.result-btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.result-btn.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
 }

@@ -93,12 +93,12 @@ const useGameStore = create((set, get) => ({
   currentIndex: 0,
   answers: [],
   setQuestions: (questions) => set({ questions, currentIndex: 0, answers: [] }),
-  answerQuestion: (answerIndex) => {
+  answerQuestion: (answerIndex, timeSpent = 0) => {
     const { currentIndex, answers, questions } = get()
     const question = questions[currentIndex]
-    const isCorrect = answerIndex === question.correct_index
+    const isCorrect = answerIndex !== null && answerIndex === question.correct_index
     set({
-      answers: [...answers, { questionId: question.id, answerIndex, isCorrect }],
+      answers: [...answers, { questionId: question.id, answerIndex, isCorrect, timeSpent }],
       currentIndex: currentIndex + 1,
     })
     return isCorrect
