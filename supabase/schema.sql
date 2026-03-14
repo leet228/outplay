@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS duels (
   creator_id      UUID NOT NULL REFERENCES users(id),
   opponent_id     UUID REFERENCES users(id),
   category        TEXT NOT NULL,
-  stake           INTEGER NOT NULL DEFAULT 100
-                  CHECK (stake IN (100, 300, 500, 1000)),
+  stake           INTEGER NOT NULL DEFAULT 50
+                  CHECK (stake IN (50, 100, 300, 500, 1000)),
   status          TEXT NOT NULL DEFAULT 'waiting'
                   CHECK (status IN ('waiting','active','finished','cancelled')),
   creator_score   INTEGER,
@@ -74,6 +74,23 @@ CREATE INDEX IF NOT EXISTS idx_duels_status ON duels(status);
 CREATE INDEX IF NOT EXISTS idx_duels_creator ON duels(creator_id);
 CREATE INDEX IF NOT EXISTS idx_duels_opponent ON duels(opponent_id);
 CREATE INDEX IF NOT EXISTS idx_duels_created ON duels(created_at DESC);
+
+-- ╔═══════════════════════════════════════════╗
+-- ║  3b. MATCHMAKING QUEUE                    ║
+-- ╚═══════════════════════════════════════════╝
+
+CREATE TABLE IF NOT EXISTS matchmaking_queue (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  category    TEXT NOT NULL
+              CHECK (category IN ('general','history','science','sport','movies','music')),
+  stake       INTEGER NOT NULL CHECK (stake IN (50, 100, 300, 500, 1000)),
+  joined_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mmq_match
+  ON matchmaking_queue(category, stake, joined_at ASC);
 
 -- ╔═══════════════════════════════════════════╗
 -- ║  4. FRIENDS                               ║
@@ -404,6 +421,125 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   PERFORM admin_log('error', 'rpc:finalize_duel', SQLERRM, jsonb_build_object('duel_id', p_duel_id));
   RETURN jsonb_build_object('error', 'internal_error');
+END;
+$$;
+
+-- ── Matchmaking: find_match ──────────────────────────────────────
+-- Атомарный поиск соперника. FOR UPDATE SKIP LOCKED = без гонок.
+CREATE OR REPLACE FUNCTION find_match(
+  p_user_id  UUID,
+  p_category TEXT,
+  p_stake    INTEGER
+)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_opponent      matchmaking_queue%ROWTYPE;
+  v_duel_id       UUID;
+  v_question_ids  UUID[];
+  v_my_balance    INTEGER;
+  v_opp_balance   INTEGER;
+BEGIN
+  -- Проверяем баланс вызывающего
+  SELECT balance INTO v_my_balance FROM users WHERE id = p_user_id;
+  IF v_my_balance IS NULL OR v_my_balance < p_stake THEN
+    RETURN jsonb_build_object('status', 'error', 'error', 'insufficient_balance');
+  END IF;
+
+  -- Ищем первого ждущего с такой же category+stake (атомарно)
+  SELECT * INTO v_opponent
+  FROM matchmaking_queue
+  WHERE category = p_category
+    AND stake = p_stake
+    AND user_id != p_user_id
+  ORDER BY joined_at ASC
+  LIMIT 1
+  FOR UPDATE SKIP LOCKED;
+
+  IF v_opponent IS NULL THEN
+    -- Нет соперника → встаём в очередь
+    INSERT INTO matchmaking_queue (user_id, category, stake)
+    VALUES (p_user_id, p_category, p_stake)
+    ON CONFLICT (user_id) DO UPDATE
+      SET category = EXCLUDED.category,
+          stake = EXCLUDED.stake,
+          joined_at = NOW();
+    RETURN jsonb_build_object('status', 'queued');
+  END IF;
+
+  -- Проверяем баланс соперника
+  SELECT balance INTO v_opp_balance FROM users WHERE id = v_opponent.user_id;
+  IF v_opp_balance IS NULL OR v_opp_balance < p_stake THEN
+    -- Соперник не может → удаляем его, встаём сами
+    DELETE FROM matchmaking_queue WHERE user_id = v_opponent.user_id;
+    INSERT INTO matchmaking_queue (user_id, category, stake)
+    VALUES (p_user_id, p_category, p_stake)
+    ON CONFLICT (user_id) DO UPDATE
+      SET category = EXCLUDED.category, stake = EXCLUDED.stake, joined_at = NOW();
+    RETURN jsonb_build_object('status', 'queued');
+  END IF;
+
+  -- Выбираем 10 случайных вопросов
+  SELECT ARRAY(
+    SELECT id FROM questions
+    WHERE category = p_category
+    ORDER BY RANDOM()
+    LIMIT 10
+  ) INTO v_question_ids;
+
+  -- Создаём дуэль
+  INSERT INTO duels (creator_id, opponent_id, category, stake, status, question_ids)
+  VALUES (v_opponent.user_id, p_user_id, p_category, p_stake, 'active', v_question_ids)
+  RETURNING id INTO v_duel_id;
+
+  -- Удаляем обоих из очереди
+  DELETE FROM matchmaking_queue WHERE user_id IN (p_user_id, v_opponent.user_id);
+
+  -- Списываем ставку с обоих
+  UPDATE users SET balance = balance - p_stake WHERE id = p_user_id;
+  UPDATE users SET balance = balance - p_stake WHERE id = v_opponent.user_id;
+
+  -- Транзакции
+  INSERT INTO transactions (user_id, type, amount, description)
+  VALUES
+    (p_user_id, 'duel_stake', -p_stake, 'Ставка на дуэль'),
+    (v_opponent.user_id, 'duel_stake', -p_stake, 'Ставка на дуэль');
+
+  RETURN jsonb_build_object(
+    'status', 'matched',
+    'duel_id', v_duel_id,
+    'opponent_id', v_opponent.user_id
+  );
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:find_match', SQLERRM,
+    jsonb_build_object('user_id', p_user_id, 'category', p_category, 'stake', p_stake));
+  RETURN jsonb_build_object('status', 'error', 'error', SQLERRM);
+END;
+$$;
+
+-- ── Matchmaking: cancel ─────────────────────────────────────────
+CREATE OR REPLACE FUNCTION cancel_matchmaking(p_user_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  DELETE FROM matchmaking_queue WHERE user_id = p_user_id;
+END;
+$$;
+
+-- ── Matchmaking: cleanup stale queue entries ────────────────────
+CREATE OR REPLACE FUNCTION cleanup_matchmaking_queue()
+RETURNS INTEGER
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_count INTEGER;
+BEGIN
+  DELETE FROM matchmaking_queue
+  WHERE joined_at < NOW() - INTERVAL '3 minutes';
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
 END;
 $$;
 
@@ -1799,8 +1935,9 @@ $$;
 -- 16. user_daily_stats    — дневной PnL (график профиля)
 -- 17. push_tokens         — токены уведомлений
 -- 18. crypto_processed_txs — обработанные крипто-депозиты
+-- 19. matchmaking_queue    — очередь поиска соперников
 --
--- 8 RPC функций:
+-- RPC функций:
 --  1. increment_balance    — атомарный баланс
 --  2. finalize_duel        — результат дуэли + рефбонус + гильдии
 --  3. update_guild_pnl_after_duel — PnL гильдии/участника
@@ -1811,4 +1948,7 @@ $$;
 --  8. get_referral_stats   — доходы по периодам
 --  9. get_user_profile     — профиль (rank + daily_stats + total_pnl)
 -- 10. process_crypto_deposit — зачисление крипто-депозита
+-- 11. find_match             — атомарный поиск соперника
+-- 12. cancel_matchmaking     — отмена поиска
+-- 13. cleanup_matchmaking_queue — очистка зависших
 -- =============================================

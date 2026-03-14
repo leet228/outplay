@@ -353,6 +353,22 @@ export async function getBotStarsBalance() {
   }
 }
 
+// ── Matchmaking ─────────────────────────────────
+export async function findMatch(userId, category, stake) {
+  const { data, error } = await supabase.rpc('find_match', {
+    p_user_id: userId,
+    p_category: category,
+    p_stake: stake,
+  })
+  if (error) { console.error('findMatch error:', error); return null }
+  return data
+}
+
+export async function cancelMatchmaking(userId) {
+  const { error } = await supabase.rpc('cancel_matchmaking', { p_user_id: userId })
+  if (error) console.error('cancelMatchmaking error:', error)
+}
+
 export async function getRecentCryptoDeposits(limit = 10) {
   const { data, error } = await supabase
     .from('crypto_processed_txs')

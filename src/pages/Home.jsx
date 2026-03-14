@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
+import { supabase } from '../lib/supabase'
+import { findMatch, cancelMatchmaking } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
@@ -186,16 +188,27 @@ function BannerCarousel({ t }) {
 }
 
 /* ── Game Sheet ── */
-const STAKES = [100, 300, 500, 1000]
+const STAKES = [50, 100, 300, 500, 1000]
+const MAX_SEARCH_TIME = 120
 
 function GameSheet({ game, t, balance, currency, rates, onClose }) {
+  const navigate = useNavigate()
+  const { user, appSettings } = useGameStore()
   const [selectedStakes, setSelectedStakes] = useState([])
   const [error, setError] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [searchTime, setSearchTime] = useState(0)
   const errorTimer = useRef(null)
+  const channelRef = useRef(null)
+  const pollRef = useRef(null)
+  const timerRef = useRef(null)
 
   useEffect(() => {
     setSelectedStakes([])
     setError(false)
+    setSearching(false)
+    setSearchTime(0)
+    cleanupSearch()
   }, [game?.id])
 
   // Lock body scroll when sheet is open
@@ -213,15 +226,49 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (!tg) return
     if (game) {
       tg.BackButton.show()
-      tg.BackButton.onClick(onClose)
+      const handler = searching ? () => handleCancel(false) : onClose
+      tg.BackButton.onClick(handler)
+      return () => tg.BackButton.offClick(handler)
     } else {
       tg.BackButton.hide()
       tg.BackButton.offClick(onClose)
     }
     return () => tg.BackButton.offClick(onClose)
-  }, [game, onClose])
+  }, [game, onClose, searching])
+
+  // Search timer
+  useEffect(() => {
+    if (!searching) return
+    timerRef.current = setInterval(() => {
+      setSearchTime(prev => {
+        if (prev + 1 >= MAX_SEARCH_TIME) {
+          handleCancel(true)
+          return prev
+        }
+        return prev + 1
+      })
+    }, 1000)
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [searching])
+
+  // Cleanup on unmount
+  useEffect(() => { return () => cleanupSearch() }, [])
+
+  function cleanupSearch() {
+    if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+  }
+
+  function handleMatchFound(duelId) {
+    cleanupSearch()
+    setSearching(false)
+    haptic('heavy')
+    navigate(`/game/${duelId}`)
+  }
 
   function toggleStake(amount) {
+    if (searching) return
     if (amount > balance) {
       haptic('light')
       clearTimeout(errorTimer.current)
@@ -235,17 +282,76 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     )
   }
 
-  function handlePlay() {
+  async function handlePlay() {
     if (selectedStakes.length === 0) return
+    if (appSettings?.game_creation === false) return
     haptic('medium')
-    // TODO: navigate to matchmaking
+
+    // Use the lowest selected stake for matchmaking
+    const stake = Math.min(...selectedStakes)
+
+    const result = await findMatch(user.id, 'general', stake)
+
+    if (!result || result.status === 'error') {
+      setError(true)
+      setTimeout(() => setError(false), 2000)
+      return
+    }
+
+    if (result.status === 'matched') {
+      handleMatchFound(result.duel_id)
+      return
+    }
+
+    // Queued — show searching UI
+    setSearching(true)
+    setSearchTime(0)
+
+    // Realtime subscription
+    const channel = supabase
+      .channel(`matchmaking-${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'duels',
+        filter: `creator_id=eq.${user.id}`,
+      }, (payload) => {
+        if (payload.new?.status === 'active') {
+          handleMatchFound(payload.new.id)
+        }
+      })
+      .subscribe()
+    channelRef.current = channel
+
+    // Fallback polling
+    pollRef.current = setInterval(async () => {
+      const { data } = await supabase
+        .from('duels')
+        .select('id')
+        .or(`creator_id.eq.${user.id},opponent_id.eq.${user.id}`)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (data) handleMatchFound(data.id)
+    }, 3000)
+  }
+
+  async function handleCancel(timeout = false) {
+    cleanupSearch()
+    if (user?.id) await cancelMatchmaking(user.id)
+    setSearching(false)
+    setSearchTime(0)
+    haptic('light')
   }
 
   const accent = game?.accent ?? '#3B82F6'
+  const mm = String(Math.floor(searchTime / 60)).padStart(2, '0')
+  const ss = String(searchTime % 60).padStart(2, '0')
 
   return (
     <>
-      <div className={`sheet-overlay ${game ? 'visible' : ''}`} onClick={onClose} />
+      <div className={`sheet-overlay ${game ? 'visible' : ''}`} onClick={searching ? undefined : onClose} />
       <div className={`game-sheet ${game ? 'open' : ''}`}>
         <div className="sheet-handle" />
 
@@ -260,72 +366,96 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
           <span className="sheet-subtitle">1 vs 1</span>
         </div>
 
-        {/* Stats row */}
-        <div className="sheet-stats-row">
-          <div className="sheet-stat">
-            <span className="sheet-stat-val">5</span>
-            <span className="sheet-stat-lbl">{t.sheetStatQ}</span>
+        {/* Stats row + Rules — hide when searching */}
+        <div className={`sheet-collapsible ${searching ? 'collapsed' : ''}`}>
+          <div className="sheet-stats-row">
+            <div className="sheet-stat">
+              <span className="sheet-stat-val">5</span>
+              <span className="sheet-stat-lbl">{t.sheetStatQ}</span>
+            </div>
+            <div className="sheet-stat-div" />
+            <div className="sheet-stat">
+              <span className="sheet-stat-val">30</span>
+              <span className="sheet-stat-lbl">{t.sheetStatSec}</span>
+            </div>
+            <div className="sheet-stat-div" />
+            <div className="sheet-stat">
+              <span className="sheet-stat-val">1v1</span>
+              <span className="sheet-stat-lbl">{t.sheetStatMode}</span>
+            </div>
           </div>
-          <div className="sheet-stat-div" />
-          <div className="sheet-stat">
-            <span className="sheet-stat-val">30</span>
-            <span className="sheet-stat-lbl">{t.sheetStatSec}</span>
-          </div>
-          <div className="sheet-stat-div" />
-          <div className="sheet-stat">
-            <span className="sheet-stat-val">1v1</span>
-            <span className="sheet-stat-lbl">{t.sheetStatMode}</span>
-          </div>
-        </div>
 
-        {/* Rules */}
-        <div className="sheet-rules">
-          <div className="sheet-rule">
-            <div className="sheet-rule-dot" style={{ background: accent }} />
-            <span>{t.sheetRule1}</span>
-          </div>
-          <div className="sheet-rule">
-            <div className="sheet-rule-dot" style={{ background: accent }} />
-            <span>{t.sheetRule2}</span>
-          </div>
-          <div className="sheet-rule">
-            <div className="sheet-rule-dot" style={{ background: accent }} />
-            <span>{t.sheetRule3}</span>
+          <div className="sheet-rules">
+            <div className="sheet-rule">
+              <div className="sheet-rule-dot" style={{ background: accent }} />
+              <span>{t.sheetRule1}</span>
+            </div>
+            <div className="sheet-rule">
+              <div className="sheet-rule-dot" style={{ background: accent }} />
+              <span>{t.sheetRule2}</span>
+            </div>
+            <div className="sheet-rule">
+              <div className="sheet-rule-dot" style={{ background: accent }} />
+              <span>{t.sheetRule3}</span>
+            </div>
           </div>
         </div>
 
         {/* Stakes */}
-        <div className="sheet-stakes-section">
-          <span className="sheet-label">{t.sheetStakeLabel}</span>
-          <span className="sheet-stake-hint">{t.sheetStakeHint}</span>
+        <div className={`sheet-stakes-section ${searching ? 'sheet-stakes-searching' : ''}`}>
+          {!searching && <span className="sheet-label">{t.sheetStakeLabel}</span>}
+          {!searching && <span className="sheet-stake-hint">{t.sheetStakeHint}</span>}
           <div className="sheet-stakes-row">
             {STAKES.map(amount => {
               const canAfford = amount <= balance
               const isActive = selectedStakes.includes(amount)
+              if (searching && !isActive) return null
               return (
                 <button
                   key={amount}
-                  className={`sheet-stake ${isActive ? 'active' : ''} ${!canAfford ? 'locked' : ''}`}
+                  className={`sheet-stake ${isActive ? 'active' : ''} ${!canAfford ? 'locked' : ''} ${searching ? 'sheet-stake-big' : ''}`}
                   onClick={() => toggleStake(amount)}
+                  disabled={searching}
                 >
                   {formatCurrency(amount, currency, rates)}
                 </button>
               )
             })}
           </div>
-          <div className={`sheet-error ${error ? 'visible' : ''}`}>
-            {t.sheetInsufficientBalance}
-          </div>
+          {!searching && (
+            <div className={`sheet-error ${error ? 'visible' : ''}`}>
+              {t.sheetInsufficientBalance}
+            </div>
+          )}
         </div>
 
+        {/* Search state */}
+        {searching && (
+          <div className="sheet-search-state">
+            <div className="sheet-search-timer">{mm}:{ss}</div>
+            <div className="sheet-search-pulse">{t.sheetSearching || 'Ищем соперника...'}</div>
+            <div className="sheet-search-dots">
+              <span className="sheet-dot" />
+              <span className="sheet-dot" />
+              <span className="sheet-dot" />
+            </div>
+          </div>
+        )}
+
         {/* CTA */}
-        <button
-          className="sheet-play-btn"
-          disabled={selectedStakes.length === 0}
-          onClick={handlePlay}
-        >
-          {t.sheetPlay}
-        </button>
+        {searching ? (
+          <button className="sheet-cancel-btn" onClick={() => handleCancel(false)}>
+            {t.sheetCancel || 'Отменить'}
+          </button>
+        ) : (
+          <button
+            className="sheet-play-btn"
+            disabled={selectedStakes.length === 0}
+            onClick={handlePlay}
+          >
+            {t.sheetPlay}
+          </button>
+        )}
       </div>
     </>
   )

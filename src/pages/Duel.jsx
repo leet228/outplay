@@ -15,10 +15,11 @@ const CATEGORIES = [
 ]
 
 const STAKES = [
-  { stars: 10, label: '10 ⭐' },
   { stars: 50, label: '50 ⭐' },
   { stars: 100, label: '100 ⭐' },
-  { stars: 200, label: '200 ⭐' },
+  { stars: 300, label: '300 ⭐' },
+  { stars: 500, label: '500 ⭐' },
+  { stars: 1000, label: '1000 ⭐' },
 ]
 
 export default function Duel() {
@@ -26,7 +27,7 @@ export default function Duel() {
   const { user, balance, appSettings } = useGameStore()
   const [tab, setTab] = useState('find') // 'find' | 'create'
   const [category, setCategory] = useState('general')
-  const [stake, setStake] = useState(10)
+  const [stake, setStake] = useState(50)
   const [loading, setLoading] = useState(false)
 
   // Pending duels waiting for opponent

@@ -32,6 +32,8 @@ export const translations = {
     sheetStakeLabel: 'Ставка',
     sheetStakeHint: 'Можно выбрать несколько — матч начнётся по той ставке, где первым найдётся соперник',
     sheetPlay: 'В бой!',
+    sheetSearching: 'Ищем соперника...',
+    sheetCancel: 'Отменить',
     sheetInsufficientBalance: 'Недостаточно средств на балансе',
 
     gamesLabel: 'Игры',
@@ -246,6 +248,8 @@ export const translations = {
     sheetRule3: 'Most correct answers wins; ties broken by speed',
     sheetStakeLabel: 'Stake',
     sheetPlay: 'Battle!',
+    sheetSearching: 'Finding opponent...',
+    sheetCancel: 'Cancel',
     sheetStakeHint: 'Pick multiple stakes — match starts at whichever finds an opponent first',
     sheetInsufficientBalance: 'Insufficient balance',
 

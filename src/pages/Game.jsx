@@ -46,14 +46,26 @@ export default function Game() {
     setDuel(duelData)
     setActiveDuel(duelData)
 
-    const { data: qs } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('category', duelData.category)
-      .limit(QUESTION_COUNT)
-      .order('RANDOM()')
+    // Load questions from pre-selected question_ids (same for both players)
+    let qs = []
+    if (duelData.question_ids && duelData.question_ids.length > 0) {
+      const { data } = await supabase
+        .from('questions')
+        .select('*')
+        .in('id', duelData.question_ids)
+      qs = data ?? []
+    } else {
+      // Fallback: random questions (legacy duels without question_ids)
+      const { data } = await supabase
+        .from('questions')
+        .select('*')
+        .eq('category', duelData.category)
+        .limit(QUESTION_COUNT)
+        .order('RANDOM()')
+      qs = data ?? []
+    }
 
-    setQuestions(qs ?? [])
+    setQuestions(qs)
     setLoading(false)
   }
 
