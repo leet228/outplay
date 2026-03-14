@@ -758,6 +758,8 @@
 .sheet-stakes-row {
   display: flex;
   gap: 8px;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .sheet-stake {
@@ -840,15 +842,22 @@
 }
 .sheet-stakes-searching .sheet-stakes-row {
   justify-content: center;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  width: 100%;
 }
 .sheet-stake-big {
-  flex: none;
-  padding: 14px 32px;
-  font-size: 18px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 14px 8px;
+  font-size: 16px;
   font-weight: 800;
   border-color: var(--accent);
   background: var(--accent-dim);
   color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Search state */

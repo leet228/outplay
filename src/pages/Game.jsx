@@ -41,6 +41,7 @@ export default function Game() {
   const channelRef = useRef(null)
   const pollRef = useRef(null)
   const submittingRef = useRef(false)
+  const advancingRef = useRef(false)
 
   useEffect(() => {
     loadDuel()
@@ -51,12 +52,12 @@ export default function Game() {
   useEffect(() => {
     if (loading || finished) return
     if (timeLeft <= 0) {
-      if (!submittingRef.current && !confirmed) {
+      if (!submittingRef.current) {
         // Not yet answered — auto-submit timeout
         handleTimeout()
       }
-      // If already confirmed and timer ran out — do nothing,
-      // onBothAnswered will handle advancing
+      // If already submitted and timer ran out — do nothing,
+      // onBothAnswered will handle advancing via realtime/poll
       return
     }
     timerRef.current = setTimeout(() => setTimeLeft(s => s - 1), 1000)
@@ -173,6 +174,10 @@ export default function Game() {
   }
 
   function onBothAnswered() {
+    // Guard: prevent double-fire from realtime + poll race condition
+    if (advancingRef.current) return
+    advancingRef.current = true
+
     // Cleanup listeners
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -201,6 +206,7 @@ export default function Game() {
       setShowResult(false)
       setTimeLeft(TIME_PER_QUESTION)
       submittingRef.current = false
+      advancingRef.current = false
       setSlideClass('slide-in')
       setTimeout(() => setSlideClass(''), 400)
     }, 350)
