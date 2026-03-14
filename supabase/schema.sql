@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS matchmaking_queue (
               CHECK (category IN ('general','history','science','sport','movies','music')),
   stake       INTEGER NOT NULL CHECK (stake IN (50, 100, 300, 500, 1000)),
   joined_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(user_id)
+  UNIQUE(user_id, stake)
 );
 
 CREATE INDEX IF NOT EXISTS idx_mmq_match
@@ -425,11 +425,12 @@ END;
 $$;
 
 -- ── Matchmaking: find_match ──────────────────────────────────────
--- Атомарный поиск соперника. FOR UPDATE SKIP LOCKED = без гонок.
+-- Атомарный поиск соперника. Принимает массив ставок — ищет по всем.
+-- FOR UPDATE SKIP LOCKED = без гонок при 100k онлайн.
 CREATE OR REPLACE FUNCTION find_match(
   p_user_id  UUID,
   p_category TEXT,
-  p_stake    INTEGER
+  p_stakes   INTEGER[]
 )
 RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER
@@ -440,46 +441,63 @@ DECLARE
   v_question_ids  UUID[];
   v_my_balance    INTEGER;
   v_opp_balance   INTEGER;
+  v_stake         INTEGER;
+  v_matched       BOOLEAN := false;
 BEGIN
-  -- Проверяем баланс вызывающего
+  -- Проверяем баланс вызывающего (минимальная ставка)
   SELECT balance INTO v_my_balance FROM users WHERE id = p_user_id;
-  IF v_my_balance IS NULL OR v_my_balance < p_stake THEN
-    RETURN jsonb_build_object('status', 'error', 'error', 'insufficient_balance');
+  IF v_my_balance IS NULL THEN
+    RETURN jsonb_build_object('status', 'error', 'error', 'user_not_found');
   END IF;
 
-  -- Ищем первого ждущего с такой же category+stake (атомарно)
-  SELECT * INTO v_opponent
-  FROM matchmaking_queue
-  WHERE category = p_category
-    AND stake = p_stake
-    AND user_id != p_user_id
-  ORDER BY joined_at ASC
-  LIMIT 1
-  FOR UPDATE SKIP LOCKED;
+  -- Перебираем каждую ставку — ищем матч
+  FOREACH v_stake IN ARRAY p_stakes LOOP
+    -- Пропускаем ставки которые не можем себе позволить
+    IF v_my_balance < v_stake THEN
+      CONTINUE;
+    END IF;
 
-  IF v_opponent IS NULL THEN
-    -- Нет соперника → встаём в очередь
-    INSERT INTO matchmaking_queue (user_id, category, stake)
-    VALUES (p_user_id, p_category, p_stake)
-    ON CONFLICT (user_id) DO UPDATE
-      SET category = EXCLUDED.category,
-          stake = EXCLUDED.stake,
-          joined_at = NOW();
+    -- Ищем соперника с такой же category+stake (атомарно)
+    SELECT * INTO v_opponent
+    FROM matchmaking_queue
+    WHERE category = p_category
+      AND stake = v_stake
+      AND user_id != p_user_id
+    ORDER BY joined_at ASC
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED;
+
+    IF v_opponent IS NOT NULL THEN
+      -- Проверяем баланс соперника
+      SELECT balance INTO v_opp_balance FROM users WHERE id = v_opponent.user_id;
+      IF v_opp_balance IS NOT NULL AND v_opp_balance >= v_stake THEN
+        v_matched := true;
+        EXIT; -- нашли матч, выходим из цикла
+      ELSE
+        -- Соперник не может — удаляем его из очереди
+        DELETE FROM matchmaking_queue WHERE id = v_opponent.id;
+        v_opponent := NULL;
+      END IF;
+    END IF;
+  END LOOP;
+
+  IF NOT v_matched THEN
+    -- Не нашли соперника — встаём в очередь по всем доступным ставкам
+    -- Сначала удаляем старые записи этого юзера
+    DELETE FROM matchmaking_queue WHERE user_id = p_user_id;
+    -- Вставляем по каждой ставке
+    FOREACH v_stake IN ARRAY p_stakes LOOP
+      IF v_my_balance >= v_stake THEN
+        INSERT INTO matchmaking_queue (user_id, category, stake)
+        VALUES (p_user_id, p_category, v_stake)
+        ON CONFLICT (user_id, stake) DO UPDATE
+          SET category = EXCLUDED.category, joined_at = NOW();
+      END IF;
+    END LOOP;
     RETURN jsonb_build_object('status', 'queued');
   END IF;
 
-  -- Проверяем баланс соперника
-  SELECT balance INTO v_opp_balance FROM users WHERE id = v_opponent.user_id;
-  IF v_opp_balance IS NULL OR v_opp_balance < p_stake THEN
-    -- Соперник не может → удаляем его, встаём сами
-    DELETE FROM matchmaking_queue WHERE user_id = v_opponent.user_id;
-    INSERT INTO matchmaking_queue (user_id, category, stake)
-    VALUES (p_user_id, p_category, p_stake)
-    ON CONFLICT (user_id) DO UPDATE
-      SET category = EXCLUDED.category, stake = EXCLUDED.stake, joined_at = NOW();
-    RETURN jsonb_build_object('status', 'queued');
-  END IF;
-
+  -- Матч найден! v_opponent и v_stake заполнены
   -- Выбираем 10 случайных вопросов
   SELECT ARRAY(
     SELECT id FROM questions
@@ -490,30 +508,31 @@ BEGIN
 
   -- Создаём дуэль
   INSERT INTO duels (creator_id, opponent_id, category, stake, status, question_ids)
-  VALUES (v_opponent.user_id, p_user_id, p_category, p_stake, 'active', v_question_ids)
+  VALUES (v_opponent.user_id, p_user_id, p_category, v_stake, 'active', v_question_ids)
   RETURNING id INTO v_duel_id;
 
-  -- Удаляем обоих из очереди
+  -- Удаляем ВСЕ записи обоих из очереди
   DELETE FROM matchmaking_queue WHERE user_id IN (p_user_id, v_opponent.user_id);
 
   -- Списываем ставку с обоих
-  UPDATE users SET balance = balance - p_stake WHERE id = p_user_id;
-  UPDATE users SET balance = balance - p_stake WHERE id = v_opponent.user_id;
+  UPDATE users SET balance = balance - v_stake WHERE id = p_user_id;
+  UPDATE users SET balance = balance - v_stake WHERE id = v_opponent.user_id;
 
   -- Транзакции
   INSERT INTO transactions (user_id, type, amount, description)
   VALUES
-    (p_user_id, 'duel_stake', -p_stake, 'Ставка на дуэль'),
-    (v_opponent.user_id, 'duel_stake', -p_stake, 'Ставка на дуэль');
+    (p_user_id, 'duel_stake', -v_stake, 'Ставка на дуэль'),
+    (v_opponent.user_id, 'duel_stake', -v_stake, 'Ставка на дуэль');
 
   RETURN jsonb_build_object(
     'status', 'matched',
     'duel_id', v_duel_id,
-    'opponent_id', v_opponent.user_id
+    'opponent_id', v_opponent.user_id,
+    'stake', v_stake
   );
 EXCEPTION WHEN OTHERS THEN
   PERFORM admin_log('error', 'rpc:find_match', SQLERRM,
-    jsonb_build_object('user_id', p_user_id, 'category', p_category, 'stake', p_stake));
+    jsonb_build_object('user_id', p_user_id, 'category', p_category, 'stakes', p_stakes));
   RETURN jsonb_build_object('status', 'error', 'error', SQLERRM);
 END;
 $$;

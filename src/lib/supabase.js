@@ -354,11 +354,11 @@ export async function getBotStarsBalance() {
 }
 
 // ── Matchmaking ─────────────────────────────────
-export async function findMatch(userId, category, stake) {
+export async function findMatch(userId, category, stakes) {
   const { data, error } = await supabase.rpc('find_match', {
     p_user_id: userId,
     p_category: category,
-    p_stake: stake,
+    p_stakes: stakes,
   })
   if (error) { console.error('findMatch error:', error); return null }
   return data

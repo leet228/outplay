@@ -287,10 +287,8 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (appSettings?.game_creation === false) return
     haptic('medium')
 
-    // Use the lowest selected stake for matchmaking
-    const stake = Math.min(...selectedStakes)
-
-    const result = await findMatch(user.id, 'general', stake)
+    // Send all selected stakes — backend tries each one
+    const result = await findMatch(user.id, 'general', selectedStakes)
 
     if (!result || result.status === 'error') {
       setError(true)
