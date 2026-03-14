@@ -413,9 +413,7 @@ BEGIN
   VALUES (v_winner, 'duel_win', payout, p_duel_id),
          (v_loser, 'duel_loss', -d.stake, p_duel_id);
 
-  -- Комиссия бота
-  INSERT INTO transactions (user_id, type, amount, ref_id, description)
-  VALUES (v_winner, 'platform_fee', -v_bot_fee, p_duel_id, 'Комиссия платформы 4.5%');
+  -- Комиссия бота (записываем как часть duel_win, уже вычтена из payout)
 
   -- Дневная статистика (winner: +payout - stake = чистый выигрыш)
   INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
@@ -554,10 +552,10 @@ BEGIN
   UPDATE users SET balance = balance - v_stake WHERE id = v_opponent.user_id;
 
   -- Транзакции
-  INSERT INTO transactions (user_id, type, amount, description)
+  INSERT INTO transactions (user_id, type, amount, ref_id)
   VALUES
-    (p_user_id, 'duel_stake', -v_stake, 'Ставка на дуэль'),
-    (v_opponent.user_id, 'duel_stake', -v_stake, 'Ставка на дуэль');
+    (p_user_id, 'duel_loss', -v_stake, v_duel_id),
+    (v_opponent.user_id, 'duel_loss', -v_stake, v_duel_id);
 
   RETURN jsonb_build_object(
     'status', 'matched',
