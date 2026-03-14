@@ -809,9 +809,9 @@ BEGIN
     SELECT to_jsonb(u.*) INTO v_user_row FROM users u WHERE u.id = v_user_id;
     RETURN jsonb_build_object('status', 'new_with_referral', 'user', v_user_row, 'bonus', v_bonus);
   ELSE
-    -- Реферер невалиден — создать без бонуса
+    -- Реферер невалиден — создать с начальным бонусом 50
     INSERT INTO users (telegram_id, username, first_name, avatar_url, balance)
-    VALUES (p_telegram_id, p_username, p_first_name, p_avatar_url, 0)
+    VALUES (p_telegram_id, p_username, p_first_name, p_avatar_url, 50)
     RETURNING id INTO v_user_id;
 
     SELECT to_jsonb(u.*) INTO v_user_row FROM users u WHERE u.id = v_user_id;

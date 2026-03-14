@@ -54,7 +54,7 @@ export async function getOrCreateUser(telegramUser, referrerId = null) {
       username: telegramUser.username ?? null,
       first_name: telegramUser.first_name,
       avatar_url: telegramUser.photo_url ?? null,
-      balance: 0,
+      balance: 50,
     })
     .select()
     .single()

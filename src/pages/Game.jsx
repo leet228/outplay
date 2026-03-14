@@ -277,7 +277,8 @@ export default function Game() {
     }
 
     // --- Local state updates ---
-    const pnlChange = won ? payout : -duel.stake
+    // pnl must match DB: winner gets (payout - stake), loser gets (-stake)
+    const pnlChange = won ? (payout - duel.stake) : -duel.stake
 
     // 1. Update dailyStats (profile chart)
     const today = new Date().toISOString().slice(0, 10)
