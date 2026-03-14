@@ -195,7 +195,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const navigate = useNavigate()
   const { user, appSettings } = useGameStore()
   const [selectedStakes, setSelectedStakes] = useState([])
-  const [error, setError] = useState(false)
+  const [error, setError] = useState(null) // null | 'balance' | 'server'
   const [searching, setSearching] = useState(false)
   const [searchTime, setSearchTime] = useState(0)
   const errorTimer = useRef(null)
@@ -205,7 +205,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
 
   useEffect(() => {
     setSelectedStakes([])
-    setError(false)
+    setError(null)
     setSearching(false)
     setSearchTime(0)
     cleanupSearch()
@@ -272,8 +272,8 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (amount > balance) {
       haptic('light')
       clearTimeout(errorTimer.current)
-      setError(true)
-      errorTimer.current = setTimeout(() => setError(false), 2000)
+      setError('balance')
+      errorTimer.current = setTimeout(() => setError(null), 2000)
       return
     }
     haptic('light')
@@ -291,8 +291,9 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     const result = await findMatch(user.id, 'general', selectedStakes)
 
     if (!result || result.status === 'error') {
-      setError(true)
-      setTimeout(() => setError(false), 2000)
+      const errType = result?.error === 'insufficient_balance' ? 'balance' : 'server'
+      setError(errType)
+      setTimeout(() => setError(null), 2000)
       return
     }
 
@@ -422,7 +423,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
           </div>
           {!searching && (
             <div className={`sheet-error ${error ? 'visible' : ''}`}>
-              {t.sheetInsufficientBalance}
+              {error === 'balance' ? t.sheetInsufficientBalance : (t.sheetServerError || 'Ошибка сервера, попробуйте позже')}
             </div>
           )}
         </div>
