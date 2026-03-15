@@ -178,7 +178,11 @@ export default function Game() {
     // Realistic delay: bot appears to "think"
     const delay = Math.max(0.5, Math.min(ba.timeSpent - humanTimeSpent, 4))
     await new Promise(r => setTimeout(r, delay * 1000))
-    await submitAnswer(duelId, BOT_USER_ID, qi, ba.answerIndex, ba.isCorrect, ba.timeSpent)
+    try {
+      await submitAnswer(duelId, BOT_USER_ID, qi, ba.answerIndex, ba.isCorrect, ba.timeSpent)
+    } catch (e) {
+      console.error('Bot submitAnswer failed:', e)
+    }
   }
 
   function handleSelect(index) {
@@ -199,7 +203,11 @@ export default function Game() {
 
     setMyAnswers(prev => [...prev, { questionIndex: qIndex, isCorrect, timeSpent }])
 
-    await submitAnswer(duelId, user.id, qIndex, selected, isCorrect, timeSpent)
+    try {
+      await submitAnswer(duelId, user.id, qIndex, selected, isCorrect, timeSpent)
+    } catch (e) {
+      console.error('submitAnswer failed:', e)
+    }
 
     if (isBotGameRef.current) {
       // Bot game: submit bot answer then advance directly — no polling needed
@@ -226,6 +234,15 @@ export default function Game() {
       if (isBotGameRef.current && q) {
         setWaitingOpponent(true)
         await submitBotAnswer(qIndex, q, TIME_PER_QUESTION, false)
+        onBothAnswered()
+      } else {
+        setWaitingOpponent(true)
+        startWaitingForOpponent(qIndex)
+      }
+    }).catch(e => {
+      console.error('Timeout submitAnswer failed:', e)
+      // Всё равно двигаемся дальше чтобы игра не зависла
+      if (isBotGameRef.current) {
         onBothAnswered()
       } else {
         setWaitingOpponent(true)

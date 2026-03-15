@@ -265,7 +265,12 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (botTimerRef.current) { clearTimeout(botTimerRef.current); botTimerRef.current = null }
   }
 
+  const matchFoundRef = useRef(false)
+
   function handleMatchFound(duelId) {
+    // Guard: prevent double-fire from realtime + poll + bot timer
+    if (matchFoundRef.current) return
+    matchFoundRef.current = true
     cleanupSearch()
     setMatched(true)
     haptic('heavy')
@@ -300,6 +305,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       return
     }
     findingRef.current = true
+    matchFoundRef.current = false
     haptic('medium')
 
     // Send all selected stakes — backend tries each one
@@ -307,13 +313,18 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
 
     if (!result || result.status === 'error') {
       findingRef.current = false
-      if (result?.error === 'opponent_balance_insufficient') {
-        // Оппонент не смог — пробуем ещё раз автоматически
-        setTimeout(() => handlePlay(), 500)
+      if (result?.error === 'insufficient_balance') {
+        setError('balance')
+        setTimeout(() => setError(null), 2000)
         return
       }
-      const errType = result?.error === 'insufficient_balance' ? 'balance' : 'server'
-      setError(errType)
+      if (result?.error === 'not_enough_questions') {
+        setError('maintenance')
+        setTimeout(() => setError(null), 3000)
+        return
+      }
+      // Любая другая ошибка — показываем и не ретраим бесконечно
+      setError('server')
       setTimeout(() => setError(null), 2000)
       return
     }
@@ -360,9 +371,15 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (appSettings?.bot_enabled !== false) {
       const botDelay = (30 + Math.floor(Math.random() * 31)) * 1000
       botTimerRef.current = setTimeout(async () => {
-        const res = await createBotDuel(user.id, 'general', selectedStakes)
-        if (res?.status === 'matched') {
-          handleMatchFound(res.duel_id)
+        // Guard: если уже нашли матч или отменили — не создаём бот-дуэль
+        if (matchFoundRef.current || !findingRef.current) return
+        try {
+          const res = await createBotDuel(user.id, 'general', selectedStakes)
+          if (res?.status === 'matched') {
+            handleMatchFound(res.duel_id)
+          }
+        } catch (e) {
+          console.error('Bot duel creation failed:', e)
         }
       }, botDelay)
     }

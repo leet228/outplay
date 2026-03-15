@@ -368,13 +368,21 @@ export async function createBotDuel(userId, category, stakes) {
 
 // ── Matchmaking ─────────────────────────────────
 export async function findMatch(userId, category, stakes) {
-  const { data, error } = await supabase.rpc('find_match', {
-    p_user_id: userId,
-    p_category: category,
-    p_stakes: stakes,
-  })
-  if (error) { console.error('findMatch error:', error); return null }
-  return data
+  try {
+    const { data, error } = await supabase.rpc('find_match', {
+      p_user_id: userId,
+      p_category: category,
+      p_stakes: stakes,
+    })
+    if (error) {
+      console.error('findMatch error:', error)
+      return { status: 'error', error: error.message || 'server_error' }
+    }
+    return data
+  } catch (e) {
+    console.error('findMatch exception:', e)
+    return { status: 'error', error: 'network_error' }
+  }
 }
 
 export async function cancelMatchmaking(userId) {
