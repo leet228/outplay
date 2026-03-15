@@ -298,6 +298,7 @@ export default function Blackjack() {
   const actionInFlightRef = useRef(false)
   const deckRef = useRef([])
   const playerStandRef = useRef(false)
+  const stakeRef = useRef(0)
 
   // Bot phantom state (only for bot games)
   const botRealTakenRef = useRef([])       // real cards bot took from deck
@@ -478,8 +479,9 @@ export default function Blackjack() {
         navigate('/')
         return
       }
-      // Set role ref BEFORE anything else — critical for PvP correctness
+      // Set refs BEFORE anything else — critical for PvP correctness (avoids stale closures)
       isPlayer1Ref.current = data.creator_id === user?.id
+      stakeRef.current = data.stake || 0
       setDuelInfo(data)
       botShouldWinRef.current = data.bot_should_win ?? (Math.random() < 0.5)
 
@@ -501,7 +503,9 @@ export default function Blackjack() {
   //  PVP: Realtime handlers
   // ══════════════════════════════════════════
 
-  function handleServerAction(actionRow) {
+  // Ref-based handler — always uses latest closures (avoids stale subscription callback)
+  const serverActionRef = useRef(null)
+  serverActionRef.current = function(actionRow) {
     if (actionRow.user_id === user?.id) return
     const { action, card_index, result_state } = actionRow
 
@@ -509,6 +513,10 @@ export default function Blackjack() {
     if (action === 'finished') { handleFinishedFromServer(result_state); return }
     if (action === 'hit') animateOpponentHitPvP(card_index, result_state)
     else if (action === 'stand') handleOpponentStandPvP(result_state)
+  }
+
+  function handleServerAction(actionRow) {
+    serverActionRef.current?.(actionRow)
   }
 
   function animateOpponentHitPvP(cardIndex, newState) {
@@ -927,7 +935,9 @@ export default function Blackjack() {
       won = pScore === oScore ? null : pScore > oScore
     }
 
-    const payout = won ? Math.floor(stake * 2 * 0.95) : 0
+    // Use ref for stake — avoids stale closure in realtime handlers
+    const currentStake = stakeRef.current || stake
+    const payout = won ? Math.floor(currentStake * 2 * 0.95) : 0
     setResult({ won, draw: false, pScore, oScore, payout })
 
     setTimeout(() => {
@@ -937,7 +947,7 @@ export default function Blackjack() {
         oppScore: oScore,
         total: 21,
         payout,
-        stake,
+        stake: currentStake,
         duelId,
         tiebreak: false,
         timeDiff: 0,
