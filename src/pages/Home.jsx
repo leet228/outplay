@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { supabase } from '../lib/supabase'
@@ -394,6 +394,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     haptic('light')
   }
 
+  const sheetCfg = game ? GAME_SHEETS[game.id] : null
   const accent = game?.accent ?? '#3B82F6'
   const mm = String(Math.floor(searchTime / 60)).padStart(2, '0')
   const ss = String(searchTime % 60).padStart(2, '0')
@@ -407,7 +408,9 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
         {/* Header */}
         <div className="sheet-header">
           <div className="sheet-icon-wrap" style={{ '--sa': accent }}>
-            <QuizIcon />
+            {sheetCfg ? (
+              game.id === 'quiz' ? <QuizIcon /> : <span className="sheet-icon-emoji">{sheetCfg.icon}</span>
+            ) : <QuizIcon />}
           </div>
           <h2 className="sheet-title" style={{ color: accent }}>
             {game ? t[game.titleKey] : ''}
@@ -417,37 +420,30 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
 
         {/* Stats row + Rules — hide when searching */}
         <div className={`sheet-collapsible ${searching ? 'collapsed' : ''}`}>
-          <div className="sheet-stats-row">
-            <div className="sheet-stat">
-              <span className="sheet-stat-val">5</span>
-              <span className="sheet-stat-lbl">{t.sheetStatQ}</span>
+          {sheetCfg && (
+            <div className="sheet-stats-row">
+              {sheetCfg.stats.map((s, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <div className="sheet-stat-div" />}
+                  <div className="sheet-stat">
+                    <span className="sheet-stat-val">{s.val}</span>
+                    <span className="sheet-stat-lbl">{t[s.lblKey] || s.lblKey}</span>
+                  </div>
+                </React.Fragment>
+              ))}
             </div>
-            <div className="sheet-stat-div" />
-            <div className="sheet-stat">
-              <span className="sheet-stat-val">15</span>
-              <span className="sheet-stat-lbl">{t.sheetStatSec}</span>
-            </div>
-            <div className="sheet-stat-div" />
-            <div className="sheet-stat">
-              <span className="sheet-stat-val">1v1</span>
-              <span className="sheet-stat-lbl">{t.sheetStatMode}</span>
-            </div>
-          </div>
+          )}
 
-          <div className="sheet-rules">
-            <div className="sheet-rule">
-              <div className="sheet-rule-dot" style={{ background: accent }} />
-              <span>{t.sheetRule1}</span>
+          {sheetCfg && (
+            <div className="sheet-rules">
+              {sheetCfg.ruleKeys.map((rk, i) => (
+                <div className="sheet-rule" key={i}>
+                  <div className="sheet-rule-dot" style={{ background: accent }} />
+                  <span>{t[rk] || rk}</span>
+                </div>
+              ))}
             </div>
-            <div className="sheet-rule">
-              <div className="sheet-rule-dot" style={{ background: accent }} />
-              <span>{t.sheetRule2}</span>
-            </div>
-            <div className="sheet-rule">
-              <div className="sheet-rule-dot" style={{ background: accent }} />
-              <span>{t.sheetRule3}</span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Stakes */}
@@ -892,10 +888,40 @@ function FriendsPanel({ open, onClose, t, user }) {
 }
 
 /* ── Games ── */
+const GAME_SHEETS = {
+  quiz: {
+    icon: '❓',
+    stats: [
+      { val: '5', lblKey: 'sheetStatQ' },
+      { val: '15', lblKey: 'sheetStatSec' },
+      { val: '1v1', lblKey: 'sheetStatMode' },
+    ],
+    ruleKeys: ['sheetRule1', 'sheetRule2', 'sheetRule3'],
+  },
+  sequence: {
+    icon: '🧠',
+    stats: [
+      { val: '3', lblKey: 'sheetSeqRounds' },
+      { val: '10', lblKey: 'sheetSeqTime' },
+      { val: '1v1', lblKey: 'sheetStatMode' },
+    ],
+    ruleKeys: ['sheetSeqRule1', 'sheetSeqRule2', 'sheetSeqRule3'],
+  },
+  blackjack: {
+    icon: '🃏',
+    stats: [
+      { val: '12', lblKey: 'sheetBjCards' },
+      { val: '21', lblKey: 'sheetBjTarget' },
+      { val: '1v1', lblKey: 'sheetStatMode' },
+    ],
+    ruleKeys: ['sheetBjRule1', 'sheetBjRule2', 'sheetBjRule3'],
+  },
+}
+
 const GAMES = [
-  { id: 'quiz', titleKey: 'gameQuizTitle', subKey: 'gameQuizSub', available: true,  accent: '#3B82F6', shadow: '#1d3461' },
-  { id: 'sequence', titleKey: 'gameSequenceTitle', subKey: 'gameSequenceSub', available: false, accent: '#8B5CF6', shadow: '#2d1b69' },
-  { id: 'blackjack', titleKey: 'gameBlackjackTitle', subKey: 'gameBlackjackSub', available: false, accent: '#F59E0B', shadow: '#78350f' },
+  { id: 'quiz', titleKey: 'gameQuizTitle', subKey: 'gameQuizSub', available: true, accent: '#3B82F6', shadow: '#1d3461' },
+  { id: 'sequence', titleKey: 'gameSequenceTitle', subKey: 'gameSequenceSub', available: true, accent: '#8B5CF6', shadow: '#2d1b69' },
+  { id: 'blackjack', titleKey: 'gameBlackjackTitle', subKey: 'gameBlackjackSub', available: true, accent: '#F59E0B', shadow: '#78350f' },
 ]
 
 /* ── Home ── */
@@ -996,16 +1022,17 @@ export default function Home() {
             {GAMES.slice(1).map(g => (
               <button
                 key={g.id}
-                className="game-card game-card--small game-card--soon"
+                className={`game-card game-card--small ${!g.available ? 'game-card--soon' : ''}`}
                 style={{ '--card-accent': g.accent, '--card-shadow': g.shadow }}
-                disabled
+                onClick={() => handleGameTap(g)}
+                disabled={!g.available}
               >
                 <div className="game-card-glow" />
                 <div className="game-card-info">
                   <span className="game-card-title">{t[g.titleKey]}</span>
                   <span className="game-card-sub">{t[g.subKey]}</span>
                 </div>
-                <div className="game-card-badge">{t.soon}</div>
+                {!g.available && <div className="game-card-badge">{t.soon}</div>}
               </button>
             ))}
           </div>

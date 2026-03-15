@@ -649,6 +649,11 @@
   color: var(--sa, #3B82F6);
 }
 
+.sheet-icon-emoji {
+  font-size: 42px;
+  line-height: 1;
+}
+
 .sheet-title {
   font-size: 30px;
   font-weight: 900;
