@@ -138,6 +138,20 @@ export const translations = {
     friendsRequestSent: 'Заявка отправлена',
     friendsAdded: 'Добавлен в друзья',
 
+    // Game invites
+    gameInvites: 'Приглашения в игру',
+    invitePlay: 'Играть',
+    inviteDecline: 'Отклонить',
+    inviteSelectGame: 'Выбери игру',
+    inviteStake: 'Ставка',
+    inviteStakePlaceholder: 'Введите сумму',
+    inviteSend: 'Отправить',
+    inviteSent: 'Приглашение отправлено!',
+    inviteInsufficientBalance: 'Недостаточно средств',
+    inviteTitle: 'Пригласить',
+    inviteFriendOffline: 'Друг не в сети',
+    inviteError: 'Ошибка отправки',
+
     // Leaderboard
     leaderboard: 'Лидерборд',
     rank: 'Место',
@@ -399,6 +413,20 @@ export const translations = {
     friendsBack: 'Back',
     friendsRequestSent: 'Request sent',
     friendsAdded: 'Added to friends',
+
+    // Game invites
+    gameInvites: 'Game Invites',
+    invitePlay: 'Play',
+    inviteDecline: 'Decline',
+    inviteSelectGame: 'Choose a game',
+    inviteStake: 'Stake',
+    inviteStakePlaceholder: 'Enter amount',
+    inviteSend: 'Send',
+    inviteSent: 'Invite sent!',
+    inviteInsufficientBalance: 'Insufficient balance',
+    inviteTitle: 'Invite',
+    inviteFriendOffline: 'Friend is offline',
+    inviteError: 'Failed to send',
 
     // Leaderboard
     leaderboard: 'Leaderboard',

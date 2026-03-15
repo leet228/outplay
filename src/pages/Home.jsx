@@ -6,7 +6,7 @@ import { findMatch, cancelMatchmaking, createBotDuel } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
-import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend } from '../lib/supabase'
+import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendsData, sendGameInvite, acceptGameInvite, rejectGameInvite, cancelAllPendingInvites, getPendingInvites } from '../lib/supabase'
 import './Home.css'
 
 /* ── Icons ── */
@@ -321,6 +321,9 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       return
     }
 
+    // Cancel any pending game invites before searching
+    cancelAllPendingInvites(user.id).catch(() => {})
+
     // Send all selected stakes — backend tries each one
     const gameType = game.id === 'blackjack' ? 'blackjack' : 'quiz'
     const result = await findMatch(user.id, game.id, selectedStakes, gameType)
@@ -546,10 +549,11 @@ function FriendAvatar({ user, showOnline }) {
   )
 }
 
-function FriendsPanel({ open, onClose, t, user }) {
+function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rates }) {
   const {
     friends, friendRequests, sentRequestIds,
     setFriends, setFriendRequests, setSentRequestIds,
+    gameInvites, setGameInvites,
   } = useGameStore()
 
   const [query, setQuery] = useState('')
@@ -559,7 +563,28 @@ function FriendsPanel({ open, onClose, t, user }) {
   const [searchLoading, setSearchLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState(null)
+  const [inviteTarget, setInviteTarget] = useState(null)
+  const [inviteGame, setInviteGame] = useState(null)
+  const [inviteStake, setInviteStake] = useState('')
+  const [inviteSending, setInviteSending] = useState(false)
+  const [inviteMsg, setInviteMsg] = useState(null) // 'sent' | 'error' | 'balance' | 'offline'
   const debounceRef = useRef(null)
+
+  // Refresh friends + invites on open
+  useEffect(() => {
+    if (open && user?.id && user.id !== 'dev') {
+      getFriendsData(user.id).then(data => {
+        if (data) {
+          setFriends(data.friends ?? [])
+          setFriendRequests(data.incoming_requests ?? [])
+          setSentRequestIds(data.outgoing_request_ids ?? [])
+        }
+      })
+      getPendingInvites(user.id).then(invites => {
+        setGameInvites(invites)
+      })
+    }
+  }, [open])
 
   // Reset on close
   useEffect(() => {
@@ -569,6 +594,7 @@ function FriendsPanel({ open, onClose, t, user }) {
       setSearchMode(false)
       setSearchResults([])
       setConfirmRemoveId(null)
+      setInviteTarget(null)
     }
   }, [open])
 
@@ -692,6 +718,53 @@ function FriendsPanel({ open, onClose, t, user }) {
     setActionLoading(null)
   }
 
+  // ── Invite handlers ──
+  async function handleSendInvite() {
+    if (!inviteTarget || !inviteGame || !inviteStake || inviteSending) return
+    const stakeNum = parseInt(inviteStake)
+    if (!stakeNum || stakeNum <= 0) return
+    if (stakeNum > balance) {
+      setInviteMsg('balance')
+      setTimeout(() => setInviteMsg(null), 2000)
+      return
+    }
+    setInviteSending(true)
+    haptic('medium')
+    const result = await sendGameInvite(user.id, inviteTarget.id, inviteGame, stakeNum)
+    setInviteSending(false)
+    if (result?.invite_id) {
+      setInviteMsg('sent')
+      setTimeout(() => { setInviteMsg(null); setInviteTarget(null); setInviteGame(null); setInviteStake('') }, 1500)
+    } else if (result?.error === 'friend_offline') {
+      setInviteMsg('offline')
+      setTimeout(() => setInviteMsg(null), 2000)
+    } else {
+      setInviteMsg('error')
+      setTimeout(() => setInviteMsg(null), 2000)
+    }
+  }
+
+  async function handleAcceptInvite(inv) {
+    haptic('medium')
+    setActionLoading(inv.id)
+    const result = await acceptGameInvite(inv.id, user.id)
+    setActionLoading(null)
+    if (result?.duel_id) {
+      setGameInvites(gameInvites.filter(i => i.id !== inv.id))
+      onClose()
+      const route = inv.game_type === 'blackjack' ? '/blackjack' : '/game'
+      navigate(`${route}/${result.duel_id}`)
+    }
+  }
+
+  async function handleRejectInvite(inv) {
+    haptic('light')
+    setActionLoading(inv.id)
+    await rejectGameInvite(inv.id, user.id)
+    setGameInvites(gameInvites.filter(i => i.id !== inv.id))
+    setActionLoading(null)
+  }
+
   // ── Friends list data ──
   const now = Date.now()
   const withOnline = (friends ?? []).map(f => ({
@@ -711,6 +784,39 @@ function FriendsPanel({ open, onClose, t, user }) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
+
+        {/* Incoming game invites */}
+        {!searchMode && gameInvites.length > 0 && (
+          <div className="friends-invites">
+            <span className="friends-group-label">
+              <span className="friends-invite-dot" />
+              {t.gameInvites} · {gameInvites.length}
+            </span>
+            {gameInvites.map(inv => {
+              const sender = friends.find(f => f.id === inv.from_id)
+              const expired = new Date(inv.expires_at) < new Date()
+              const gameIcon = inv.game_type === 'blackjack' ? '🃏' : inv.game_type === 'sequence' ? '🧠' : '❓'
+              const gameLabel = inv.game_type === 'blackjack' ? '21 очко' : inv.game_type === 'sequence' ? 'Sequence' : 'Викторина'
+              return (
+                <div key={inv.id} className="friends-row friends-invite-row">
+                  <FriendAvatar user={sender || { first_name: '?' }} showOnline />
+                  <div className="friends-info">
+                    <span className="friends-name">{sender?.first_name || '?'}</span>
+                    <span className="friends-invite-meta">{gameIcon} {gameLabel} · {formatCurrency(inv.stake, currency, rates)}</span>
+                  </div>
+                  {!expired ? (
+                    <div className="friends-req-actions">
+                      <button className="friends-action-btn accept" disabled={actionLoading === inv.id} onClick={e => { e.stopPropagation(); handleAcceptInvite(inv) }}>{t.invitePlay}</button>
+                      <button className="friends-action-btn decline" disabled={actionLoading === inv.id} onClick={e => { e.stopPropagation(); handleRejectInvite(inv) }}>{t.inviteDecline}</button>
+                    </div>
+                  ) : (
+                    <span className="friends-badge friends-badge--pending">Expired</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Incoming requests (only in friends mode) */}
         {!searchMode && friendRequests.length > 0 && (
@@ -802,7 +908,7 @@ function FriendsPanel({ open, onClose, t, user }) {
                         </div>
                         {activeId === f.id && (
                           <div className="friends-actions">
-                            <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
+                            <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light'); setInviteTarget(f); setInviteGame(null); setInviteStake(''); setInviteMsg(null) }}>{t.friendsInvite}</button>
                             <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
                           </div>
                         )}
@@ -836,7 +942,6 @@ function FriendsPanel({ open, onClose, t, user }) {
                         </div>
                         {activeId === f.id && (
                           <div className="friends-actions">
-                            <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light') }}>{t.friendsInvite}</button>
                             <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
                           </div>
                         )}
@@ -897,6 +1002,60 @@ function FriendsPanel({ open, onClose, t, user }) {
         </div>
 
       </div>
+
+      {/* Invite Sheet (bottom overlay inside friends panel) */}
+      {inviteTarget && (
+        <>
+          <div className="invite-overlay" onClick={() => setInviteTarget(null)} />
+          <div className="invite-sheet">
+            <div className="invite-sheet-handle" />
+            <h3 className="invite-sheet-title">{t.inviteTitle} {inviteTarget.first_name}</h3>
+
+            <span className="invite-sheet-label">{t.inviteSelectGame}</span>
+            <div className="invite-game-cards">
+              {[
+                { id: 'quiz', icon: '❓', label: 'Викторина' },
+                { id: 'blackjack', icon: '🃏', label: '21 очко' },
+              ].map(g => (
+                <button
+                  key={g.id}
+                  className={`invite-game-card ${inviteGame === g.id ? 'active' : ''}`}
+                  onClick={() => { haptic('light'); setInviteGame(g.id) }}
+                >
+                  <span className="invite-game-icon">{g.icon}</span>
+                  <span className="invite-game-label">{g.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <span className="invite-sheet-label">{t.inviteStake}</span>
+            <input
+              type="number"
+              className="invite-stake-input"
+              placeholder={t.inviteStakePlaceholder}
+              value={inviteStake}
+              onChange={e => setInviteStake(e.target.value)}
+              min="1"
+              inputMode="numeric"
+            />
+
+            <div className={`invite-msg ${inviteMsg ? 'visible' : ''}`}>
+              {inviteMsg === 'sent' ? t.inviteSent
+                : inviteMsg === 'balance' ? t.inviteInsufficientBalance
+                : inviteMsg === 'offline' ? t.inviteFriendOffline
+                : inviteMsg === 'error' ? t.inviteError : ''}
+            </div>
+
+            <button
+              className="invite-send-btn"
+              disabled={!inviteGame || !inviteStake || inviteSending || inviteMsg === 'sent'}
+              onClick={handleSendInvite}
+            >
+              {inviteSending ? '...' : t.inviteSend}
+            </button>
+          </div>
+        </>
+      )}
     </>
   )
 }
@@ -943,7 +1102,7 @@ const GAMES = [
 const ADMIN_IDS = ['dev', 945676433]
 
 export default function Home() {
-  const { balance, currency, rates, lang, setDepositOpen, user, friendRequests, balanceBounce } = useGameStore()
+  const { balance, currency, rates, lang, setDepositOpen, user, friendRequests, balanceBounce, gameInvites, pendingGameNav, setPendingGameNav } = useGameStore()
   const navigate = useNavigate()
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)
@@ -964,6 +1123,16 @@ export default function Home() {
     haptic('light')
     setFriendsOpen(false)
   }, [])
+
+  // Sender navigation: when opponent accepts invite, navigate to game
+  useEffect(() => {
+    if (pendingGameNav) {
+      const { duelId, gameType } = pendingGameNav
+      setPendingGameNav(null)
+      const route = gameType === 'blackjack' ? '/blackjack' : '/game'
+      navigate(`${route}/${duelId}`)
+    }
+  }, [pendingGameNav])
 
   function handleGameTap(game) {
     if (!game.available) return
@@ -993,8 +1162,8 @@ export default function Home() {
               <line x1="20" y1="8" x2="20" y2="14"/>
               <line x1="23" y1="11" x2="17" y2="11"/>
             </svg>
-            {friendRequests.length > 0 && (
-              <span className="topbar-friends-badge">{friendRequests.length}</span>
+            {(friendRequests.length + gameInvites.length) > 0 && (
+              <span className="topbar-friends-badge">{friendRequests.length + gameInvites.length}</span>
             )}
           </button>
           <div className={`topbar-balance ${balanceBounce ? 'bounce' : ''}`}>
@@ -1055,7 +1224,7 @@ export default function Home() {
         </div>
       </div>
 
-      <FriendsPanel open={friendsOpen} onClose={closeFriends} t={t} user={user} />
+      <FriendsPanel open={friendsOpen} onClose={closeFriends} t={t} user={user} navigate={navigate} balance={balance} currency={currency} rates={rates} />
 
       <GameSheet
         game={sheetGame}

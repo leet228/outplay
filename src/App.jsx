@@ -187,6 +187,51 @@ export default function App() {
     }
   }, [phase])
 
+  // Realtime: game invites
+  const inviteChannelRef = useRef(null)
+  useEffect(() => {
+    const uid = useGameStore.getState().user?.id
+    if (!uid || uid === 'dev') return
+    if (inviteChannelRef.current) return
+
+    const ch = supabase
+      .channel(`invites-${uid}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'game_invites',
+        filter: `to_id=eq.${uid}`,
+      }, (payload) => {
+        const store = useGameStore.getState()
+        if (payload.eventType === 'INSERT' && payload.new?.status === 'pending') {
+          store.setGameInvites([...store.gameInvites, payload.new])
+        } else if (payload.eventType === 'UPDATE' && payload.new?.status !== 'pending') {
+          store.setGameInvites(store.gameInvites.filter(i => i.id !== payload.new.id))
+        }
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'game_invites',
+        filter: `from_id=eq.${uid}`,
+      }, (payload) => {
+        const store = useGameStore.getState()
+        const inv = payload.new
+        if (inv.status === 'accepted' && inv.duel_id) {
+          store.setPendingGameNav({ duelId: inv.duel_id, gameType: inv.game_type })
+        }
+        store.setSentInvites(store.sentInvites.filter(i => i.id !== inv.id))
+      })
+      .subscribe()
+
+    inviteChannelRef.current = ch
+
+    return () => {
+      supabase.removeChannel(ch)
+      inviteChannelRef.current = null
+    }
+  }, [phase])
+
   async function bootstrap() {
     const tgUser = getTelegramUser()
     const store = useGameStore.getState()

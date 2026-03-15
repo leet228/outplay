@@ -288,6 +288,57 @@ export async function removeFriend(userId, friendId) {
   return data
 }
 
+// ── Game Invites ──
+
+export async function sendGameInvite(fromId, toId, gameType, stake) {
+  const { data, error } = await supabase.rpc('send_game_invite', {
+    p_from_id: fromId, p_to_id: toId, p_game_type: gameType, p_stake: stake,
+  })
+  if (error) { console.error('sendGameInvite error:', error); return { error: error.message } }
+  return data
+}
+
+export async function acceptGameInvite(inviteId, userId) {
+  const { data, error } = await supabase.rpc('accept_game_invite', {
+    p_invite_id: inviteId, p_user_id: userId,
+  })
+  if (error) { console.error('acceptGameInvite error:', error); return { error: error.message } }
+  return data
+}
+
+export async function rejectGameInvite(inviteId, userId) {
+  const { data, error } = await supabase.rpc('reject_game_invite', {
+    p_invite_id: inviteId, p_user_id: userId,
+  })
+  if (error) { console.error('rejectGameInvite error:', error); return { error: error.message } }
+  return data
+}
+
+export async function cancelGameInvite(inviteId, userId) {
+  const { data, error } = await supabase.rpc('cancel_game_invite', {
+    p_invite_id: inviteId, p_user_id: userId,
+  })
+  if (error) { console.error('cancelGameInvite error:', error); return { error: error.message } }
+  return data
+}
+
+export async function cancelAllPendingInvites(userId) {
+  const { error } = await supabase.rpc('cancel_all_pending_invites', { p_user_id: userId })
+  if (error) console.error('cancelAllPendingInvites error:', error)
+}
+
+export async function getPendingInvites(userId) {
+  const { data, error } = await supabase
+    .from('game_invites')
+    .select('*')
+    .eq('to_id', userId)
+    .eq('status', 'pending')
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+  if (error) { console.error('getPendingInvites error:', error); return [] }
+  return data || []
+}
+
 // ── Deposits ──
 
 export async function createStarsInvoice(userId, amount, currencyAmount, currencyCode) {

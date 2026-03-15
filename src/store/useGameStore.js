@@ -83,6 +83,14 @@ const useGameStore = create((set, get) => ({
   sentRequestIds: [],
   setSentRequestIds: (v) => set({ sentRequestIds: v }),
 
+  // Game invites
+  gameInvites: [],
+  setGameInvites: (v) => set({ gameInvites: v }),
+  sentInvites: [],
+  setSentInvites: (v) => set({ sentInvites: v }),
+  pendingGameNav: null,
+  setPendingGameNav: (v) => set({ pendingGameNav: v }),
+
   // Active duel
   activeDuel: null,
   setActiveDuel: (duel) => set({ activeDuel: duel }),

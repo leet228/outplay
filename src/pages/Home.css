@@ -1440,3 +1440,214 @@
   opacity: 0.5;
   pointer-events: none;
 }
+
+/* ═══════════════════════════════════
+   Game Invites Section
+═══════════════════════════════════ */
+.friends-invites {
+  padding: 0 16px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.friends-invite-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  margin-right: 4px;
+  animation: invite-dot-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes invite-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.friends-invite-row {
+  padding-right: 8px;
+}
+
+.friends-invite-meta {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════
+   Invite Sheet (bottom overlay inside friends panel)
+═══════════════════════════════════ */
+.invite-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 250;
+  animation: invite-fade-in 0.2s ease;
+}
+
+@keyframes invite-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.invite-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+  border-top: 1px solid var(--border);
+  z-index: 300;
+  padding: 0 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: invite-slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes invite-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.invite-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 12px auto 4px;
+  flex-shrink: 0;
+}
+
+.invite-sheet-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+  text-align: center;
+  letter-spacing: -0.3px;
+}
+
+.invite-sheet-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+}
+
+.invite-game-cards {
+  display: flex;
+  gap: 10px;
+}
+
+.invite-game-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #ffffff06;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.invite-game-card:active {
+  transform: scale(0.95);
+}
+
+.invite-game-card.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent)33;
+}
+
+.invite-game-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.invite-game-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.invite-stake-input {
+  width: 100%;
+  padding: 13px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  -moz-appearance: textfield;
+}
+
+.invite-stake-input::-webkit-outer-spin-button,
+.invite-stake-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.invite-stake-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.5;
+  font-weight: 500;
+}
+
+.invite-stake-input:focus {
+  border-color: var(--accent);
+}
+
+.invite-msg {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  min-height: 18px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  color: #ef4444;
+}
+
+.invite-msg.visible {
+  opacity: 1;
+}
+
+.invite-send-btn {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, var(--accent) 0%, #60a5fa 100%);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.15s;
+  box-shadow: 0 4px 20px #3B82F630;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.invite-send-btn:active:not(:disabled) {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+.invite-send-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  box-shadow: none;
+}
