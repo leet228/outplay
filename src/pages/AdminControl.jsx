@@ -9,6 +9,7 @@ const TOGGLES = [
   { key: 'withdrawals',     icon: '💸', label: 'Выводы' },
   { key: 'game_creation',   icon: '🎮', label: 'Создание игр' },
   { key: 'subscriptions',   icon: '👑', label: 'Подписки' },
+  { key: 'bot_enabled',     icon: '🤖', label: 'Bot Opponent' },
 ]
 
 function timeAgo(dateStr) {
@@ -202,6 +203,74 @@ export default function AdminControl() {
           </div>
         ))}
       </div>
+
+      {/* Bot Statistics */}
+      {settings && (
+        <div className="admin-server-section">
+          <h3 className="admin-section-title">Bot Statistics</h3>
+          <div className="admin-server-card">
+            {(() => {
+              const games = settings.bot_total_games ?? 0
+              const wagered = settings.bot_total_wagered ?? 0
+              const paid = settings.bot_total_paid ?? 0
+              const pnl = settings.bot_current_pnl ?? 0
+              const rtp = wagered > 0 ? ((paid / wagered) * 100).toFixed(1) : '—'
+              const pnlColor = pnl >= 0 ? '#22c55e' : '#ef4444'
+              const rtpNum = wagered > 0 ? (paid / wagered) * 100 : null
+              const rtpColor = rtpNum === null ? '#888'
+                : Math.abs(rtpNum - 95) <= 2 ? '#22c55e'
+                : Math.abs(rtpNum - 95) <= 5 ? '#eab308'
+                : '#ef4444'
+              const deficitPct = pnl < 0 ? Math.min(100, Math.round((Math.abs(pnl) / 2000) * 100)) : 0
+              return <>
+                <div className="admin-server-row">
+                  <span>Total Games</span>
+                  <span style={{ fontWeight: 600 }}>{games}</span>
+                </div>
+                <div className="admin-server-row">
+                  <span>Total Wagered</span>
+                  <span>{wagered.toLocaleString()} ⭐</span>
+                </div>
+                <div className="admin-server-row">
+                  <span>Total Paid</span>
+                  <span>{paid.toLocaleString()} ⭐</span>
+                </div>
+                <div className="admin-server-row">
+                  <span>Bot P&L</span>
+                  <span style={{ color: pnlColor, fontWeight: 600 }}>
+                    {pnl >= 0 ? '+' : ''}{pnl.toLocaleString()} ⭐
+                  </span>
+                </div>
+                <div className="admin-server-row">
+                  <span>Current RTP</span>
+                  <span style={{ color: rtpColor, fontWeight: 600 }}>{rtp}%</span>
+                </div>
+                <div className="admin-server-row">
+                  <span>Target RTP</span>
+                  <span>95%</span>
+                </div>
+                {pnl < 0 && (
+                  <div className="admin-server-row" style={{ flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                      <span>Deficit Usage</span>
+                      <span>{Math.abs(pnl).toLocaleString()} / 2 000</span>
+                    </div>
+                    <div style={{ width: '100%', height: 6, borderRadius: 3, background: 'var(--border)' }}>
+                      <div style={{
+                        width: deficitPct + '%',
+                        height: '100%',
+                        borderRadius: 3,
+                        background: deficitPct > 80 ? '#ef4444' : deficitPct > 50 ? '#eab308' : '#22c55e',
+                        transition: 'width 0.3s',
+                      }} />
+                    </div>
+                  </div>
+                )}
+              </>
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Crypto Deposits */}
       <div className="admin-server-section">

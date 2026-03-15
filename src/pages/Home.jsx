@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { supabase } from '../lib/supabase'
-import { findMatch, cancelMatchmaking } from '../lib/supabase'
+import { findMatch, cancelMatchmaking, createBotDuel } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
@@ -204,6 +204,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const channelRef = useRef(null)
   const pollRef = useRef(null)
   const timerRef = useRef(null)
+  const botTimerRef = useRef(null)
 
   useEffect(() => {
     setSelectedStakes([])
@@ -261,6 +262,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    if (botTimerRef.current) { clearTimeout(botTimerRef.current); botTimerRef.current = null }
   }
 
   function handleMatchFound(duelId) {
@@ -353,6 +355,17 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
         .maybeSingle()
       if (data) handleMatchFound(data.id)
     }, 3000)
+
+    // Bot timer: подключить бота через 30-60 сек если не нашёл человека
+    if (appSettings?.bot_enabled !== false) {
+      const botDelay = (30 + Math.floor(Math.random() * 31)) * 1000
+      botTimerRef.current = setTimeout(async () => {
+        const res = await createBotDuel(user.id, 'general', selectedStakes)
+        if (res?.status === 'matched') {
+          handleMatchFound(res.duel_id)
+        }
+      }, botDelay)
+    }
   }
 
   async function handleCancel(timeout = false) {

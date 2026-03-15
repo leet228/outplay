@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS duels (
   opponent_score  INTEGER,
   winner_id       UUID REFERENCES users(id),
   question_ids    UUID[] NOT NULL DEFAULT '{}',     -- массив ID вопросов для этой дуэли
+  is_bot_game     BOOLEAN NOT NULL DEFAULT false,   -- игра с ботом
+  bot_should_win  BOOLEAN,                          -- null для обычных дуэлей, true/false для бот-игр
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   finished_at     TIMESTAMPTZ
 );
@@ -416,8 +418,9 @@ BEGIN
   -- Реферальный бонус: каждая 3-я победа реферала → 1% от total_pot рефоводу
   -- Если 3-я победа: бот получает 3.5%, реферовод 1%
   -- Если нет: бот получает 4.5%, бонуса нет
+  -- НЕ начисляем реферальный бонус если победитель — бот-соперник
   SELECT referrer_id INTO v_ref_id FROM referrals WHERE referred_user_id = v_winner;
-  IF v_ref_id IS NOT NULL THEN
+  IF v_ref_id IS NOT NULL AND v_winner != '00000000-0000-0000-0000-000000000001' THEN
     SELECT wins INTO v_winner_wins FROM users WHERE id = v_winner;
     IF v_winner_wins % 3 = 0 THEN
       -- Каждая 3-я победа: 1% от total_pot рефоводу (из доли бота)
@@ -449,20 +452,22 @@ BEGIN
   VALUES (v_winner, 'duel_win', payout, p_duel_id),
          (v_loser, 'duel_loss', -d.stake, p_duel_id);
 
-  -- Дневная статистика (winner: +payout - stake = чистый выигрыш)
-  INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
-  VALUES (v_winner, CURRENT_DATE, payout - d.stake, 1, 1)
-  ON CONFLICT (user_id, date)
-  DO UPDATE SET pnl = user_daily_stats.pnl + (payout - d.stake), games = user_daily_stats.games + 1, wins = user_daily_stats.wins + 1;
+  -- Дневная статистика и гильдии — пропускаем для бота (telegram_id = -1)
+  IF v_winner != '00000000-0000-0000-0000-000000000001' THEN
+    INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
+    VALUES (v_winner, CURRENT_DATE, payout - d.stake, 1, 1)
+    ON CONFLICT (user_id, date)
+    DO UPDATE SET pnl = user_daily_stats.pnl + (payout - d.stake), games = user_daily_stats.games + 1, wins = user_daily_stats.wins + 1;
+    PERFORM update_guild_pnl_after_duel(v_winner, payout - d.stake);
+  END IF;
 
-  INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
-  VALUES (v_loser, CURRENT_DATE, -d.stake, 1, 0)
-  ON CONFLICT (user_id, date)
-  DO UPDATE SET pnl = user_daily_stats.pnl - d.stake, games = user_daily_stats.games + 1;
-
-  -- Обновляем PnL гильдий
-  PERFORM update_guild_pnl_after_duel(v_winner, payout - d.stake);
-  PERFORM update_guild_pnl_after_duel(v_loser, -d.stake);
+  IF v_loser != '00000000-0000-0000-0000-000000000001' THEN
+    INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
+    VALUES (v_loser, CURRENT_DATE, -d.stake, 1, 0)
+    ON CONFLICT (user_id, date)
+    DO UPDATE SET pnl = user_daily_stats.pnl - d.stake, games = user_daily_stats.games + 1;
+    PERFORM update_guild_pnl_after_duel(v_loser, -d.stake);
+  END IF;
 
   RETURN jsonb_build_object(
     'result', 'win',
@@ -643,6 +648,157 @@ BEGIN
   WHERE joined_at < NOW() - INTERVAL '3 minutes';
   GET DIAGNOSTICS v_count = ROW_COUNT;
   RETURN v_count;
+END;
+$$;
+
+-- ── Bot user ───────────────────────────────────────────────────
+-- Бот-соперник для дуэлей. Огромный баланс, telegram_id = -1
+INSERT INTO users (id, telegram_id, username, first_name, balance, wins, losses)
+VALUES ('00000000-0000-0000-0000-000000000001', -1, 'outplay_bot', 'Outplay Bot', 999999999, 0, 0)
+ON CONFLICT (telegram_id) DO NOTHING;
+
+-- ── Bot Duel: create_bot_duel ─────────────────────────────────
+DROP FUNCTION IF EXISTS create_bot_duel(UUID, TEXT, INTEGER[]);
+
+CREATE OR REPLACE FUNCTION create_bot_duel(
+  p_user_id  UUID,
+  p_category TEXT,
+  p_stakes   INTEGER[]
+)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+DECLARE
+  v_bot_id        UUID := '00000000-0000-0000-0000-000000000001';
+  v_my_balance    INTEGER;
+  v_stake         INTEGER;
+  v_question_ids  UUID[];
+  v_duel_id       UUID;
+  v_bot_enabled   BOOLEAN;
+  v_total_games   INTEGER;
+  v_total_wagered INTEGER;
+  v_total_paid    INTEGER;
+  v_current_pnl   INTEGER;
+  v_current_rtp   NUMERIC;
+  v_should_win    BOOLEAN;
+  v_payout        INTEGER;
+  v_affected      INTEGER;
+BEGIN
+  -- 1. Проверяем что бот включён
+  SELECT (value)::boolean INTO v_bot_enabled FROM app_settings WHERE key = 'bot_enabled';
+  IF NOT COALESCE(v_bot_enabled, true) THEN
+    RETURN jsonb_build_object('status', 'error', 'error', 'bot_disabled');
+  END IF;
+
+  -- 2. Проверяем что юзер ещё в очереди (не нашёл человека)
+  IF NOT EXISTS (SELECT 1 FROM matchmaking_queue WHERE user_id = p_user_id) THEN
+    RETURN jsonb_build_object('status', 'error', 'error', 'not_in_queue');
+  END IF;
+
+  -- 3. Удаляем из очереди
+  DELETE FROM matchmaking_queue WHERE user_id = p_user_id;
+
+  -- 4. Баланс
+  SELECT balance INTO v_my_balance FROM users WHERE id = p_user_id;
+  IF v_my_balance IS NULL THEN
+    RETURN jsonb_build_object('status', 'error', 'error', 'user_not_found');
+  END IF;
+
+  -- 5. Выбираем максимальную доступную ставку
+  SELECT ARRAY(SELECT unnest(p_stakes) ORDER BY 1 DESC) INTO p_stakes;
+  v_stake := NULL;
+  FOR i IN 1..array_length(p_stakes, 1) LOOP
+    IF v_my_balance >= p_stakes[i] THEN
+      v_stake := p_stakes[i];
+      EXIT;
+    END IF;
+  END LOOP;
+
+  IF v_stake IS NULL THEN
+    RETURN jsonb_build_object('status', 'error', 'error', 'insufficient_balance');
+  END IF;
+
+  -- 6. Вопросы
+  SELECT ARRAY(
+    SELECT id FROM questions WHERE category = p_category ORDER BY RANDOM() LIMIT 5
+  ) INTO v_question_ids;
+
+  IF v_question_ids IS NULL OR array_length(v_question_ids, 1) IS NULL OR array_length(v_question_ids, 1) < 5 THEN
+    RETURN jsonb_build_object('status', 'error', 'error', 'not_enough_questions');
+  END IF;
+
+  -- 7. RTP расчёт — решаем: бот выигрывает или проигрывает
+  SELECT COALESCE((value)::integer, 0) INTO v_total_games   FROM app_settings WHERE key = 'bot_total_games';
+  SELECT COALESCE((value)::integer, 0) INTO v_total_wagered FROM app_settings WHERE key = 'bot_total_wagered';
+  SELECT COALESCE((value)::integer, 0) INTO v_total_paid    FROM app_settings WHERE key = 'bot_total_paid';
+  SELECT COALESCE((value)::integer, 0) INTO v_current_pnl   FROM app_settings WHERE key = 'bot_current_pnl';
+
+  v_payout := FLOOR(v_stake * 2 * 0.95); -- что получит игрок при победе
+
+  IF v_current_pnl <= -2000 THEN
+    -- Защита дефицита — бот обязан выиграть
+    v_should_win := true;
+  ELSIF v_total_games < 5 THEN
+    -- Холодный старт — лёгкий bias в пользу бота
+    v_should_win := random() < 0.55;
+  ELSE
+    -- RTP = (total_paid / total_wagered) * 100
+    v_current_rtp := (v_total_paid::numeric / NULLIF(v_total_wagered, 0)) * 100;
+    IF v_current_rtp IS NULL THEN
+      v_should_win := random() < 0.55;
+    ELSIF v_current_rtp > 95 THEN
+      v_should_win := true;  -- слишком много выплатили — забираем
+    ELSIF v_current_rtp < 95 THEN
+      v_should_win := false; -- мало выплатили — отдаём
+    ELSE
+      v_should_win := random() < 0.5;
+    END IF;
+  END IF;
+
+  -- 8. Создаём дуэль
+  INSERT INTO duels (creator_id, opponent_id, category, stake, status, question_ids, is_bot_game, bot_should_win)
+  VALUES (p_user_id, v_bot_id, p_category, v_stake, 'active', v_question_ids, true, v_should_win)
+  RETURNING id INTO v_duel_id;
+
+  -- 9. Списываем ставку с игрока
+  UPDATE users SET balance = balance - v_stake WHERE id = p_user_id AND balance >= v_stake;
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  IF v_affected = 0 THEN
+    DELETE FROM duels WHERE id = v_duel_id;
+    RETURN jsonb_build_object('status', 'error', 'error', 'insufficient_balance');
+  END IF;
+
+  -- 10. Списываем ставку с бота (у него огромный баланс — формальность)
+  UPDATE users SET balance = balance - v_stake WHERE id = v_bot_id;
+
+  -- 11. Транзакции
+  INSERT INTO transactions (user_id, type, amount, ref_id)
+  VALUES (p_user_id, 'duel_loss', -v_stake, v_duel_id),
+         (v_bot_id, 'duel_loss', -v_stake, v_duel_id);
+
+  -- 12. Обновляем бот-статистику
+  UPDATE app_settings SET value = to_jsonb(v_total_games + 1), updated_at = NOW() WHERE key = 'bot_total_games';
+  UPDATE app_settings SET value = to_jsonb(v_total_wagered + v_stake), updated_at = NOW() WHERE key = 'bot_total_wagered';
+
+  IF NOT v_should_win THEN
+    -- Бот проигрывает → выплата игроку
+    UPDATE app_settings SET value = to_jsonb(v_total_paid + v_payout), updated_at = NOW() WHERE key = 'bot_total_paid';
+    UPDATE app_settings SET value = to_jsonb(v_current_pnl - (v_payout - v_stake)), updated_at = NOW() WHERE key = 'bot_current_pnl';
+  ELSE
+    -- Бот выигрывает → игрок теряет ставку
+    UPDATE app_settings SET value = to_jsonb(v_current_pnl + v_stake), updated_at = NOW() WHERE key = 'bot_current_pnl';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'status', 'matched',
+    'duel_id', v_duel_id,
+    'bot_should_win', v_should_win,
+    'stake', v_stake
+  );
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:create_bot_duel', SQLERRM,
+    jsonb_build_object('user_id', p_user_id, 'category', p_category));
+  RETURN jsonb_build_object('status', 'error', 'error', SQLERRM);
 END;
 $$;
 
@@ -999,6 +1155,7 @@ BEGIN
         FROM user_daily_stats
         GROUP BY user_id
       ) s ON s.user_id = u.id
+      WHERE u.telegram_id != -1
       ORDER BY COALESCE(s.pnl, 0) DESC
       LIMIT p_limit
     ) t
@@ -1405,6 +1562,7 @@ BEGIN
         ) AS request_pending
       FROM users u
       WHERE u.id != p_user_id
+        AND u.telegram_id != -1
         AND (
           u.first_name ILIKE '%' || p_query || '%'
           OR u.username ILIKE '%' || p_query || '%'
@@ -1773,7 +1931,12 @@ INSERT INTO app_settings (key, value) VALUES
   ('crypto_deposits', 'true'::jsonb),
   ('withdrawals',     'true'::jsonb),
   ('game_creation',   'true'::jsonb),
-  ('subscriptions',   'true'::jsonb)
+  ('subscriptions',   'true'::jsonb),
+  ('bot_enabled',     'true'::jsonb),
+  ('bot_total_games', '0'::jsonb),
+  ('bot_total_wagered', '0'::jsonb),
+  ('bot_total_paid',  '0'::jsonb),
+  ('bot_current_pnl', '0'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;

@@ -353,6 +353,19 @@ export async function getBotStarsBalance() {
   }
 }
 
+// ── Bot ─────────────────────────────────────────
+export const BOT_USER_ID = '00000000-0000-0000-0000-000000000001'
+
+export async function createBotDuel(userId, category, stakes) {
+  const { data, error } = await supabase.rpc('create_bot_duel', {
+    p_user_id: userId,
+    p_category: category,
+    p_stakes: stakes,
+  })
+  if (error) { console.error('createBotDuel error:', error); return null }
+  return data
+}
+
 // ── Matchmaking ─────────────────────────────────
 export async function findMatch(userId, category, stakes) {
   const { data, error } = await supabase.rpc('find_match', {

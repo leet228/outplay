@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
-import { supabase, submitAnswer } from '../lib/supabase'
+import { supabase, submitAnswer, BOT_USER_ID } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import './Game.css'
@@ -42,6 +42,9 @@ export default function Game() {
   const pollRef = useRef(null)
   const submittingRef = useRef(false)
   const advancingRef = useRef(false)
+  const botAnswersRef = useRef([])       // трекинг ответов бота
+  const botShouldWinRef = useRef(false)
+  const isBotGameRef = useRef(false)
 
   useEffect(() => {
     loadDuel()
@@ -78,6 +81,13 @@ export default function Game() {
     setDuel(duelData)
     setActiveDuel(duelData)
 
+    // Detect bot game
+    if (duelData.is_bot_game) {
+      isBotGameRef.current = true
+      botShouldWinRef.current = !!duelData.bot_should_win
+      botAnswersRef.current = []
+    }
+
     let qs = []
     if (duelData.question_ids?.length > 0) {
       const { data } = await supabase
@@ -90,6 +100,76 @@ export default function Game() {
 
     setQuestions(qs)
     setLoading(false)
+  }
+
+  // ── Bot logic ──
+  function generateBotAnswer(qi, question, humanTimeSpent, humanIsCorrect) {
+    const botShouldWin = botShouldWinRef.current
+    const humanCorrect = myAnswers.filter(a => a.isCorrect).length + (humanIsCorrect ? 1 : 0)
+    const botCorrect = botAnswersRef.current.filter(a => a.isCorrect).length
+    const remaining = QUESTION_COUNT - qi - 1 // questions left after this one
+    const isLast = remaining === 0
+
+    let shouldBeCorrect
+    if (isLast) {
+      // Last question — guarantee outcome
+      if (botShouldWin) {
+        // Bot needs to be ahead (or tie with faster time)
+        shouldBeCorrect = botCorrect <= humanCorrect // if behind or tied — answer correctly
+      } else {
+        // Bot needs to lose
+        shouldBeCorrect = botCorrect < humanCorrect - 1 // only answer correctly if far behind
+      }
+    } else {
+      // Not last — probabilistic
+      const diff = humanCorrect - botCorrect
+      if (botShouldWin) {
+        // Base ~75%, boost if falling behind
+        const prob = Math.min(0.95, Math.max(0.2, 0.75 + diff * 0.12))
+        shouldBeCorrect = Math.random() < prob
+      } else {
+        // Base ~35%, reduce if getting ahead
+        const prob = Math.min(0.8, Math.max(0.05, 0.35 - diff * 0.1))
+        shouldBeCorrect = Math.random() < prob
+      }
+    }
+
+    // Pick answer index
+    const answerIndex = shouldBeCorrect
+      ? question.correct_index
+      : [0, 1, 2, 3].filter(i => i !== question.correct_index)[Math.floor(Math.random() * 3)]
+
+    // Time — realistic
+    let timeSpent
+    if (shouldBeCorrect) {
+      timeSpent = 2 + Math.random() * 6 // 2-8s
+    } else {
+      timeSpent = 5 + Math.random() * 8 // 5-13s
+    }
+    // Tiebreak: if last q and scores will be equal
+    if (isLast && (botCorrect + (shouldBeCorrect ? 1 : 0)) === humanCorrect) {
+      if (botShouldWin) {
+        timeSpent = Math.min(timeSpent, humanTimeSpent - 0.5) // faster
+        timeSpent = Math.max(1, timeSpent)
+      } else {
+        timeSpent = Math.max(timeSpent, humanTimeSpent + 1) // slower
+        timeSpent = Math.min(14.5, timeSpent)
+      }
+    }
+
+    timeSpent = Math.round(timeSpent * 10) / 10
+
+    const result = { questionIndex: qi, isCorrect: shouldBeCorrect, timeSpent, answerIndex }
+    botAnswersRef.current.push(result)
+    return result
+  }
+
+  async function submitBotAnswer(qi, question, humanTimeSpent, humanIsCorrect) {
+    const ba = generateBotAnswer(qi, question, humanTimeSpent, humanIsCorrect)
+    // Realistic delay: bot appears to "think"
+    const delay = Math.max(0.5, Math.min(ba.timeSpent - humanTimeSpent, 4))
+    await new Promise(r => setTimeout(r, delay * 1000))
+    await submitAnswer(duelId, BOT_USER_ID, qi, ba.answerIndex, ba.isCorrect, ba.timeSpent)
   }
 
   function handleSelect(index) {
@@ -112,6 +192,11 @@ export default function Game() {
 
     await submitAnswer(duelId, user.id, qIndex, selected, isCorrect, timeSpent)
 
+    if (isBotGameRef.current) {
+      // Submit bot answer with delay — polling/realtime will pick it up
+      submitBotAnswer(qIndex, q, timeSpent, isCorrect)
+    }
+
     setWaitingOpponent(true)
     startWaitingForOpponent(qIndex)
   }
@@ -123,9 +208,13 @@ export default function Game() {
     setSelected(null)
     haptic('light')
 
+    const q = questions[qIndex]
     setMyAnswers(prev => [...prev, { questionIndex: qIndex, isCorrect: false, timeSpent: TIME_PER_QUESTION }])
 
     submitAnswer(duelId, user.id, qIndex, null, false, TIME_PER_QUESTION).then(() => {
+      if (isBotGameRef.current && q) {
+        submitBotAnswer(qIndex, q, TIME_PER_QUESTION, false)
+      }
       setWaitingOpponent(true)
       startWaitingForOpponent(qIndex)
     })
