@@ -269,6 +269,8 @@ export default function Blackjack() {
   const botShouldWinRef = useRef(Math.random() < 0.5)
   const stake = isDevDuel ? devStake : (duelInfo?.stake || 0)
   const isPlayer1 = isDevDuel ? true : (duelInfo?.creator_id === user?.id)
+  // Ref for PvP role — set BEFORE calling startRoundFromState to avoid stale closures
+  const isPlayer1Ref = useRef(true)
 
   // Game state
   const [phase, setPhase] = useState('loading')
@@ -294,6 +296,8 @@ export default function Blackjack() {
   const timerRef = useRef(null)
   const channelRef = useRef(null)
   const actionInFlightRef = useRef(false)
+  const deckRef = useRef([])
+  const playerStandRef = useRef(false)
 
   // Bot phantom state (only for bot games)
   const botRealTakenRef = useRef([])       // real cards bot took from deck
@@ -399,13 +403,17 @@ export default function Blackjack() {
   // ══════════════════════════════════════════
 
   const startRoundFromState = useCallback((bjDeck, bjState) => {
+    // Use ref for role — avoids stale closure from React state timing
+    const p1 = isPlayer1Ref.current
     const fullDeck = bjDeck
+    deckRef.current = fullDeck
     setDeck(fullDeck)
     setRemaining([])
     setPlayerHand([])
     setOpponentHand([])
     setPlayerScore(0)
     setOpponentScore(0)
+    playerStandRef.current = false
     setPlayerStand(false)
     setOpponentStand(false)
     setDeckSpread(false)
@@ -418,11 +426,11 @@ export default function Blackjack() {
     gameOverRef.current = false
     setRoundNum(bjState.round || 1)
 
-    const myHandKey = isPlayer1 ? 'player1_hand' : 'player2_hand'
-    const oppHandKey = isPlayer1 ? 'player2_hand' : 'player1_hand'
-    const myStandKey = isPlayer1 ? 'player1_stand' : 'player2_stand'
-    const oppStandKey = isPlayer1 ? 'player2_stand' : 'player1_stand'
-    const myTurnRole = isPlayer1 ? 'player1' : 'player2'
+    const myHandKey = p1 ? 'player1_hand' : 'player2_hand'
+    const oppHandKey = p1 ? 'player2_hand' : 'player1_hand'
+    const myStandKey = p1 ? 'player1_stand' : 'player2_stand'
+    const oppStandKey = p1 ? 'player2_stand' : 'player1_stand'
+    const myTurnRole = p1 ? 'player1' : 'player2'
 
     const myCards = deckToCards(fullDeck, bjState[myHandKey])
     const oppCards = deckToCards(fullDeck, bjState[oppHandKey])
@@ -447,13 +455,14 @@ export default function Blackjack() {
     setTimeout(() => {
       if (myCards.length > 2) { setPlayerHand(myCards); setPlayerScore(calcScore(myCards)) }
       if (oppCards.length > 2) { setOpponentHand(oppCards); setOpponentScore(calcScore(oppCards)) }
+      playerStandRef.current = myStand
       setPlayerStand(myStand)
       setOpponentStand(oppStand)
       if (bjState.phase === 'finished') setPhase('finished')
       else if (bjState.current_turn === myTurnRole && !myStand) setPhase('player_turn')
       else setPhase('opponent_turn')
     }, 3100)
-  }, [isPlayer1])
+  }, [])
 
   // ── Initialize game ──
   useEffect(() => {
@@ -469,6 +478,8 @@ export default function Blackjack() {
         navigate('/')
         return
       }
+      // Set role ref BEFORE anything else — critical for PvP correctness
+      isPlayer1Ref.current = data.creator_id === user?.id
       setDuelInfo(data)
       botShouldWinRef.current = data.bot_should_win ?? (Math.random() < 0.5)
 
@@ -501,24 +512,26 @@ export default function Blackjack() {
   }
 
   function animateOpponentHitPvP(cardIndex, newState) {
-    if (!deck.length) return
-    const card = deck[cardIndex]
+    const d = deckRef.current
+    if (!d.length) return
+    const card = d[cardIndex]
     if (!card) return
+    const p1 = isPlayer1Ref.current
 
     setDeckSpread(false)
     setTimeout(() => {
       setOpponentHand(prev => [...prev, card])
-      const oppHandKey = isPlayer1 ? 'player2_hand' : 'player1_hand'
-      const oppCards = deckToCards(deck, newState[oppHandKey])
+      const oppHandKey = p1 ? 'player2_hand' : 'player1_hand'
+      const oppCards = deckToCards(d, newState[oppHandKey])
       setOpponentScore(calcScore(oppCards))
-      setRemaining(getRemainingCards(deck, newState.deck_index))
-      const oppStandKey = isPlayer1 ? 'player2_stand' : 'player1_stand'
+      setRemaining(getRemainingCards(d, newState.deck_index))
+      const oppStandKey = p1 ? 'player2_stand' : 'player1_stand'
       if (newState[oppStandKey]) setOpponentStand(true)
 
       setTimeout(() => {
         setDeckSpread(true)
-        const myTurnRole = isPlayer1 ? 'player1' : 'player2'
-        if (newState.current_turn === myTurnRole && !playerStand) {
+        const myTurnRole = p1 ? 'player1' : 'player2'
+        if (newState.current_turn === myTurnRole && !playerStandRef.current) {
           setIsMyTurn(true)
           setPhase('player_turn')
         } else {
@@ -531,8 +544,9 @@ export default function Blackjack() {
 
   function handleOpponentStandPvP(newState) {
     setOpponentStand(true)
-    const myTurnRole = isPlayer1 ? 'player1' : 'player2'
-    if (newState.current_turn === myTurnRole && !playerStand) {
+    const p1 = isPlayer1Ref.current
+    const myTurnRole = p1 ? 'player1' : 'player2'
+    if (newState.current_turn === myTurnRole && !playerStandRef.current) {
       setIsMyTurn(true)
       setPhase('player_turn')
     }
@@ -551,13 +565,15 @@ export default function Blackjack() {
   }
 
   function handleFinishedFromServer(finalState) {
+    const p1 = isPlayer1Ref.current
+    const d = deckRef.current
     setPhase('finished')
     setRevealOpponent(true)
     haptic('heavy')
-    const myHandKey = isPlayer1 ? 'player1_hand' : 'player2_hand'
-    const oppHandKey = isPlayer1 ? 'player2_hand' : 'player1_hand'
-    const myCards = deckToCards(deck, finalState[myHandKey])
-    const oppCards = deckToCards(deck, finalState[oppHandKey])
+    const myHandKey = p1 ? 'player1_hand' : 'player2_hand'
+    const oppHandKey = p1 ? 'player2_hand' : 'player1_hand'
+    const myCards = deckToCards(d, finalState[myHandKey])
+    const oppCards = deckToCards(d, finalState[oppHandKey])
     const pScore = calcScore(myCards)
     const oScore = calcScore(oppCards)
     setPlayerHand(myCards); setPlayerScore(pScore)
@@ -628,19 +644,20 @@ export default function Blackjack() {
     const newState = res.state || res.new_state
     if (!newState) { setAnimatingHit(false); setDeckSpread(true); return }
 
-    const myHandKey = isPlayer1 ? 'player1_hand' : 'player2_hand'
-    const myStandKey = isPlayer1 ? 'player1_stand' : 'player2_stand'
+    const p1 = isPlayer1Ref.current
+    const myHandKey = p1 ? 'player1_hand' : 'player2_hand'
+    const myStandKey = p1 ? 'player1_stand' : 'player2_stand'
     const myCards = deckToCards(deck, newState[myHandKey])
     const myScore = calcScore(myCards)
     const rem = getRemainingCards(deck, newState.deck_index)
     const myStand = newState[myStandKey]
-    const myTurnRole = isPlayer1 ? 'player1' : 'player2'
+    const myTurnRole = p1 ? 'player1' : 'player2'
 
     setTimeout(() => {
       setPlayerHand(myCards); setPlayerScore(myScore); setRemaining(rem)
       setTimeout(() => {
         setDeckSpread(true); setAnimatingHit(false)
-        if (myStand) { setPlayerStand(true); haptic('medium') }
+        if (myStand) { playerStandRef.current = true; setPlayerStand(true); haptic('medium') }
         if (res.status === 'draw') { handleDrawPvPLocal(res); return }
         if (res.status === 'finished') { handleFinishedPvPLocal(res); return }
         if (newState.current_turn === myTurnRole && !myStand) {
@@ -675,6 +692,7 @@ export default function Blackjack() {
   async function handleStandPvP() {
     if (actionInFlightRef.current) return
     actionInFlightRef.current = true
+    playerStandRef.current = true
     setPlayerStand(true)
 
     const res = await submitBlackjackAction(duelId, user.id, 'stand')
@@ -685,7 +703,8 @@ export default function Blackjack() {
     if (res.status === 'draw') { handleDrawPvPLocal(res); return }
     if (res.status === 'finished') { handleFinishedPvPLocal(res); return }
     if (newState) {
-      const myTurnRole = isPlayer1 ? 'player1' : 'player2'
+      const p1 = isPlayer1Ref.current
+      const myTurnRole = p1 ? 'player1' : 'player2'
       if (newState.current_turn === myTurnRole) { setIsMyTurn(true); setPhase('player_turn') }
       else { setIsMyTurn(false); setPhase('opponent_turn') }
     }
@@ -702,7 +721,7 @@ export default function Blackjack() {
     setTimeout(async () => {
       setDrawMessage(false)
       if (res.new_state && res.new_deck) {
-        setDeck(res.new_deck); startRoundFromState(res.new_deck, res.new_state)
+        deckRef.current = res.new_deck; setDeck(res.new_deck); startRoundFromState(res.new_deck, res.new_state)
       } else {
         const data = await getBlackjackState(duelId)
         if (data) { setDuelInfo(data); startRoundFromState(data.bj_deck, data.bj_state) }
@@ -711,11 +730,12 @@ export default function Blackjack() {
   }
 
   function handleFinishedPvPLocal(res) {
+    const p1 = isPlayer1Ref.current
     setPhase('finished'); setRevealOpponent(true); haptic('heavy')
-    const pScore = isPlayer1 ? res.p1_score : res.p2_score
-    const oScore = isPlayer1 ? res.p2_score : res.p1_score
+    const pScore = p1 ? res.p1_score : res.p2_score
+    const oScore = p1 ? res.p2_score : res.p1_score
     if (res.state) {
-      const oppHandKey = isPlayer1 ? 'player2_hand' : 'player1_hand'
+      const oppHandKey = p1 ? 'player2_hand' : 'player1_hand'
       setOpponentHand(deckToCards(deck, res.state[oppHandKey]))
     }
     setPlayerScore(pScore); setOpponentScore(oScore)
