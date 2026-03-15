@@ -19,6 +19,11 @@ function getRankDisplay(rank) {
   return { label: '500+', color: '#4B5563', bg: '#4B556318' }
 }
 
+// Local YYYY-MM-DD (NOT UTC — avoids timezone shift)
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // Fill missing days with zeros for chart rendering
 // Shows days from registration date (or max 7 days)
 function buildChartData(dailyStats, createdAt) {
@@ -34,7 +39,7 @@ function buildChartData(dailyStats, createdAt) {
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)
+    const key = localDateStr(d)
     const label = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`
     const stat = statsMap.get(key)
     result.push({ date: label, pnl: stat?.pnl ?? 0 })

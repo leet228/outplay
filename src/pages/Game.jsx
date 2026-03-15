@@ -483,7 +483,8 @@ export default function Game() {
     if (!isDevDuel) {
     const pnlChange = won ? (payout - duel.stake) : -duel.stake
 
-    const today = new Date().toISOString().slice(0, 10)
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const updatedDailyStats = [...dailyStats]
     const todayIdx = updatedDailyStats.findIndex(d => d.date === today)
     if (todayIdx >= 0) {
