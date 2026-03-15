@@ -59,10 +59,10 @@ export const translations = {
     gameLive: 'Играть',
     gameQuizTitle: 'Викторина',
     gameQuizSub: 'Дуэль 1 на 1 · 10 вопросов',
-    gameSpeedTitle: 'Спидран',
-    gameSpeedSub: 'Кто быстрее ответит',
-    gameBlitzTitle: 'Блиц',
-    gameBlitzSub: '5 вопросов · 5 сек',
+    gameSequenceTitle: 'Последовательность',
+    gameSequenceSub: 'Запомни и повтори · 3 раунда',
+    gameBlackjackTitle: '21 очко',
+    gameBlackjackSub: 'Карточная дуэль 1 на 1',
 
     // Profile
     balance: 'Баланс',
@@ -295,10 +295,10 @@ export const translations = {
     gameLive: 'Play',
     gameQuizTitle: 'Quiz',
     gameQuizSub: '1v1 Duel · 10 questions',
-    gameSpeedTitle: 'Speedrun',
-    gameSpeedSub: 'Who answers faster',
-    gameBlitzTitle: 'Blitz',
-    gameBlitzSub: '5 questions · 5 sec',
+    gameSequenceTitle: 'Sequence',
+    gameSequenceSub: 'Remember & repeat · 3 rounds',
+    gameBlackjackTitle: '21 Points',
+    gameBlackjackSub: 'Card duel 1v1',
 
     // Profile
     balance: 'Balance',

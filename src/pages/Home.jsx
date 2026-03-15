@@ -894,8 +894,8 @@ function FriendsPanel({ open, onClose, t, user }) {
 /* ── Games ── */
 const GAMES = [
   { id: 'quiz', titleKey: 'gameQuizTitle', subKey: 'gameQuizSub', available: true,  accent: '#3B82F6', shadow: '#1d3461' },
-  { id: 'speed', titleKey: 'gameSpeedTitle', subKey: 'gameSpeedSub', available: false, accent: '#8B5CF6', shadow: '#2d1b69' },
-  { id: 'blitz', titleKey: 'gameBlitzTitle', subKey: 'gameBlitzSub', available: false, accent: '#F59E0B', shadow: '#78350f' },
+  { id: 'sequence', titleKey: 'gameSequenceTitle', subKey: 'gameSequenceSub', available: false, accent: '#8B5CF6', shadow: '#2d1b69' },
+  { id: 'blackjack', titleKey: 'gameBlackjackTitle', subKey: 'gameBlackjackSub', available: false, accent: '#F59E0B', shadow: '#78350f' },
 ]
 
 /* ── Home ── */
