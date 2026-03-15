@@ -476,12 +476,17 @@ BEGIN
 
   -- Для quiz: вопросы
   IF p_game_type = 'quiz' THEN
-    SELECT ARRAY(
-      SELECT id FROM questions
-      WHERE category = p_category
-      ORDER BY RANDOM()
-      LIMIT 5
-    ) INTO v_question_ids;
+    IF p_category = 'quiz' THEN
+      -- "Общая викторина" — вопросы из ВСЕХ категорий
+      SELECT ARRAY(
+        SELECT id FROM questions ORDER BY RANDOM() LIMIT 5
+      ) INTO v_question_ids;
+    ELSE
+      -- Конкретная категория
+      SELECT ARRAY(
+        SELECT id FROM questions WHERE category = p_category ORDER BY RANDOM() LIMIT 5
+      ) INTO v_question_ids;
+    END IF;
 
     IF v_question_ids IS NULL OR array_length(v_question_ids, 1) IS NULL OR array_length(v_question_ids, 1) < 5 THEN
       PERFORM admin_log('error', 'rpc:find_match', 'Not enough questions for category',
@@ -607,9 +612,16 @@ BEGIN
 
   -- Для quiz: вопросы
   IF p_game_type = 'quiz' THEN
-    SELECT ARRAY(
-      SELECT id FROM questions WHERE category = p_category ORDER BY RANDOM() LIMIT 5
-    ) INTO v_question_ids;
+    IF p_category = 'quiz' THEN
+      -- "Общая викторина" — вопросы из ВСЕХ категорий
+      SELECT ARRAY(
+        SELECT id FROM questions ORDER BY RANDOM() LIMIT 5
+      ) INTO v_question_ids;
+    ELSE
+      SELECT ARRAY(
+        SELECT id FROM questions WHERE category = p_category ORDER BY RANDOM() LIMIT 5
+      ) INTO v_question_ids;
+    END IF;
 
     IF v_question_ids IS NULL OR array_length(v_question_ids, 1) IS NULL OR array_length(v_question_ids, 1) < 5 THEN
       RETURN jsonb_build_object('status', 'error', 'error', 'not_enough_questions');
