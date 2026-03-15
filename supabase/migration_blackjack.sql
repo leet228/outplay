@@ -14,6 +14,11 @@ ALTER TABLE duels ADD COLUMN IF NOT EXISTS bj_state JSONB;
 -- Колонка game_type в matchmaking_queue для фильтрации
 ALTER TABLE matchmaking_queue ADD COLUMN IF NOT EXISTS game_type TEXT NOT NULL DEFAULT 'quiz';
 
+-- Расширяем CHECK constraint на category чтобы включить 'blackjack' и 'quiz'
+ALTER TABLE matchmaking_queue DROP CONSTRAINT IF EXISTS matchmaking_queue_category_check;
+ALTER TABLE matchmaking_queue ADD CONSTRAINT matchmaking_queue_category_check
+  CHECK (category IN ('general','history','science','sport','movies','music','quiz','blackjack','sequence'));
+
 -- ╔═══════════════════════════════════════════╗
 -- ║  2. Таблица blackjack_actions (realtime)  ║
 -- ╚═══════════════════════════════════════════╝
@@ -31,10 +36,16 @@ CREATE TABLE IF NOT EXISTS blackjack_actions (
 CREATE INDEX IF NOT EXISTS idx_bj_actions_duel ON blackjack_actions(duel_id, created_at);
 
 ALTER TABLE blackjack_actions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "bj_actions_read" ON blackjack_actions;
 CREATE POLICY "bj_actions_read" ON blackjack_actions FOR SELECT USING (true);
 
 -- Включить realtime для blackjack_actions
-ALTER PUBLICATION supabase_realtime ADD TABLE blackjack_actions;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE blackjack_actions;
+EXCEPTION WHEN duplicate_object THEN
+  NULL; -- already added
+END $$;
 
 
 -- ╔═══════════════════════════════════════════╗
