@@ -202,12 +202,14 @@ export default function Game() {
     await submitAnswer(duelId, user.id, qIndex, selected, isCorrect, timeSpent)
 
     if (isBotGameRef.current) {
-      // Submit bot answer with delay — polling/realtime will pick it up
-      submitBotAnswer(qIndex, q, timeSpent, isCorrect)
+      // Bot game: submit bot answer then advance directly — no polling needed
+      setWaitingOpponent(true)
+      await submitBotAnswer(qIndex, q, timeSpent, isCorrect)
+      onBothAnswered()
+    } else {
+      setWaitingOpponent(true)
+      startWaitingForOpponent(qIndex)
     }
-
-    setWaitingOpponent(true)
-    startWaitingForOpponent(qIndex)
   }
 
   function handleTimeout() {
@@ -220,12 +222,15 @@ export default function Game() {
     const q = questions[qIndex]
     setMyAnswers(prev => [...prev, { questionIndex: qIndex, isCorrect: false, timeSpent: TIME_PER_QUESTION }])
 
-    submitAnswer(duelId, user.id, qIndex, null, false, TIME_PER_QUESTION).then(() => {
+    submitAnswer(duelId, user.id, qIndex, null, false, TIME_PER_QUESTION).then(async () => {
       if (isBotGameRef.current && q) {
-        submitBotAnswer(qIndex, q, TIME_PER_QUESTION, false)
+        setWaitingOpponent(true)
+        await submitBotAnswer(qIndex, q, TIME_PER_QUESTION, false)
+        onBothAnswered()
+      } else {
+        setWaitingOpponent(true)
+        startWaitingForOpponent(qIndex)
       }
-      setWaitingOpponent(true)
-      startWaitingForOpponent(qIndex)
     })
   }
 
@@ -326,7 +331,10 @@ export default function Game() {
     }
 
     const isCreator = duel.creator_id === user.id
-    const finalMyScore = myAnswers.filter(a => a.isCorrect).length
+    // Берём счёт из БД — локальный myAnswers может быть stale из-за React batching
+    const finalMyScore = finalDuel
+      ? (isCreator ? finalDuel.creator_score : finalDuel.opponent_score)
+      : myAnswers.filter(a => a.isCorrect).length
     let won = null
     let payout = 0
     let oppScore = null
