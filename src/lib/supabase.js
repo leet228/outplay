@@ -356,23 +356,25 @@ export async function getBotStarsBalance() {
 // ── Bot ─────────────────────────────────────────
 export const BOT_USER_ID = '00000000-0000-0000-0000-000000000001'
 
-export async function createBotDuel(userId, category, stakes) {
+export async function createBotDuel(userId, category, stakes, gameType = 'quiz') {
   const { data, error } = await supabase.rpc('create_bot_duel', {
     p_user_id: userId,
     p_category: category,
     p_stakes: stakes,
+    p_game_type: gameType,
   })
   if (error) { console.error('createBotDuel error:', error); return null }
   return data
 }
 
 // ── Matchmaking ─────────────────────────────────
-export async function findMatch(userId, category, stakes) {
+export async function findMatch(userId, category, stakes, gameType = 'quiz') {
   try {
     const { data, error } = await supabase.rpc('find_match', {
       p_user_id: userId,
       p_category: category,
       p_stakes: stakes,
+      p_game_type: gameType,
     })
     if (error) {
       console.error('findMatch error:', error)
@@ -407,6 +409,52 @@ export async function finalizeDuel(duelId) {
   const { data, error } = await supabase.rpc('finalize_duel', { p_duel_id: duelId })
   if (error) { console.error('finalizeDuel error:', error); return null }
   return data
+}
+
+// ── Blackjack ───────────────────────────────────
+export async function getBlackjackState(duelId) {
+  const { data, error } = await supabase
+    .from('duels')
+    .select('id, bj_deck, bj_state, creator_id, opponent_id, stake, status, is_bot_game, bot_should_win, game_type')
+    .eq('id', duelId)
+    .single()
+  if (error) { console.error('getBlackjackState error:', error); return null }
+  return data
+}
+
+export async function submitBlackjackAction(duelId, userId, action) {
+  const { data, error } = await supabase.rpc('submit_blackjack_action', {
+    p_duel_id: duelId,
+    p_user_id: userId,
+    p_action: action,
+  })
+  if (error) { console.error('submitBlackjackAction error:', error); return null }
+  return data
+}
+
+export async function finalizeBlackjack(duelId, creatorScore, opponentScore) {
+  const { data, error } = await supabase.rpc('finalize_blackjack', {
+    p_duel_id: duelId,
+    p_creator_score: creatorScore,
+    p_opponent_score: opponentScore,
+  })
+  if (error) { console.error('finalizeBlackjack error:', error); return null }
+  return data
+}
+
+export function subscribeBlackjackActions(duelId, callback) {
+  const channel = supabase
+    .channel(`bj-${duelId}`)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'blackjack_actions',
+      filter: `duel_id=eq.${duelId}`,
+    }, payload => {
+      callback(payload.new)
+    })
+    .subscribe()
+  return channel
 }
 
 export async function getRecentCryptoDeposits(limit = 10) {

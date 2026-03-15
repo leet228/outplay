@@ -334,7 +334,8 @@
   padding: 18px 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   min-height: 120px;
 }
 
@@ -388,6 +389,7 @@
 .game-card-info {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 4px;
   flex: 1;
 }
@@ -402,7 +404,11 @@
 }
 
 .game-card--small .game-card-title {
-  font-size: 16px;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .game-card-sub {
@@ -410,6 +416,12 @@
   color: var(--text-muted);
   font-weight: 500;
   display: block;
+  text-align: center;
+}
+
+.game-card-emoji {
+  font-size: 28px;
+  line-height: 1;
 }
 
 .game-card-badge {

@@ -1,0 +1,532 @@
+/* ── Blackjack 21 ── */
+
+.bj-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100svh;
+  background: var(--bg);
+}
+.bj-loading-spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Table layout ── */
+.bj-table {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  height: 100svh;
+  padding: 20px 16px;
+  background: var(--bg);
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Round badge ── */
+.bj-round-badge {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 10px;
+  z-index: 10;
+}
+
+/* ── Areas ── */
+.bj-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  position: relative;
+}
+
+.bj-opponent-area {
+  flex-shrink: 0;
+}
+
+.bj-player-area {
+  flex-shrink: 0;
+}
+
+.bj-area-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+}
+
+/* ── Hand ── */
+.bj-hand {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  position: relative;
+  min-height: 74px;
+}
+
+.bj-hand-card {
+  transition: transform 0.4s ease, opacity 0.3s ease;
+}
+
+.bj-hand-card:not(:first-child) {
+  margin-left: -18px;
+}
+
+.bj-hand--opp {
+  min-height: 60px;
+}
+.bj-hand--opp .bj-card {
+  width: 44px;
+  height: 62px;
+}
+
+.bj-dealing {
+  opacity: 0;
+  transform: scale(0.5) translateY(0);
+}
+
+.bj-dealt {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  animation: cardDeal 0.4s ease-out;
+}
+
+@keyframes cardDeal {
+  from { opacity: 0; transform: scale(0.6) translateY(-30px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Score ── */
+.bj-score {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.bj-score--bust {
+  color: #ef4444;
+}
+
+.bj-score--hidden {
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+/* ── Card ── */
+.bj-card {
+  width: 52px;
+  height: 74px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid #ccc;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  transition: transform 0.3s ease;
+}
+
+.bj-card--red { color: #dc2626; }
+.bj-card--black { color: #1a1a1a; }
+
+.bj-card--back {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%);
+  border: 2px solid #3b6ea5;
+}
+
+.bj-card-back-pattern {
+  position: absolute;
+  inset: 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    rgba(255,255,255,0.05) 4px,
+    rgba(255,255,255,0.05) 8px
+  );
+}
+
+/* Card face layout */
+.bj-card-rank-top {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+.bj-card-suit-top {
+  position: absolute;
+  top: 15px;
+  left: 4px;
+  font-size: 8px;
+  line-height: 1;
+}
+.bj-card-body {
+  position: absolute;
+  inset: 20px 14px 20px 14px;
+}
+.bj-card-pip {
+  position: absolute;
+  font-size: 10px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+}
+.bj-card-face-letter {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+.bj-card-rank-bottom {
+  position: absolute;
+  bottom: 3px;
+  right: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  transform: rotate(180deg);
+}
+.bj-card-suit-bottom {
+  position: absolute;
+  bottom: 15px;
+  right: 4px;
+  font-size: 8px;
+  line-height: 1;
+  transform: rotate(180deg);
+}
+
+/* ── Flip animation ── */
+.bj-flip {
+  animation: flipCard 0.5s ease-in-out;
+}
+
+@keyframes flipCard {
+  0%   { transform: rotateY(0deg); }
+  50%  { transform: rotateY(90deg); }
+  100% { transform: rotateY(0deg); }
+}
+
+/* ── Deck area (poker table) ── */
+.bj-deck-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex-shrink: 0;
+  position: relative;
+  min-height: 100px;
+  padding: 18px 8px;
+  background: radial-gradient(ellipse 90% 100% at 50% 50%, #1a5c2e 0%, #14472a 60%, transparent 100%);
+  border-radius: 40px;
+  border: 2px solid #1f6e38;
+  box-shadow:
+    inset 0 0 30px rgba(0,0,0,0.3),
+    0 0 20px rgba(26, 92, 46, 0.2);
+}
+
+.bj-deck {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.4s ease;
+}
+
+/* Stacked deck (3D pile) — neat pile */
+.bj-deck--stacked {
+  width: 46px;
+  height: 62px;
+}
+.bj-deck--stacked .bj-deck-card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transition: all 0.3s ease;
+}
+.bj-deck--stacked .bj-deck-card .bj-card {
+  width: 46px;
+  height: 62px;
+}
+/* Only show top 3 cards offset for depth effect */
+.bj-deck--stacked .bj-deck-card:nth-last-child(1) {
+  transform: translate(0, 0);
+}
+.bj-deck--stacked .bj-deck-card:nth-last-child(2) {
+  transform: translate(1px, -1px);
+}
+.bj-deck--stacked .bj-deck-card:nth-last-child(3) {
+  transform: translate(2px, -2px);
+}
+.bj-deck--stacked .bj-deck-card:nth-last-child(n+4) {
+  transform: translate(2px, -2px);
+  opacity: 0;
+}
+
+/* Spread deck (show all remaining cards) */
+.bj-deck--spread {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  align-content: center;
+  max-width: 300px;
+}
+.bj-deck--spread .bj-deck-card {
+  position: relative;
+  transform: none;
+  transition: all 0.4s ease;
+}
+
+/* Small cards in spread */
+.bj-deck--spread .bj-card {
+  width: 38px;
+  height: 54px;
+}
+.bj-deck--spread .bj-card-rank-top {
+  font-size: 9px;
+  top: 2px;
+  left: 2px;
+}
+.bj-deck--spread .bj-card-suit-top {
+  font-size: 6px;
+  top: 11px;
+  left: 2px;
+}
+.bj-deck--spread .bj-card-body {
+  inset: 16px 4px 16px 4px;
+}
+.bj-deck--spread .bj-card-pip {
+  font-size: 7px;
+}
+.bj-deck--spread .bj-card-face-letter {
+  font-size: 16px;
+}
+.bj-deck--spread .bj-card-rank-bottom {
+  font-size: 9px;
+  bottom: 2px;
+  right: 2px;
+}
+.bj-deck--spread .bj-card-suit-bottom {
+  font-size: 6px;
+  bottom: 11px;
+  right: 2px;
+}
+
+.bj-deck-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ── Timer ── */
+.bj-timer {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 4px;
+}
+.bj-timer-ring {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.bj-timer-bg {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 3;
+}
+.bj-timer-progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dasharray 1s linear;
+}
+.bj-timer--urgent .bj-timer-progress {
+  stroke: #ef4444;
+}
+.bj-timer-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+.bj-timer--urgent .bj-timer-num {
+  color: #ef4444;
+  animation: timerPulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes timerPulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.15); }
+}
+
+/* ── Action buttons ── */
+.bj-actions-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.bj-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 0 16px;
+}
+
+.bj-btn {
+  flex: 1;
+  padding: 14px 0;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.2s;
+  color: #fff;
+}
+.bj-btn:active { transform: scale(0.96); }
+.bj-btn:disabled { opacity: 0.35; cursor: default; }
+
+.bj-btn--hit {
+  background: var(--accent);
+}
+.bj-btn--stand {
+  background: #6b7280;
+}
+
+/* ── Waiting dots ── */
+.bj-waiting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--text-muted);
+}
+.bj-waiting-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+.bj-waiting-dot:nth-child(2) { animation-delay: 0.2s; }
+.bj-waiting-dot:nth-child(3) { animation-delay: 0.4s; }
+
+.bj-waiting-text {
+  font-size: 13px;
+  margin-left: 4px;
+}
+
+@keyframes dotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── Stand label ── */
+.bj-stand-label {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ── Result overlay ── */
+.bj-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 20px;
+  border-radius: 12px;
+  animation: resultPop 0.4s ease-out;
+}
+.bj-result--win {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.bj-result--lose {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.bj-result-emoji {
+  font-size: 24px;
+}
+.bj-result-text {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* ── Draw overlay ── */
+.bj-draw-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.3s ease;
+}
+.bj-draw-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  padding: 28px 40px;
+  border-radius: 20px;
+  animation: resultPop 0.4s ease-out;
+}
+.bj-draw-emoji {
+  font-size: 48px;
+}
+.bj-draw-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text);
+}
+.bj-draw-sub {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes resultPop {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

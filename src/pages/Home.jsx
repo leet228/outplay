@@ -277,7 +277,8 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     setTimeout(() => {
       setSearching(false)
       setMatched(false)
-      navigate(`/game/${duelId}`)
+      const route = game?.id === 'blackjack' ? '/blackjack' : '/game'
+      navigate(`${route}/${duelId}`)
     }, 1500)
   }
 
@@ -308,8 +309,21 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     matchFoundRef.current = false
     haptic('medium')
 
+    // Dev mode — skip matchmaking, go straight to game
+    if (user.id === 'dev') {
+      setSearching(true)
+      setSearchTime(0)
+      setTimeout(() => {
+        setSearching(false)
+        const devRoute = game.id === 'blackjack' ? '/blackjack' : '/game'
+        navigate(`${devRoute}/dev-${game.id}-${selectedStakes[0]}`)
+      }, 1500)
+      return
+    }
+
     // Send all selected stakes — backend tries each one
-    const result = await findMatch(user.id, 'general', selectedStakes)
+    const gameType = game.id === 'blackjack' ? 'blackjack' : 'quiz'
+    const result = await findMatch(user.id, game.id, selectedStakes, gameType)
 
     if (!result || result.status === 'error') {
       findingRef.current = false
@@ -374,7 +388,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
         // Guard: если уже нашли матч или отменили — не создаём бот-дуэль
         if (matchFoundRef.current || !findingRef.current) return
         try {
-          const res = await createBotDuel(user.id, 'general', selectedStakes)
+          const res = await createBotDuel(user.id, game.id, selectedStakes, gameType)
           if (res?.status === 'matched') {
             handleMatchFound(res.duel_id)
           }
@@ -910,7 +924,7 @@ const GAME_SHEETS = {
   blackjack: {
     icon: '🃏',
     stats: [
-      { val: '12', lblKey: 'sheetBjCards' },
+      { val: '16', lblKey: 'sheetBjCards' },
       { val: '21', lblKey: 'sheetBjTarget' },
       { val: '1v1', lblKey: 'sheetStatMode' },
     ],
@@ -1028,6 +1042,7 @@ export default function Home() {
                 disabled={!g.available}
               >
                 <div className="game-card-glow" />
+                <span className="game-card-emoji">{GAME_SHEETS[g.id]?.icon}</span>
                 <div className="game-card-info">
                   <span className="game-card-title">{t[g.titleKey]}</span>
                   <span className="game-card-sub">{t[g.subKey]}</span>

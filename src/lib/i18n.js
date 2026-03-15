@@ -76,6 +76,21 @@ export const translations = {
     gameBlackjackTitle: '21 очко',
     gameBlackjackSub: 'Карточная дуэль 1 на 1',
 
+    // Blackjack in-game
+    bjOpponent: 'Соперник',
+    bjYou: 'Вы',
+    bjHit: 'Взять',
+    bjStand: 'Хватит',
+    bjBust: 'Перебор!',
+    bjPoints: 'очков',
+    bjOpponentThinking: 'Соперник думает...',
+    bjYouStand: 'Вы остановились',
+    bjWin: 'Победа!',
+    bjLose: 'Поражение',
+    bjDeckEmpty: 'Колода пуста',
+    bjDraw: 'Ничья!',
+    bjDrawSub: 'Новый раунд...',
+
     // Profile
     balance: 'Баланс',
     deposit: 'Пополнить',
@@ -323,6 +338,20 @@ export const translations = {
     gameSequenceSub: 'Remember & repeat',
     gameBlackjackTitle: '21 Points',
     gameBlackjackSub: 'Card duel 1v1',
+
+    bjOpponent: 'Opponent',
+    bjYou: 'You',
+    bjHit: 'Hit',
+    bjStand: 'Stand',
+    bjBust: 'Bust!',
+    bjPoints: 'points',
+    bjOpponentThinking: 'Opponent thinking...',
+    bjYouStand: 'You stand',
+    bjWin: 'Victory!',
+    bjLose: 'Defeat',
+    bjDeckEmpty: 'Deck empty',
+    bjDraw: 'Draw!',
+    bjDrawSub: 'New round...',
 
     // Profile
     balance: 'Balance',

@@ -46,8 +46,14 @@ export default function Game() {
   const botShouldWinRef = useRef(false)
   const isBotGameRef = useRef(false)
 
+  const isDevDuel = duelId?.startsWith('dev-')
+
   useEffect(() => {
-    loadDuel()
+    if (isDevDuel) {
+      loadDevDuel()
+    } else {
+      loadDuel()
+    }
     return () => cleanupAll()
   }, [duelId])
 
@@ -71,6 +77,43 @@ export default function Game() {
     clearTimeout(timerRef.current)
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
+
+  function loadDevDuel() {
+    // Parse dev-{gameType}-{stake}
+    const parts = duelId.split('-')
+    const gameType = parts[1] || 'quiz'
+    const stake = parseInt(parts[2]) || 100
+
+    const mockQuestions = Array.from({ length: QUESTION_COUNT }, (_, i) => ({
+      id: `dev-q-${i}`,
+      category: gameType,
+      question: `Dev вопрос #${i + 1} (${gameType})`,
+      options: ['Вариант A', 'Вариант B', 'Вариант C', 'Вариант D'],
+      correct_index: Math.floor(Math.random() * 4),
+    }))
+
+    const mockDuel = {
+      id: duelId,
+      creator_id: 'dev',
+      opponent_id: BOT_USER_ID,
+      category: gameType,
+      stake,
+      status: 'active',
+      question_ids: mockQuestions.map(q => q.id),
+      is_bot_game: true,
+      bot_should_win: Math.random() < 0.5,
+      creator_score: null,
+      opponent_score: null,
+    }
+
+    setDuel(mockDuel)
+    setActiveDuel(mockDuel)
+    isBotGameRef.current = true
+    botShouldWinRef.current = mockDuel.bot_should_win
+    botAnswersRef.current = []
+    setQuestions(mockQuestions)
+    setLoading(false)
   }
 
   async function loadDuel() {
@@ -203,16 +246,24 @@ export default function Game() {
 
     setMyAnswers(prev => [...prev, { questionIndex: qIndex, isCorrect, timeSpent }])
 
-    try {
-      await submitAnswer(duelId, user.id, qIndex, selected, isCorrect, timeSpent)
-    } catch (e) {
-      console.error('submitAnswer failed:', e)
+    if (!isDevDuel) {
+      try {
+        await submitAnswer(duelId, user.id, qIndex, selected, isCorrect, timeSpent)
+      } catch (e) {
+        console.error('submitAnswer failed:', e)
+      }
     }
 
     if (isBotGameRef.current) {
       // Bot game: submit bot answer then advance directly — no polling needed
       setWaitingOpponent(true)
-      await submitBotAnswer(qIndex, q, timeSpent, isCorrect)
+      if (!isDevDuel) {
+        await submitBotAnswer(qIndex, q, timeSpent, isCorrect)
+      } else {
+        // Dev mode: just generate bot answer locally (no RPC)
+        generateBotAnswer(qIndex, q, timeSpent, isCorrect)
+        await new Promise(r => setTimeout(r, 500))
+      }
       onBothAnswered()
     } else {
       setWaitingOpponent(true)
@@ -230,10 +281,19 @@ export default function Game() {
     const q = questions[qIndex]
     setMyAnswers(prev => [...prev, { questionIndex: qIndex, isCorrect: false, timeSpent: TIME_PER_QUESTION }])
 
-    submitAnswer(duelId, user.id, qIndex, null, false, TIME_PER_QUESTION).then(async () => {
+    const doSubmit = isDevDuel
+      ? Promise.resolve()
+      : submitAnswer(duelId, user.id, qIndex, null, false, TIME_PER_QUESTION)
+
+    doSubmit.then(async () => {
       if (isBotGameRef.current && q) {
         setWaitingOpponent(true)
-        await submitBotAnswer(qIndex, q, TIME_PER_QUESTION, false)
+        if (!isDevDuel) {
+          await submitBotAnswer(qIndex, q, TIME_PER_QUESTION, false)
+        } else {
+          generateBotAnswer(qIndex, q, TIME_PER_QUESTION, false)
+          await new Promise(r => setTimeout(r, 500))
+        }
         onBothAnswered()
       } else {
         setWaitingOpponent(true)
@@ -241,7 +301,6 @@ export default function Game() {
       }
     }).catch(e => {
       console.error('Timeout submitAnswer failed:', e)
-      // Всё равно двигаемся дальше чтобы игра не зависла
       if (isBotGameRef.current) {
         onBothAnswered()
       } else {
@@ -336,74 +395,94 @@ export default function Game() {
     setFinished(true)
     cleanupAll()
 
-    // Wait for finalize_duel to complete on server
-    await new Promise(r => setTimeout(r, 500))
+    let finalMyScore, won, payout, oppScore, tiebreak, timeDiff
 
-    let finalDuel = null
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { data } = await supabase
-        .from('duels').select('*').eq('id', duelId).single()
-      if (data?.status === 'finished') { finalDuel = data; break }
-      await new Promise(r => setTimeout(r, 1500))
-    }
+    if (isDevDuel) {
+      // Dev mode — compute result locally
+      finalMyScore = myAnswers.filter(a => a.isCorrect).length
+      oppScore = botAnswersRef.current.filter(a => a.isCorrect).length
+      tiebreak = false
+      timeDiff = 0
 
-    const isCreator = duel.creator_id === user.id
-    // Берём счёт из БД — локальный myAnswers может быть stale из-за React batching
-    const finalMyScore = finalDuel
-      ? (isCreator ? finalDuel.creator_score : finalDuel.opponent_score)
-      : myAnswers.filter(a => a.isCorrect).length
-    let won = null
-    let payout = 0
-    let oppScore = null
-    let tiebreak = false
-    let timeDiff = 0
-
-    if (finalDuel?.status === 'finished') {
-      oppScore = isCreator ? finalDuel.opponent_score : finalDuel.creator_score
-      const scoresEqual = finalDuel.creator_score === finalDuel.opponent_score
-
-      if (finalDuel.winner_id === user.id) {
+      if (finalMyScore > oppScore) {
         won = true
-        payout = Math.floor(duel.stake * 2 * 0.95)
-      } else {
+      } else if (oppScore > finalMyScore) {
         won = false
-        payout = 0
+      } else {
+        // Tiebreak by time
+        tiebreak = true
+        const myTime = myAnswers.reduce((s, a) => s + a.timeSpent, 0)
+        const botTime = botAnswersRef.current.reduce((s, a) => s + a.timeSpent, 0)
+        timeDiff = Math.round(Math.abs(myTime - botTime) * 10) / 10
+        won = myTime <= botTime
+      }
+      payout = won ? Math.floor(duel.stake * 2 * 0.95) : 0
+    } else {
+      // Production — fetch from DB
+      await new Promise(r => setTimeout(r, 500))
+
+      let finalDuel = null
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { data } = await supabase
+          .from('duels').select('*').eq('id', duelId).single()
+        if (data?.status === 'finished') { finalDuel = data; break }
+        await new Promise(r => setTimeout(r, 1500))
       }
 
-      // Если одинаковый счёт — загружаем время для тайбрейка
-      if (scoresEqual) {
-        tiebreak = true
-        const { data: allAnswers } = await supabase
-          .from('duel_answers')
-          .select('user_id, time_spent')
-          .eq('duel_id', duelId)
+      const isCreator = duel.creator_id === user.id
+      finalMyScore = finalDuel
+        ? (isCreator ? finalDuel.creator_score : finalDuel.opponent_score)
+        : myAnswers.filter(a => a.isCorrect).length
+      won = null
+      payout = 0
+      oppScore = null
+      tiebreak = false
+      timeDiff = 0
 
-        if (allAnswers) {
-          const myTime = allAnswers
-            .filter(a => a.user_id === user.id)
-            .reduce((sum, a) => sum + a.time_spent, 0)
-          const oppTime = allAnswers
-            .filter(a => a.user_id !== user.id)
-            .reduce((sum, a) => sum + a.time_spent, 0)
-          timeDiff = Math.round(Math.abs(myTime - oppTime) * 10) / 10
+      if (finalDuel?.status === 'finished') {
+        oppScore = isCreator ? finalDuel.opponent_score : finalDuel.creator_score
+        const scoresEqual = finalDuel.creator_score === finalDuel.opponent_score
+
+        if (finalDuel.winner_id === user.id) {
+          won = true
+          payout = Math.floor(duel.stake * 2 * 0.95)
+        } else {
+          won = false
+          payout = 0
+        }
+
+        if (scoresEqual) {
+          tiebreak = true
+          const { data: allAnswers } = await supabase
+            .from('duel_answers')
+            .select('user_id, time_spent')
+            .eq('duel_id', duelId)
+
+          if (allAnswers) {
+            const myTime = allAnswers
+              .filter(a => a.user_id === user.id)
+              .reduce((sum, a) => sum + a.time_spent, 0)
+            const oppTime = allAnswers
+              .filter(a => a.user_id !== user.id)
+              .reduce((sum, a) => sum + a.time_spent, 0)
+            timeDiff = Math.round(Math.abs(myTime - oppTime) * 10) / 10
+          }
         }
       }
+
+      // Refresh balance
+      const { data: userData } = await supabase
+        .from('users').select('balance, wins, losses').eq('id', user.id).single()
+      if (userData) {
+        setBalance(userData.balance)
+        setUser({ ...user, wins: userData.wins, losses: userData.losses })
+      }
     }
 
-    // Refresh balance
-    const { data: userData } = await supabase
-      .from('users').select('balance, wins, losses').eq('id', user.id).single()
-    if (userData) {
-      setBalance(userData.balance)
-      // Update local user wins/losses
-      setUser({ ...user, wins: userData.wins, losses: userData.losses })
-    }
-
-    // --- Local state updates ---
-    // pnl must match DB: winner gets (payout - stake), loser gets (-stake)
+    // --- Local state updates (skip in dev mode) ---
+    if (!isDevDuel) {
     const pnlChange = won ? (payout - duel.stake) : -duel.stake
 
-    // 1. Update dailyStats (profile chart)
     const today = new Date().toISOString().slice(0, 10)
     const updatedDailyStats = [...dailyStats]
     const todayIdx = updatedDailyStats.findIndex(d => d.date === today)
@@ -467,11 +546,11 @@ export default function Game() {
       }
     }
 
-    // 5. Update guild season prize pool (0.5% of total pot goes to prize pool)
     if (guildSeason) {
       const guildFee = Math.floor(duel.stake * 2 * 0.005)
       setGuildSeason({ ...guildSeason, prize_pool: (guildSeason.prize_pool || 0) + guildFee })
     }
+    } // end if (!isDevDuel)
 
     setLastResult({
       won,
