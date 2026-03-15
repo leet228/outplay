@@ -554,6 +554,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
     friends, friendRequests, sentRequestIds,
     setFriends, setFriendRequests, setSentRequestIds,
     gameInvites, setGameInvites,
+    sentInvites, setSentInvites,
   } = useGameStore()
 
   const [query, setQuery] = useState('')
@@ -722,7 +723,11 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
   async function handleSendInvite() {
     if (!inviteTarget || !inviteGame || !inviteStake || inviteSending) return
     const stakeNum = parseInt(inviteStake)
-    if (!stakeNum || stakeNum <= 0) return
+    if (!stakeNum || stakeNum < 50) {
+      setInviteMsg('minStake')
+      setTimeout(() => setInviteMsg(null), 2000)
+      return
+    }
     if (stakeNum > balance) {
       setInviteMsg('balance')
       setTimeout(() => setInviteMsg(null), 2000)
@@ -733,6 +738,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
     const result = await sendGameInvite(user.id, inviteTarget.id, inviteGame, stakeNum)
     setInviteSending(false)
     if (result?.invite_id) {
+      setSentInvites([...sentInvites, { id: result.invite_id, to_id: inviteTarget.id, game_type: inviteGame, stake: stakeNum }])
       setInviteMsg('sent')
       setTimeout(() => { setInviteMsg(null); setInviteTarget(null); setInviteGame(null); setInviteStake('') }, 1500)
     } else if (result?.error === 'friend_offline') {
@@ -906,12 +912,15 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
                           <span className="friends-name">{f.first_name}</span>
                           {f.username && <span className="friends-username">@{f.username}</span>}
                         </div>
-                        {activeId === f.id && (
-                          <div className="friends-actions">
-                            <button className="friends-action-btn invite" onClick={e => { e.stopPropagation(); haptic('light'); setInviteTarget(f); setInviteGame(null); setInviteStake(''); setInviteMsg(null) }}>{t.friendsInvite}</button>
-                            <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
-                          </div>
-                        )}
+                        {activeId === f.id && (() => {
+                          const hasPendingInvite = sentInvites.some(si => si.to_id === f.id)
+                          return (
+                            <div className="friends-actions">
+                              <button className={`friends-action-btn invite ${hasPendingInvite ? 'disabled' : ''}`} disabled={hasPendingInvite} onClick={e => { e.stopPropagation(); haptic('light'); setInviteTarget(f); setInviteGame(null); setInviteStake(''); setInviteMsg(null) }}>{hasPendingInvite ? t.inviteSent : t.friendsInvite}</button>
+                              <button className="friends-action-btn remove" onClick={e => { e.stopPropagation(); handleRemoveFriend(f.id) }}>{t.friendsRemove}</button>
+                            </div>
+                          )
+                        })()}
                       </div>
                       {confirmRemoveId === f.id && (
                         <div className="friends-confirm-inline">
@@ -1035,12 +1044,13 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
               placeholder={t.inviteStakePlaceholder}
               value={inviteStake}
               onChange={e => setInviteStake(e.target.value)}
-              min="1"
+              min="50"
               inputMode="numeric"
             />
 
             <div className={`invite-msg ${inviteMsg ? 'visible' : ''}`}>
               {inviteMsg === 'sent' ? t.inviteSent
+                : inviteMsg === 'minStake' ? t.inviteMinStake
                 : inviteMsg === 'balance' ? t.inviteInsufficientBalance
                 : inviteMsg === 'offline' ? t.inviteFriendOffline
                 : inviteMsg === 'error' ? t.inviteError : ''}
