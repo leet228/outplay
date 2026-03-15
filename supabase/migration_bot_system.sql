@@ -149,9 +149,9 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
--- 5. Обновляем finalize_duel — пропускаем бота для дневной статы/гильдий/рефералов
--- ВАЖНО: перезапусти весь finalize_duel и get_leaderboard из schema.sql
--- или примени вручную нужные IF-блоки
+-- 5. ВАЖНО: перезапусти весь finalize_duel из schema.sql!
+-- Изменения: bot_should_win принудительно определяет победителя в бот-играх,
+-- пропуск дневной статы/гильдий/рефералов для бота
 
 -- 6. Обновляем leaderboard — исключаем бота
 -- В get_leaderboard добавить: WHERE u.telegram_id != -1

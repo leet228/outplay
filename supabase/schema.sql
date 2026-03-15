@@ -388,7 +388,18 @@ BEGIN
     UPDATE guild_seasons SET prize_pool = prize_pool + v_guild_fee WHERE id = v_season_id;
   END IF;
 
-  IF d.creator_score > d.opponent_score THEN
+  -- Бот-игра: bot_should_win принудительно определяет победителя
+  IF d.is_bot_game AND d.bot_should_win IS NOT NULL THEN
+    IF d.bot_should_win THEN
+      -- Бот должен выиграть → игрок проигрывает
+      v_winner := d.opponent_id;  -- бот = opponent
+      v_loser  := d.creator_id;   -- игрок = creator
+    ELSE
+      -- Бот должен проиграть → игрок выигрывает
+      v_winner := d.creator_id;
+      v_loser  := d.opponent_id;
+    END IF;
+  ELSIF d.creator_score > d.opponent_score THEN
     v_winner := d.creator_id;
     v_loser  := d.opponent_id;
   ELSIF d.opponent_score > d.creator_score THEN
