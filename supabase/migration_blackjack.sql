@@ -11,6 +11,9 @@ ALTER TABLE duels ADD COLUMN IF NOT EXISTS game_type TEXT NOT NULL DEFAULT 'quiz
 ALTER TABLE duels ADD COLUMN IF NOT EXISTS bj_deck JSONB;
 ALTER TABLE duels ADD COLUMN IF NOT EXISTS bj_state JSONB;
 
+-- Разрешаем NULL для question_ids (blackjack не использует вопросы)
+ALTER TABLE duels ALTER COLUMN question_ids DROP NOT NULL;
+
 -- Колонка game_type в matchmaking_queue для фильтрации
 ALTER TABLE matchmaking_queue ADD COLUMN IF NOT EXISTS game_type TEXT NOT NULL DEFAULT 'quiz';
 
