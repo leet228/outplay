@@ -1483,6 +1483,14 @@
   font-weight: 600;
 }
 
+.friends-invite-error {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ef4444;
+  white-space: nowrap;
+  animation: invite-fade-in 0.2s ease;
+}
+
 /* ═══════════════════════════════════
    Invite Sheet (bottom overlay inside friends panel)
 ═══════════════════════════════════ */

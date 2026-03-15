@@ -569,6 +569,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
   const [inviteStake, setInviteStake] = useState('')
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteMsg, setInviteMsg] = useState(null) // 'sent' | 'error' | 'balance' | 'offline'
+  const [acceptError, setAcceptError] = useState(null) // invite id with balance error
   const debounceRef = useRef(null)
 
   // Refresh friends + invites on open
@@ -751,6 +752,13 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
   }
 
   async function handleAcceptInvite(inv) {
+    // Check balance before accepting
+    if (balance < inv.stake) {
+      haptic('error')
+      setAcceptError(inv.id)
+      setTimeout(() => setAcceptError(null), 2500)
+      return
+    }
     haptic('medium')
     setActionLoading(inv.id)
     const result = await acceptGameInvite(inv.id, user.id)
@@ -760,6 +768,10 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
       onClose()
       const route = inv.game_type === 'blackjack' ? '/blackjack' : '/game'
       navigate(`${route}/${result.duel_id}`)
+    } else if (result?.error === 'insufficient_balance' || result?.error === 'sender_insufficient_balance') {
+      haptic('error')
+      setAcceptError(inv.id)
+      setTimeout(() => setAcceptError(null), 2500)
     }
   }
 
@@ -812,8 +824,14 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
                   </div>
                   {!expired ? (
                     <div className="friends-req-actions">
-                      <button className="friends-action-btn accept" disabled={actionLoading === inv.id} onClick={e => { e.stopPropagation(); handleAcceptInvite(inv) }}>{t.invitePlay}</button>
-                      <button className="friends-action-btn decline" disabled={actionLoading === inv.id} onClick={e => { e.stopPropagation(); handleRejectInvite(inv) }}>{t.inviteDecline}</button>
+                      {acceptError === inv.id ? (
+                        <span className="friends-invite-error">{t.inviteInsufficientBalance}</span>
+                      ) : (
+                        <>
+                          <button className="friends-action-btn accept" disabled={actionLoading === inv.id} onClick={e => { e.stopPropagation(); handleAcceptInvite(inv) }}>{t.invitePlay}</button>
+                          <button className="friends-action-btn decline" disabled={actionLoading === inv.id} onClick={e => { e.stopPropagation(); handleRejectInvite(inv) }}>{t.inviteDecline}</button>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <span className="friends-badge friends-badge--pending">Expired</span>
