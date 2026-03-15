@@ -112,13 +112,22 @@ export default function Game() {
 
     let shouldBeCorrect
     if (isLast) {
-      // Last question — guarantee outcome
+      // Last question — guarantee outcome by SCORE (avoid tiebreaks)
+      const botFinal = botCorrect + 1
+      const botFinalWrong = botCorrect
       if (botShouldWin) {
-        // Bot needs to be ahead (or tie with faster time)
-        shouldBeCorrect = botCorrect <= humanCorrect // if behind or tied — answer correctly
+        // Bot needs to win — prefer winning by score, not tiebreak
+        if (botFinal > humanCorrect) {
+          shouldBeCorrect = true // win by score
+        } else if (botFinalWrong > humanCorrect) {
+          shouldBeCorrect = false // already ahead, can afford wrong
+        } else {
+          // Best we can do is tie or behind — answer correctly
+          shouldBeCorrect = true
+        }
       } else {
-        // Bot needs to lose
-        shouldBeCorrect = botCorrect < humanCorrect - 1 // only answer correctly if far behind
+        // Bot needs to lose — must have fewer correct
+        shouldBeCorrect = botFinal < humanCorrect // only correct if still behind
       }
     } else {
       // Not last — probabilistic
