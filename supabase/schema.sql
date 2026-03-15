@@ -1088,10 +1088,11 @@ BEGIN
   SELECT COALESCE(SUM(pnl), 0) INTO v_total
   FROM user_daily_stats WHERE user_id = p_user_id;
 
-  -- Rank: users with strictly higher PnL + 1
+  -- Rank: users with strictly higher PnL + 1 (exclude bot)
   SELECT COUNT(*) + 1 INTO v_rank
   FROM users u
-  WHERE COALESCE((SELECT SUM(pnl) FROM user_daily_stats WHERE user_id = u.id), 0) > v_total;
+  WHERE u.id != '00000000-0000-0000-0000-000000000001'
+    AND COALESCE((SELECT SUM(pnl) FROM user_daily_stats WHERE user_id = u.id), 0) > v_total;
 
   -- Daily stats for last N days
   SELECT COALESCE(jsonb_agg(

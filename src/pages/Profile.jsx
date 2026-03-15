@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
+import { supabase, getUserProfile, getUserBalance } from '../lib/supabase'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import './Profile.css'
@@ -45,10 +46,30 @@ const W = 320
 const H = 130
 
 export default function Profile() {
-  const { user, balance, currency, rates, setCurrency, lang, setLang, setDepositOpen, rank, dailyStats, totalPnl } = useGameStore()
+  const { user, setUser, balance, setBalance, currency, rates, setCurrency, lang, setLang, setDepositOpen, rank, setRank, dailyStats, setDailyStats, totalPnl, setTotalPnl, setRefEarnings } = useGameStore()
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
   const [tooltip, setTooltip] = useState(null)
+
+  // Refresh profile data + balance + user stats from server on mount
+  useEffect(() => {
+    if (!user?.id || user.id === 'dev') return
+    getUserProfile(user.id).then(profile => {
+      if (profile) {
+        setRank(profile.rank ?? 0)
+        setTotalPnl(profile.total_pnl ?? 0)
+        setDailyStats(profile.daily_stats ?? [])
+        setRefEarnings(profile.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
+      }
+    })
+    getUserBalance(user.id).then(bal => {
+      if (bal !== undefined) setBalance(bal)
+    })
+    // Refresh wins/losses from users table
+    supabase.from('users').select('wins, losses').eq('id', user.id).single().then(({ data }) => {
+      if (data) setUser({ ...user, wins: data.wins, losses: data.losses })
+    })
+  }, [user?.id])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
   const [withdrawError, setWithdrawError] = useState(false)
