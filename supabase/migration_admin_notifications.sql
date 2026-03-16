@@ -57,50 +57,47 @@ $$;
 GRANT EXECUTE ON FUNCTION update_bug_report_status(UUID, TEXT) TO anon, authenticated;
 
 -- 3. Trigger: notify admin on error/warn logs
---    Sends directly to Telegram API via pg_net (no Edge Function needed)
---    Uses Edge Function URL with service role key from Supabase project settings
+--    Sends DIRECTLY to Telegram API via pg_net — no Edge Function needed
 CREATE OR REPLACE FUNCTION notify_admin_on_log()
 RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_url TEXT := 'https://aakczalawsfnwykzpcsc.supabase.co/functions/v1/notify-admin';
-  v_key TEXT;
+  v_bot TEXT := '8774811583:AAF5ZyJ4rXrmtLXW67PI5bdHPxXvR_9QD04';
+  v_chat TEXT := '945676433';
+  v_icon TEXT;
+  v_msg TEXT;
+  v_details TEXT;
 BEGIN
-  IF NEW.level IN ('error', 'warn') THEN
-    -- Get service role key from vault (stored by Supabase automatically)
-    SELECT decrypted_secret INTO v_key
-    FROM vault.decrypted_secrets
-    WHERE name = 'service_role_key'
-    LIMIT 1;
-
-    -- Fallback: skip notification if key not found
-    IF v_key IS NULL THEN
-      RETURN NEW;
-    END IF;
-
-    PERFORM net.http_post(
-      url := v_url,
-      headers := jsonb_build_object(
-        'Authorization', 'Bearer ' || v_key,
-        'Content-Type', 'application/json'
-      ),
-      body := jsonb_build_object(
-        'type', 'log',
-        'data', jsonb_build_object(
-          'level', NEW.level,
-          'source', NEW.source,
-          'message', NEW.message,
-          'details', NEW.details,
-          'created_at', NEW.created_at
-        )
-      )
-    );
+  IF NEW.level NOT IN ('error', 'warn') THEN
+    RETURN NEW;
   END IF;
+
+  IF NEW.level = 'error' THEN v_icon := '🔴'; ELSE v_icon := '🟡'; END IF;
+
+  v_msg := v_icon || ' <b>' || UPPER(NEW.level) || '</b> | <code>' ||
+           COALESCE(NEW.source, '') || '</code>' || chr(10) ||
+           COALESCE(NEW.message, '');
+
+  IF NEW.details IS NOT NULL AND NEW.details::text != '{}' AND NEW.details::text != 'null' THEN
+    v_details := LEFT(NEW.details::text, 500);
+    v_msg := v_msg || chr(10) || '<pre>' || v_details || '</pre>';
+  END IF;
+
+  PERFORM net.http_post(
+    url := 'https://api.telegram.org/bot' || v_bot || '/sendMessage',
+    headers := '{"Content-Type": "application/json"}'::jsonb,
+    body := jsonb_build_object(
+      'chat_id', v_chat,
+      'text', v_msg,
+      'parse_mode', 'HTML',
+      'disable_web_page_preview', true
+    )
+  );
+
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
-  -- Never block inserts if notification fails
   RETURN NEW;
 END;
 $$;
@@ -111,46 +108,63 @@ CREATE TRIGGER trg_notify_admin_log
   FOR EACH ROW
   EXECUTE FUNCTION notify_admin_on_log();
 
--- 4. Trigger: notify admin on new bug report
+-- 4. Trigger: notify admin on new bug report (text + photos)
 CREATE OR REPLACE FUNCTION notify_admin_on_bug_report()
 RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_bot TEXT := '8774811583:AAF5ZyJ4rXrmtLXW67PI5bdHPxXvR_9QD04';
+  v_chat TEXT := '945676433';
   v_username TEXT;
-  v_url TEXT := 'https://aakczalawsfnwykzpcsc.supabase.co/functions/v1/notify-admin';
-  v_key TEXT;
+  v_msg TEXT;
+  v_photo TEXT;
+  v_photo_count INT;
 BEGIN
   SELECT username INTO v_username FROM users WHERE id = NEW.user_id;
 
-  SELECT decrypted_secret INTO v_key
-  FROM vault.decrypted_secrets
-  WHERE name = 'service_role_key'
-  LIMIT 1;
+  v_msg := '🐛 <b>Новый баг-репорт</b>' || chr(10) ||
+           '👤 @' || COALESCE(v_username, 'unknown') || chr(10) ||
+           '📝 ' || LEFT(COALESCE(NEW.description, ''), 300);
 
-  IF v_key IS NULL THEN
-    RETURN NEW;
+  v_photo_count := COALESCE(array_length(NEW.photos, 1), 0);
+  IF v_photo_count > 0 THEN
+    v_msg := v_msg || chr(10) || '📎 Фото: ' || v_photo_count;
   END IF;
 
+  IF NEW.device_info IS NOT NULL AND NEW.device_info != '' THEN
+    v_msg := v_msg || chr(10) || '📱 ' || NEW.device_info;
+  END IF;
+
+  -- Send text message
   PERFORM net.http_post(
-    url := v_url,
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || v_key,
-      'Content-Type', 'application/json'
-    ),
+    url := 'https://api.telegram.org/bot' || v_bot || '/sendMessage',
+    headers := '{"Content-Type": "application/json"}'::jsonb,
     body := jsonb_build_object(
-      'type', 'bug_report',
-      'data', jsonb_build_object(
-        'username', COALESCE(v_username, 'unknown'),
-        'description', LEFT(NEW.description, 300),
-        'photos', COALESCE(NEW.photos, ARRAY[]::TEXT[]),
-        'photos_count', COALESCE(array_length(NEW.photos, 1), 0),
-        'device_info', COALESCE(NEW.device_info, ''),
-        'created_at', NEW.created_at
-      )
+      'chat_id', v_chat,
+      'text', v_msg,
+      'parse_mode', 'HTML',
+      'disable_web_page_preview', true
     )
   );
+
+  -- Send each photo
+  IF v_photo_count > 0 THEN
+    FOREACH v_photo IN ARRAY NEW.photos LOOP
+      IF v_photo IS NOT NULL AND v_photo LIKE 'http%' THEN
+        PERFORM net.http_post(
+          url := 'https://api.telegram.org/bot' || v_bot || '/sendPhoto',
+          headers := '{"Content-Type": "application/json"}'::jsonb,
+          body := jsonb_build_object(
+            'chat_id', v_chat,
+            'photo', v_photo
+          )
+        );
+      END IF;
+    END LOOP;
+  END IF;
+
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
