@@ -10,16 +10,16 @@ import DepositSheet from './components/DepositSheet'
 import SplashScreen from './components/SplashScreen'
 import Onboarding from './pages/Onboarding'
 
-const Home = React.lazy(() => import('./pages/Home'))
-const Duel = React.lazy(() => import('./pages/Duel'))
-const Game = React.lazy(() => import('./pages/Game'))
-const Result = React.lazy(() => import('./pages/Result'))
-const Leaderboard = React.lazy(() => import('./pages/Leaderboard'))
-const Guilds = React.lazy(() => import('./pages/Guilds'))
-const Shop = React.lazy(() => import('./pages/Shop'))
-const Profile = React.lazy(() => import('./pages/Profile'))
-const Admin = React.lazy(() => import('./pages/Admin'))
-const Blackjack = React.lazy(() => import('./pages/Blackjack'))
+import Home from './pages/Home'
+import Duel from './pages/Duel'
+import Game from './pages/Game'
+import Result from './pages/Result'
+import Leaderboard from './pages/Leaderboard'
+import Guilds from './pages/Guilds'
+import Shop from './pages/Shop'
+import Profile from './pages/Profile'
+import Admin from './pages/Admin'
+import Blackjack from './pages/Blackjack'
 
 // Disable browser scroll restoration globally — SPA handles it manually
 if ('scrollRestoration' in history) {
@@ -54,21 +54,19 @@ function Layout() {
   return (
     <>
       <ScrollToTop />
-      <React.Suspense fallback={<div style={{ height: '100svh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="friends-spinner" /></div>}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/duel" element={<Duel />} />
-          <Route path="/game/:duelId" element={<Game />} />
-          <Route path="/blackjack/:duelId" element={<Blackjack />} />
-          <Route path="/result" element={<Result />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/guilds" element={<Guilds />} />
-          <Route path="/shop" element={<Shop />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </React.Suspense>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/duel" element={<Duel />} />
+        <Route path="/game/:duelId" element={<Game />} />
+        <Route path="/blackjack/:duelId" element={<Blackjack />} />
+        <Route path="/result" element={<Result />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/guilds" element={<Guilds />} />
+        <Route path="/shop" element={<Shop />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="*" element={<Navigate to="/" />} />
+      </Routes>
       {showNav && <BottomNav />}
       <DepositSheet />
     </>

@@ -420,21 +420,32 @@ export async function createBotDuel(userId, category, stakes, gameType = 'quiz')
 
 // ── Matchmaking ─────────────────────────────────
 export async function findMatch(userId, category, stakes, gameType = 'quiz') {
-  try {
-    const { data, error } = await supabase.rpc('find_match', {
-      p_user_id: userId,
-      p_category: category,
-      p_stakes: stakes,
-      p_game_type: gameType,
-    })
-    if (error) {
-      console.error('findMatch error:', error)
-      return { status: 'error', error: error.message || 'server_error' }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { data, error } = await supabase.rpc('find_match', {
+        p_user_id: userId,
+        p_category: category,
+        p_stakes: stakes,
+        p_game_type: gameType,
+      })
+      if (error) {
+        // Transient errors (network/timeout) — retry once
+        if (attempt === 0 && (error.message?.includes('fetch') || error.message?.includes('network') || error.code === 'PGRST301' || error.code === '57014')) {
+          await new Promise(r => setTimeout(r, 800))
+          continue
+        }
+        console.error('findMatch error:', error)
+        return { status: 'error', error: error.message || 'server_error' }
+      }
+      return data
+    } catch (e) {
+      if (attempt === 0) {
+        await new Promise(r => setTimeout(r, 800))
+        continue
+      }
+      console.error('findMatch exception:', e)
+      return { status: 'error', error: 'network_error' }
     }
-    return data
-  } catch (e) {
-    console.error('findMatch exception:', e)
-    return { status: 'error', error: 'network_error' }
   }
 }
 
