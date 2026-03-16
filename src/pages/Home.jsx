@@ -828,7 +828,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
               const sender = friends.find(f => f.id === inv.from_id)
               const expired = new Date(inv.expires_at) < new Date()
               const gameIcon = inv.game_type === 'blackjack' ? '🃏' : inv.game_type === 'sequence' ? '🧠' : '❓'
-              const gameLabel = inv.game_type === 'blackjack' ? '21 очко' : inv.game_type === 'sequence' ? 'Sequence' : 'Викторина'
+              const gameLabel = inv.game_type === 'blackjack' ? 'Блэкджек' : inv.game_type === 'sequence' ? 'Sequence' : 'Викторина'
               return (
                 <div key={inv.id} className="friends-row friends-invite-row">
                   <FriendAvatar user={sender || { first_name: '?' }} showOnline />
@@ -1056,7 +1056,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
             <div className="invite-game-cards">
               {[
                 { id: 'quiz', icon: '❓', label: 'Викторина' },
-                { id: 'blackjack', icon: '🃏', label: '21 очко' },
+                { id: 'blackjack', icon: '🃏', label: 'Блэкджек' },
               ].map(g => (
                 <button
                   key={g.id}

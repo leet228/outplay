@@ -339,6 +339,19 @@ export async function getPendingInvites(userId) {
   return data || []
 }
 
+// ── Withdrawals ──
+
+export async function requestWithdrawal(userId, amountRub, tonAddress, memo) {
+  const { data, error } = await supabase.rpc('request_withdrawal', {
+    p_user_id: userId,
+    p_amount_rub: amountRub,
+    p_ton_address: tonAddress,
+    p_memo: memo || '',
+  })
+  if (error) throw error
+  return data
+}
+
 // ── Deposits ──
 
 export async function createStarsInvoice(userId, amount, currencyAmount, currencyCode) {

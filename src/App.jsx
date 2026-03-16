@@ -7,6 +7,7 @@ import useGameStore from './store/useGameStore'
 import './App.css'
 import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
+import WithdrawalSheet from './components/WithdrawalSheet'
 import SplashScreen from './components/SplashScreen'
 import Onboarding from './pages/Onboarding'
 
@@ -69,6 +70,7 @@ function Layout() {
       </Routes>
       {showNav && <BottomNav />}
       <DepositSheet />
+      <WithdrawalSheet />
     </>
   )
 }

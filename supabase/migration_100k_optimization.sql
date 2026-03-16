@@ -95,12 +95,11 @@ BEGIN
     RETURN jsonb_build_object('error', 'user_not_found');
   END IF;
 
-  -- Total PnL from MV (fast)
-  SELECT COALESCE(mv.total_pnl, 0) INTO v_total
-  FROM mv_user_total_pnl mv WHERE mv.user_id = p_user_id;
-  IF v_total IS NULL THEN v_total := 0; END IF;
+  -- Total PnL: live from user_daily_stats (avoids MV staleness after a game)
+  SELECT COALESCE(SUM(pnl), 0) INTO v_total
+  FROM user_daily_stats WHERE user_id = p_user_id;
 
-  -- Rank from MV: simple index scan instead of correlated subquery
+  -- Rank: count users with higher PnL (still uses MV for speed — rank can lag a bit)
   SELECT COUNT(*) + 1 INTO v_rank
   FROM mv_user_total_pnl mv
   JOIN users u ON u.id = mv.user_id

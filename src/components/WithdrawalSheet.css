@@ -1,0 +1,360 @@
+/* === Overlay === */
+.wd-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.wd-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* === Sheet === */
+.wd-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(100%);
+  width: 100%;
+  max-width: 420px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+  border-top: 1px solid var(--border);
+  z-index: 101;
+  padding: 12px 20px calc(env(safe-area-inset-bottom, 0px) + 28px);
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.wd-sheet.open {
+  transform: translateX(-50%) translateY(0);
+}
+
+.wd-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 0 auto 20px;
+}
+
+/* === Header === */
+.wd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.wd-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.wd-close {
+  background: var(--surface2);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* === Body === */
+.wd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* === TON Banner === */
+.wd-ton-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(0, 152, 234, 0.06);
+  border: 1px solid rgba(0, 152, 234, 0.12);
+}
+.wd-ton-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(0, 152, 234, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.wd-ton-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wd-ton-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.wd-ton-desc {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+/* === Field === */
+.wd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wd-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.wd-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface2);
+  transition: border-color 0.15s;
+}
+.wd-input-wrap:focus-within {
+  border-color: var(--accent);
+}
+.wd-input-wrap.valid {
+  border-color: #22c55e;
+}
+.wd-input-wrap.error {
+  border-color: #ef4444;
+}
+.wd-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  font-family: inherit;
+  min-width: 0;
+}
+.wd-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.wd-input-icon {
+  flex-shrink: 0;
+}
+.wd-paste-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: transform 0.1s, opacity 0.1s;
+}
+.wd-paste-btn:active {
+  transform: scale(0.94);
+  opacity: 0.8;
+}
+.wd-field-error {
+  font-size: 12px;
+  color: #ef4444;
+  padding-left: 2px;
+}
+
+/* === Amount field === */
+.wd-amount-wrap {
+  gap: 6px;
+}
+.wd-amount-input {
+  font-size: 18px;
+  font-weight: 700;
+}
+.wd-amount-input::-webkit-outer-spin-button,
+.wd-amount-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+.wd-amount-symbol {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.wd-max-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s, opacity 0.1s;
+}
+.wd-max-btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+
+.wd-amount-hint {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+/* === Fees === */
+.wd-fees {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  animation: wd-fade-in 0.2s ease;
+}
+@keyframes wd-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.wd-fee-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.wd-fee-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.wd-fee-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.wd-fee-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
+}
+.wd-fee-total .wd-fee-label {
+  font-weight: 700;
+  color: var(--text);
+}
+.wd-fee-receive {
+  font-size: 15px;
+  font-weight: 800;
+  color: #22c55e;
+}
+
+/* === Submit === */
+.wd-submit-btn {
+  width: 100%;
+  padding: 15px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.1s, background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.wd-submit-btn:active {
+  transform: scale(0.97);
+  background: var(--accent-hover);
+}
+.wd-submit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* === Success === */
+.wd-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 0 32px;
+  animation: wd-success-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes wd-success-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.wd-success-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(34, 197, 94, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.wd-success-check path {
+  stroke-dasharray: 50;
+  stroke-dashoffset: 50;
+  animation: wd-draw-check 0.5s 0.2s ease forwards;
+}
+@keyframes wd-draw-check {
+  to { stroke-dashoffset: 0; }
+}
+.wd-success-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.wd-success-sub {
+  font-size: 14px;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 280px;
+  line-height: 1.4;
+}
+
+/* === Loading spinner === */
+.wd-btn-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: wd-spin 0.7s linear infinite;
+  margin: 0 auto;
+}
+@keyframes wd-spin {
+  to { transform: rotate(360deg); }
+}

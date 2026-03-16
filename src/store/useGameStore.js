@@ -121,6 +121,10 @@ const useGameStore = create((set, get) => ({
   depositOpen: false,
   setDepositOpen: (v) => set({ depositOpen: v }),
 
+  // Withdrawal sheet
+  withdrawalOpen: false,
+  setWithdrawalOpen: (v) => set({ withdrawalOpen: v }),
+
   // App settings (feature flags)
   appSettings: {},
   setAppSettings: (s) => set({ appSettings: s }),

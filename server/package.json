@@ -11,8 +11,10 @@
     "express": "^4",
     "cors": "^2",
     "dotenv": "^16",
+    "@supabase/supabase-js": "^2",
     "@ton/ton": "^15",
     "@ton/crypto": "^3",
+    "@ton/core": "^0.58",
     "tronweb": "^6",
     "ethers": "^6"
   }

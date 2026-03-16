@@ -400,13 +400,16 @@
 }
 
 .balance-btn.withdraw {
-  background: var(--surface2);
-  color: var(--text-muted);
-  border: 1px solid var(--border);
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.25);
   cursor: pointer;
 }
 
 .balance-btn.withdraw--locked {
+  background: var(--surface2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
   opacity: 0.45;
   cursor: pointer;
 }

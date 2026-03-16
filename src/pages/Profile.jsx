@@ -56,6 +56,7 @@ export default function Profile() {
   const setCurrency = useGameStore(s => s.setCurrency)
   const setLang = useGameStore(s => s.setLang)
   const setDepositOpen = useGameStore(s => s.setDepositOpen)
+  const setWithdrawalOpen = useGameStore(s => s.setWithdrawalOpen)
   const setRank = useGameStore(s => s.setRank)
   const setDailyStats = useGameStore(s => s.setDailyStats)
   const setTotalPnl = useGameStore(s => s.setTotalPnl)
@@ -81,7 +82,7 @@ export default function Profile() {
   const [withdrawError, setWithdrawError] = useState(false)
   const withdrawTimer = useRef(null)
 
-  const MIN_WITHDRAW = 2000
+  const MIN_WITHDRAW = 50
   const canWithdraw = balance >= MIN_WITHDRAW
 
   function handleWithdraw() {
@@ -92,7 +93,7 @@ export default function Profile() {
       withdrawTimer.current = setTimeout(() => setWithdrawError(false), 2000)
       return
     }
-    // TODO: withdrawal flow
+    setWithdrawalOpen(true)
   }
 
   const closeSettings = useCallback(() => {
