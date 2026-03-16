@@ -184,6 +184,20 @@ export default function WithdrawalSheet() {
 
   async function handlePaste() {
     haptic('light')
+    const tg = window.Telegram?.WebApp
+
+    // 1. Try Telegram's clipboard API (works inside WebApp)
+    if (tg?.readTextFromClipboard) {
+      tg.readTextFromClipboard((text) => {
+        if (text) {
+          setWallet(text.trim())
+          setWalletTouched(true)
+        }
+      })
+      return
+    }
+
+    // 2. Fallback to browser clipboard API
     try {
       const text = await navigator.clipboard.readText()
       if (text) {
