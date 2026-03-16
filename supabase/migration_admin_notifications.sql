@@ -57,17 +57,33 @@ $$;
 GRANT EXECUTE ON FUNCTION update_bug_report_status(UUID, TEXT) TO anon, authenticated;
 
 -- 3. Trigger: notify admin on error/warn logs
+--    Sends directly to Telegram API via pg_net (no Edge Function needed)
+--    Uses Edge Function URL with service role key from Supabase project settings
 CREATE OR REPLACE FUNCTION notify_admin_on_log()
 RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_url TEXT := 'https://aakczalawsfnwykzpcsc.supabase.co/functions/v1/notify-admin';
+  v_key TEXT;
 BEGIN
   IF NEW.level IN ('error', 'warn') THEN
+    -- Get service role key from vault (stored by Supabase automatically)
+    SELECT decrypted_secret INTO v_key
+    FROM vault.decrypted_secrets
+    WHERE name = 'service_role_key'
+    LIMIT 1;
+
+    -- Fallback: skip notification if key not found
+    IF v_key IS NULL THEN
+      RETURN NEW;
+    END IF;
+
     PERFORM net.http_post(
-      url := current_setting('app.settings.supabase_url') || '/functions/v1/notify-admin',
+      url := v_url,
       headers := jsonb_build_object(
-        'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
+        'Authorization', 'Bearer ' || v_key,
         'Content-Type', 'application/json'
       ),
       body := jsonb_build_object(
@@ -82,6 +98,9 @@ BEGIN
       )
     );
   END IF;
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Never block inserts if notification fails
   RETURN NEW;
 END;
 $$;
@@ -100,13 +119,24 @@ SET search_path = public
 AS $$
 DECLARE
   v_username TEXT;
+  v_url TEXT := 'https://aakczalawsfnwykzpcsc.supabase.co/functions/v1/notify-admin';
+  v_key TEXT;
 BEGIN
   SELECT username INTO v_username FROM users WHERE id = NEW.user_id;
 
+  SELECT decrypted_secret INTO v_key
+  FROM vault.decrypted_secrets
+  WHERE name = 'service_role_key'
+  LIMIT 1;
+
+  IF v_key IS NULL THEN
+    RETURN NEW;
+  END IF;
+
   PERFORM net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/notify-admin',
+    url := v_url,
     headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
+      'Authorization', 'Bearer ' || v_key,
       'Content-Type', 'application/json'
     ),
     body := jsonb_build_object(
@@ -120,6 +150,8 @@ BEGIN
       )
     )
   );
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
 END;
 $$;
