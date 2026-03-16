@@ -5,6 +5,7 @@ import { haptic } from '../lib/telegram'
 import AdminDashboard from './AdminDashboard'
 import AdminControl from './AdminControl'
 import AdminWallet from './AdminWallet'
+import AdminBugReports from './AdminBugReports'
 import './Admin.css'
 
 // ── Admin Telegram IDs ──
@@ -44,12 +45,22 @@ const TABS = [
       </svg>
     ),
   },
+  {
+    id: 'reports',
+    label: 'Reports',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    ),
+  },
 ]
 
 const TAB_TITLES = {
   dashboard: 'Dashboard',
   control: 'Control Panel',
   wallet: 'Wallet Monitor',
+  reports: 'Bug Reports',
 }
 
 export default function Admin() {
@@ -92,6 +103,7 @@ export default function Admin() {
         {tab === 'dashboard' && <AdminDashboard />}
         {tab === 'control' && <AdminControl />}
         {tab === 'wallet' && <AdminWallet />}
+        {tab === 'reports' && <AdminBugReports />}
       </div>
 
       {/* Bottom nav */}

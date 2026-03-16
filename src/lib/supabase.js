@@ -582,6 +582,23 @@ export async function submitBugReport(userId, description, photos, deviceInfo, c
   return data
 }
 
+export async function getBugReports(status = null) {
+  const { data, error } = await supabase.rpc('get_bug_reports', {
+    p_status: status,
+  })
+  if (error) { console.error('getBugReports error:', error); return [] }
+  return data || []
+}
+
+export async function updateBugReportStatus(reportId, status) {
+  const { data, error } = await supabase.rpc('update_bug_report_status', {
+    p_report_id: reportId,
+    p_status: status,
+  })
+  if (error) { console.error('updateBugReportStatus error:', error); return { error: error.message } }
+  return data
+}
+
 export async function getRecentCryptoDeposits(limit = 10) {
   const { data, error } = await supabase
     .from('crypto_processed_txs')
