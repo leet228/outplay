@@ -144,6 +144,7 @@ BEGIN
       'data', jsonb_build_object(
         'username', COALESCE(v_username, 'unknown'),
         'description', LEFT(NEW.description, 300),
+        'photos', COALESCE(NEW.photos, ARRAY[]::TEXT[]),
         'photos_count', COALESCE(array_length(NEW.photos, 1), 0),
         'device_info', COALESCE(NEW.device_info, ''),
         'created_at', NEW.created_at

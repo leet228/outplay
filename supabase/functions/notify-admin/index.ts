@@ -76,6 +76,23 @@ async function sendTelegramMessage(chatId: string, text: string) {
   return result
 }
 
+async function sendTelegramPhoto(chatId: string, photoUrl: string, caption?: string) {
+  const res = await fetch(`${TELEGRAM_API}/sendPhoto`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      photo: photoUrl,
+      ...(caption ? { caption, parse_mode: 'HTML' } : {}),
+    }),
+  })
+  const result = await res.json()
+  if (!result.ok) {
+    console.error('Telegram sendPhoto failed:', result)
+  }
+  return result
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -114,6 +131,15 @@ serve(async (req) => {
     }
 
     const result = await sendTelegramMessage(ADMIN_TG_ID, message)
+
+    // Send photos for bug reports
+    if (type === 'bug_report' && Array.isArray(data.photos) && data.photos.length > 0) {
+      for (const photoUrl of data.photos) {
+        if (typeof photoUrl === 'string' && photoUrl.startsWith('http')) {
+          await sendTelegramPhoto(ADMIN_TG_ID, photoUrl)
+        }
+      }
+    }
 
     return new Response(JSON.stringify({ ok: result.ok }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
