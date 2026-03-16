@@ -1,27 +1,20 @@
-import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
+import { useShallow } from 'zustand/react/shallow'
 import { haptic } from '../lib/telegram'
-import { getUserBalance } from '../lib/supabase'
 import { translations } from '../lib/i18n'
 import './Result.css'
 
 export default function Result() {
   const navigate = useNavigate()
-  const { lastResult, resetGame, user, setBalance } = useGameStore()
-  const lang = useGameStore((s) => s.lang)
-  const currency = useGameStore((s) => s.currency)
-  const rates = useGameStore((s) => s.rates)
+  const { lastResult, user } = useGameStore(
+    useShallow(s => ({ lastResult: s.lastResult, user: s.user }))
+  )
+  const lang = useGameStore(s => s.lang)
+  const currency = useGameStore(s => s.currency)
+  const rates = useGameStore(s => s.rates)
+  const resetGame = useGameStore(s => s.resetGame)
   const tr = translations[lang] || translations.ru
-
-  // Refresh balance from server after game finishes
-  useEffect(() => {
-    if (user?.id) {
-      getUserBalance(user.id).then(bal => {
-        if (bal !== undefined) setBalance(bal)
-      })
-    }
-  }, [user?.id])
 
   if (!lastResult) {
     navigate('/')

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
-import { supabase, getUserProfile, getUserBalance } from '../lib/supabase'
+import { getUserProfile } from '../lib/supabase'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import './Profile.css'
@@ -51,7 +52,14 @@ const W = 320
 const H = 130
 
 export default function Profile() {
-  const { user, setUser, balance, setBalance, currency, rates, setCurrency, lang, setLang, setDepositOpen, rank, setRank, dailyStats, setDailyStats, totalPnl, setTotalPnl, setRefEarnings } = useGameStore()
+  const { user, balance, currency, rates, lang, rank, dailyStats, totalPnl } = useGameStore(useShallow(s => ({ user: s.user, balance: s.balance, currency: s.currency, rates: s.rates, lang: s.lang, rank: s.rank, dailyStats: s.dailyStats, totalPnl: s.totalPnl })))
+  const setCurrency = useGameStore(s => s.setCurrency)
+  const setLang = useGameStore(s => s.setLang)
+  const setDepositOpen = useGameStore(s => s.setDepositOpen)
+  const setRank = useGameStore(s => s.setRank)
+  const setDailyStats = useGameStore(s => s.setDailyStats)
+  const setTotalPnl = useGameStore(s => s.setTotalPnl)
+  const setRefEarnings = useGameStore(s => s.setRefEarnings)
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
   const [tooltip, setTooltip] = useState(null)
@@ -66,13 +74,6 @@ export default function Profile() {
         setDailyStats(profile.daily_stats ?? [])
         setRefEarnings(profile.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
       }
-    })
-    getUserBalance(user.id).then(bal => {
-      if (bal !== undefined) setBalance(bal)
-    })
-    // Refresh wins/losses from users table
-    supabase.from('users').select('wins, losses').eq('id', user.id).single().then(({ data }) => {
-      if (data) setUser({ ...user, wins: data.wins, losses: data.losses })
     })
   }, [user?.id])
   const [settingsOpen, setSettingsOpen] = useState(false)

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import useGameStore from '../store/useGameStore'
 import { getReferralsList } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
@@ -153,7 +154,9 @@ function PlanSheet({ plan, t, currency, rates, onClose, appSettings }) {
 
 /* ── Referral Section ── */
 function ReferralSection({ t, currency, rates, user }) {
-  const { refEarnings, referrals, referralsLoading, setReferrals, setReferralsLoading } = useGameStore()
+  const { refEarnings, referrals, referralsLoading } = useGameStore(useShallow(s => ({ refEarnings: s.refEarnings, referrals: s.referrals, referralsLoading: s.referralsLoading })))
+  const setReferrals = useGameStore(s => s.setReferrals)
+  const setReferralsLoading = useGameStore(s => s.setReferralsLoading)
   const [copied, setCopied] = useState(false)
   const [period, setPeriod] = useState('all')
   const [visible, setVisible] = useState(REFERRAL_PAGE_SIZE)
@@ -365,7 +368,7 @@ function ReferralSection({ t, currency, rates, user }) {
 
 /* ── Shop ── */
 export default function Shop() {
-  const { lang, currency, rates, user, plans, appSettings } = useGameStore()
+  const { lang, currency, rates, user, plans, appSettings } = useGameStore(useShallow(s => ({ lang: s.lang, currency: s.currency, rates: s.rates, user: s.user, plans: s.plans, appSettings: s.appSettings })))
   const t = translations[lang]
   const PLANS = plans.length > 0 ? mergePlans(plans) : STATIC_PLANS
   const [active, setActive] = useState(1)

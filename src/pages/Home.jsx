@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
+import { useShallow } from 'zustand/react/shallow'
 import { supabase } from '../lib/supabase'
 import { findMatch, cancelMatchmaking, createBotDuel } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
@@ -193,7 +194,7 @@ const MAX_SEARCH_TIME = 120
 
 function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const navigate = useNavigate()
-  const { user, appSettings } = useGameStore()
+  const { user, appSettings } = useGameStore(useShallow(s => ({ user: s.user, appSettings: s.appSettings })))
   const [selectedStakes, setSelectedStakes] = useState([])
   const [error, setError] = useState(null) // null | 'balance' | 'server'
   const [searching, setSearching] = useState(false)
@@ -550,12 +551,15 @@ function FriendAvatar({ user, showOnline }) {
 }
 
 function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rates }) {
-  const {
-    friends, friendRequests, sentRequestIds,
-    setFriends, setFriendRequests, setSentRequestIds,
-    gameInvites, setGameInvites,
-    sentInvites, setSentInvites,
-  } = useGameStore()
+  const { friends, friendRequests, sentRequestIds, gameInvites, sentInvites } = useGameStore(useShallow(s => ({
+    friends: s.friends, friendRequests: s.friendRequests, sentRequestIds: s.sentRequestIds,
+    gameInvites: s.gameInvites, sentInvites: s.sentInvites,
+  })))
+  const setFriends = useGameStore(s => s.setFriends)
+  const setFriendRequests = useGameStore(s => s.setFriendRequests)
+  const setSentRequestIds = useGameStore(s => s.setSentRequestIds)
+  const setGameInvites = useGameStore(s => s.setGameInvites)
+  const setSentInvites = useGameStore(s => s.setSentInvites)
 
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState(null)
@@ -1130,7 +1134,13 @@ const GAMES = [
 const ADMIN_IDS = ['dev', 945676433]
 
 export default function Home() {
-  const { balance, currency, rates, lang, setDepositOpen, user, friendRequests, balanceBounce, gameInvites, pendingGameNav, setPendingGameNav } = useGameStore()
+  const { balance, currency, rates, lang, user, friendRequests, balanceBounce, gameInvites, pendingGameNav } = useGameStore(useShallow(s => ({
+    balance: s.balance, currency: s.currency, rates: s.rates, lang: s.lang,
+    user: s.user, friendRequests: s.friendRequests, balanceBounce: s.balanceBounce,
+    gameInvites: s.gameInvites, pendingGameNav: s.pendingGameNav,
+  })))
+  const setDepositOpen = useGameStore(s => s.setDepositOpen)
+  const setPendingGameNav = useGameStore(s => s.setPendingGameNav)
   const navigate = useNavigate()
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)

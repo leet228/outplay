@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
@@ -66,7 +67,7 @@ function ListRankBadge({ rank }) {
 }
 
 export default function Leaderboard() {
-  const { user, currency, rates, lang, leaderboard, rank, totalPnl } = useGameStore()
+  const { user, currency, rates, lang, leaderboard, rank, totalPnl } = useGameStore(useShallow(s => ({ user: s.user, currency: s.currency, rates: s.rates, lang: s.lang, leaderboard: s.leaderboard, rank: s.rank, totalPnl: s.totalPnl })))
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
 

@@ -4,6 +4,7 @@ import useGameStore from '../store/useGameStore'
 import { supabase, submitAnswer, BOT_USER_ID } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
+import { updateLocalStats } from '../lib/gameUtils'
 import './Game.css'
 
 const QUESTION_COUNT = 5
@@ -14,14 +15,12 @@ const CIRCLE_C = 2 * Math.PI * CIRCLE_R
 export default function Game() {
   const { duelId } = useParams()
   const navigate = useNavigate()
-  const {
-    user, setLastResult, setActiveDuel, setBalance,
-    setUser, dailyStats, setDailyStats, totalPnl, setTotalPnl,
-    leaderboard, setLeaderboard,
-    guild, setGuild, guildMembers, setGuildMembers, topGuilds, setTopGuilds,
-    guildSeason, setGuildSeason,
-  } = useGameStore()
-  const lang = useGameStore((s) => s.lang)
+  const user = useGameStore(s => s.user)
+  const lang = useGameStore(s => s.lang)
+  const setLastResult = useGameStore(s => s.setLastResult)
+  const setActiveDuel = useGameStore(s => s.setActiveDuel)
+  const setBalance = useGameStore(s => s.setBalance)
+  const setUser = useGameStore(s => s.setUser)
   const tr = translations[lang] || translations.ru
 
   const [duel, setDuel] = useState(null)
@@ -39,7 +38,6 @@ export default function Game() {
 
   const timerRef = useRef(null)
   const channelRef = useRef(null)
-  const pollRef = useRef(null)
   const submittingRef = useRef(false)
   const advancingRef = useRef(false)
   const botAnswersRef = useRef([])       // трекинг ответов бота
@@ -76,7 +74,6 @@ export default function Game() {
   function cleanupAll() {
     clearTimeout(timerRef.current)
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
   }
 
   function loadDevDuel() {
@@ -313,7 +310,6 @@ export default function Game() {
   function startWaitingForOpponent(qi) {
     // Cleanup previous listeners
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
 
     // Check immediately
     checkBothAnswered(qi)
@@ -331,11 +327,12 @@ export default function Game() {
           onBothAnswered()
         }
       })
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          setTimeout(() => checkBothAnswered(qi), 3000)
+        }
+      })
     channelRef.current = channel
-
-    // Fallback poll
-    pollRef.current = setInterval(() => checkBothAnswered(qi), 2000)
   }
 
   async function checkBothAnswered(qi) {
@@ -359,7 +356,6 @@ export default function Game() {
 
     // Cleanup listeners
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
 
     setWaitingOpponent(false)
     setShowResult(true)
@@ -479,79 +475,10 @@ export default function Game() {
       }
     }
 
-    // --- Local state updates (skip in dev mode) ---
-    if (!isDevDuel) {
-    const pnlChange = won ? (payout - duel.stake) : -duel.stake
-
-    const now = new Date()
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const updatedDailyStats = [...dailyStats]
-    const todayIdx = updatedDailyStats.findIndex(d => d.date === today)
-    if (todayIdx >= 0) {
-      updatedDailyStats[todayIdx] = {
-        ...updatedDailyStats[todayIdx],
-        pnl: updatedDailyStats[todayIdx].pnl + pnlChange,
-        games: (updatedDailyStats[todayIdx].games || 0) + 1,
-        wins: (updatedDailyStats[todayIdx].wins || 0) + (won ? 1 : 0),
-      }
-    } else {
-      updatedDailyStats.push({
-        date: today,
-        pnl: pnlChange,
-        games: 1,
-        wins: won ? 1 : 0,
-      })
+    // Local state updates (skip in dev mode)
+    if (!isDevDuel && won !== null) {
+      updateLocalStats({ won, stake: duel.stake, userId: user.id })
     }
-    setDailyStats(updatedDailyStats)
-
-    // 2. Update totalPnl
-    setTotalPnl(totalPnl + pnlChange)
-
-    // 3. Update leaderboard (find current user and update their PnL)
-    if (leaderboard.length > 0) {
-      const updatedLb = leaderboard.map(p =>
-        p.id === user.id
-          ? {
-              ...p,
-              total_pnl: (p.total_pnl || 0) + pnlChange,
-              wins: won ? (p.wins || 0) + 1 : (p.wins || 0),
-              losses: won ? (p.losses || 0) : (p.losses || 0) + 1,
-            }
-          : p
-      ).sort((a, b) => (b.total_pnl || 0) - (a.total_pnl || 0))
-      setLeaderboard(updatedLb)
-    }
-
-    // 4. Update guild PnL (if user is in a guild)
-    if (guild) {
-      setGuild({ ...guild, pnl: (guild.pnl || 0) + pnlChange })
-
-      // Update current user's member PnL
-      if (guildMembers.length > 0) {
-        const updatedMembers = guildMembers.map(m =>
-          m.user_id === user.id
-            ? { ...m, pnl: (m.pnl || 0) + pnlChange }
-            : m
-        ).sort((a, b) => (b.pnl || 0) - (a.pnl || 0))
-        setGuildMembers(updatedMembers)
-      }
-
-      // Update topGuilds list
-      if (topGuilds.length > 0) {
-        const updatedTopGuilds = topGuilds.map(g =>
-          g.id === guild.id
-            ? { ...g, pnl: (g.pnl || 0) + pnlChange }
-            : g
-        ).sort((a, b) => (b.pnl || 0) - (a.pnl || 0))
-        setTopGuilds(updatedTopGuilds)
-      }
-    }
-
-    if (guildSeason) {
-      const guildFee = Math.floor(duel.stake * 2 * 0.005)
-      setGuildSeason({ ...guildSeason, prize_pool: (guildSeason.prize_pool || 0) + guildFee })
-    }
-    } // end if (!isDevDuel)
 
     setLastResult({
       won,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import useGameStore from '../store/useGameStore'
+import { useShallow } from 'zustand/react/shallow'
 import { translations } from '../lib/i18n'
 import { haptic } from '../lib/telegram'
 import { formatCurrency } from '../lib/currency'
@@ -638,11 +639,15 @@ function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds
 
 /* ── Main Page ── */
 export default function Guilds() {
-  const {
-    lang, currency, rates, user, balance,
-    guild, guildMembers, topGuilds, guildSeason,
-    setGuild, setGuildMembers, setTopGuilds, setGuildSeason, setBalance,
-  } = useGameStore()
+  const { lang, currency, rates, user, balance, guild, guildMembers, topGuilds, guildSeason } = useGameStore(useShallow(s => ({
+    lang: s.lang, currency: s.currency, rates: s.rates, user: s.user, balance: s.balance,
+    guild: s.guild, guildMembers: s.guildMembers, topGuilds: s.topGuilds, guildSeason: s.guildSeason,
+  })))
+  const setGuild = useGameStore(s => s.setGuild)
+  const setGuildMembers = useGameStore(s => s.setGuildMembers)
+  const setTopGuilds = useGameStore(s => s.setTopGuilds)
+  const setGuildSeason = useGameStore(s => s.setGuildSeason)
+  const setBalance = useGameStore(s => s.setBalance)
   const t = translations[lang]
   const [time, setTime] = useState(() => getTimeLeft(guildSeason?.end_date))
   const prizeRef = useRef(null)

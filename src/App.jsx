@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser, getStartParam } from './lib/telegram'
 import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings } from './lib/supabase'
@@ -9,16 +9,17 @@ import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
 import SplashScreen from './components/SplashScreen'
 import Onboarding from './pages/Onboarding'
-import Home from './pages/Home'
-import Duel from './pages/Duel'
-import Game from './pages/Game'
-import Result from './pages/Result'
-import Leaderboard from './pages/Leaderboard'
-import Guilds from './pages/Guilds'
-import Shop from './pages/Shop'
-import Profile from './pages/Profile'
-import Admin from './pages/Admin'
-import Blackjack from './pages/Blackjack'
+
+const Home = React.lazy(() => import('./pages/Home'))
+const Duel = React.lazy(() => import('./pages/Duel'))
+const Game = React.lazy(() => import('./pages/Game'))
+const Result = React.lazy(() => import('./pages/Result'))
+const Leaderboard = React.lazy(() => import('./pages/Leaderboard'))
+const Guilds = React.lazy(() => import('./pages/Guilds'))
+const Shop = React.lazy(() => import('./pages/Shop'))
+const Profile = React.lazy(() => import('./pages/Profile'))
+const Admin = React.lazy(() => import('./pages/Admin'))
+const Blackjack = React.lazy(() => import('./pages/Blackjack'))
 
 // Disable browser scroll restoration globally — SPA handles it manually
 if ('scrollRestoration' in history) {
@@ -53,19 +54,21 @@ function Layout() {
   return (
     <>
       <ScrollToTop />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/duel" element={<Duel />} />
-        <Route path="/game/:duelId" element={<Game />} />
-        <Route path="/blackjack/:duelId" element={<Blackjack />} />
-        <Route path="/result" element={<Result />} />
-        <Route path="/leaderboard" element={<Leaderboard />} />
-        <Route path="/guilds" element={<Guilds />} />
-        <Route path="/shop" element={<Shop />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+      <React.Suspense fallback={<div style={{ height: '100svh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="friends-spinner" /></div>}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/duel" element={<Duel />} />
+          <Route path="/game/:duelId" element={<Game />} />
+          <Route path="/blackjack/:duelId" element={<Blackjack />} />
+          <Route path="/result" element={<Result />} />
+          <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/guilds" element={<Guilds />} />
+          <Route path="/shop" element={<Shop />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </React.Suspense>
       {showNav && <BottomNav />}
       <DepositSheet />
     </>
@@ -100,7 +103,8 @@ function writeCache(data) {
 }
 
 export default function App() {
-  const { setUser, setBalance } = useGameStore()
+  const setUser = useGameStore(s => s.setUser)
+  const setBalance = useGameStore(s => s.setBalance)
   // 'splash' | 'onboarding' | 'app'
   const [phase, setPhase] = useState('splash')
 
@@ -140,33 +144,32 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
-  // Refresh app settings every 60s (feature flags)
+  // App settings realtime — replaces 60s polling
   useEffect(() => {
-    const id = setInterval(() => {
-      getAppSettings().then(s => { if (s) useGameStore.getState().setAppSettings(s) })
-    }, 60_000)
-    return () => clearInterval(id)
+    const settingsCh = supabase
+      .channel('app-settings')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'app_settings' }, () => {
+        getAppSettings().then(s => { if (s) useGameStore.getState().setAppSettings(s) })
+      })
+      .subscribe()
+    return () => supabase.removeChannel(settingsCh)
   }, [])
 
   // Realtime: listen for new deposits → bounce balance
-  const userIdRef = useRef(null)
+  const userId = useGameStore(s => s.user?.id)
   useEffect(() => {
-    const uid = useGameStore.getState().user?.id
-    if (!uid || uid === 'dev') return
-    // Avoid re-subscribing for the same user
-    if (userIdRef.current === uid) return
-    userIdRef.current = uid
+    if (!userId || userId === 'dev') return
 
     const channel = supabase
-      .channel(`deposits-${uid}`)
+      .channel(`deposits-${userId}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'transactions',
-        filter: `user_id=eq.${uid}`,
+        filter: `user_id=eq.${userId}`,
       }, (payload) => {
         if (payload.new?.type === 'deposit') {
-          getUserBalance(uid).then(bal => {
+          getUserBalance(userId).then(bal => {
             if (bal != null) {
               useGameStore.getState().setBalance(bal)
               useGameStore.getState().setBalanceBounce(true)
@@ -177,30 +180,26 @@ export default function App() {
       })
       .subscribe((status) => {
         if (status === 'CHANNEL_ERROR') {
-          console.warn('Realtime channel error, will retry on next phase change')
+          console.warn('Realtime deposit channel error for user', userId)
         }
       })
 
     return () => {
-      userIdRef.current = null
       supabase.removeChannel(channel)
     }
-  }, [phase])
+  }, [userId])
 
   // Realtime: game invites
-  const inviteChannelRef = useRef(null)
   useEffect(() => {
-    const uid = useGameStore.getState().user?.id
-    if (!uid || uid === 'dev') return
-    if (inviteChannelRef.current) return
+    if (!userId || userId === 'dev') return
 
     const ch = supabase
-      .channel(`invites-${uid}`)
+      .channel(`invites-${userId}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'game_invites',
-        filter: `to_id=eq.${uid}`,
+        filter: `to_id=eq.${userId}`,
       }, (payload) => {
         const store = useGameStore.getState()
         if (payload.eventType === 'INSERT' && payload.new?.status === 'pending') {
@@ -213,7 +212,7 @@ export default function App() {
         event: 'UPDATE',
         schema: 'public',
         table: 'game_invites',
-        filter: `from_id=eq.${uid}`,
+        filter: `from_id=eq.${userId}`,
       }, (payload) => {
         const store = useGameStore.getState()
         const inv = payload.new
@@ -224,13 +223,10 @@ export default function App() {
       })
       .subscribe()
 
-    inviteChannelRef.current = ch
-
     return () => {
       supabase.removeChannel(ch)
-      inviteChannelRef.current = null
     }
-  }, [phase])
+  }, [userId])
 
   async function bootstrap() {
     const tgUser = getTelegramUser()
@@ -249,10 +245,12 @@ export default function App() {
               setBalance(user.balance ?? 0)
               localStorage.setItem('outplay_user', JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, username: user.username }))
               // Continue with real user bootstrap below
-              const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] = await Promise.all([
+              const cachedResults = await Promise.allSettled([
                 getUserProfile(user.id), getPlans(), getLeaderboard(50), getGuildData(user.id),
                 getRecentOpponents(user.id), getFriendsData(user.id), fetchRates(), getAppSettings(),
               ])
+              const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] =
+                cachedResults.map(r => r.status === 'fulfilled' ? r.value : null)
               store.setRank(profile?.rank ?? 0)
               store.setTotalPnl(profile?.total_pnl ?? 0)
               store.setDailyStats(profile?.daily_stats ?? [])
@@ -363,7 +361,7 @@ export default function App() {
 
 
     // 8 parallel fetches — all data for the entire app
-    const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] = await Promise.all([
+    const results = await Promise.allSettled([
       getUserProfile(user.id),
       getPlans(),
       getLeaderboard(50),
@@ -373,6 +371,8 @@ export default function App() {
       fetchRates(),
       getAppSettings(),
     ])
+    const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] =
+      results.map(r => r.status === 'fulfilled' ? r.value : null)
 
     // Exchange rates
     if (rates) store.setRates(rates)

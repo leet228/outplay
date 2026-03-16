@@ -11,6 +11,7 @@ import {
   BOT_USER_ID,
   supabase,
 } from '../lib/supabase'
+import { updateLocalStats } from '../lib/gameUtils'
 import './Blackjack.css'
 
 // ── Card engine ──
@@ -253,14 +254,11 @@ const TURN_TIME = 10
 export default function Blackjack() {
   const { duelId } = useParams()
   const navigate = useNavigate()
-  const {
-    user, setUser, setLastResult, setBalance,
-    dailyStats, setDailyStats, totalPnl, setTotalPnl,
-    leaderboard, setLeaderboard,
-    guild, setGuild, guildMembers, setGuildMembers, topGuilds, setTopGuilds,
-    guildSeason, setGuildSeason,
-  } = useGameStore()
+  const user = useGameStore(s => s.user)
   const lang = useGameStore(s => s.lang)
+  const setUser = useGameStore(s => s.setUser)
+  const setLastResult = useGameStore(s => s.setLastResult)
+  const setBalance = useGameStore(s => s.setBalance)
   const t = translations[lang] || translations.ru
 
   // Mode detection
@@ -329,20 +327,27 @@ export default function Blackjack() {
 
   // ── Timer logic ──
   useEffect(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+
     if (phase === 'player_turn' && !playerStand && !animatingHit && isMyTurn) {
       setTurnTimer(TURN_TIME)
       timerRef.current = setInterval(() => {
         setTurnTimer(prev => {
           if (prev <= 1) {
             clearInterval(timerRef.current)
+            timerRef.current = null
             return 0
           }
           return prev - 1
         })
       }, 1000)
-      return () => clearInterval(timerRef.current)
-    } else {
-      clearInterval(timerRef.current)
+      return () => {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
     }
   }, [phase, playerStand, animatingHit, roundNum, isMyTurn])
 
@@ -905,7 +910,7 @@ export default function Blackjack() {
     }
 
     // Local stats update (PnL, leaderboard, guild, etc.)
-    if (won !== null) updateLocalStats(won, stake)
+    if (won !== null) updateLocalStatsWrapper(won, stake)
 
     setTimeout(() => {
       setLastResult({
@@ -924,69 +929,12 @@ export default function Blackjack() {
     }, 3000)
   }
 
-  // ══════════════════════════════════════════
-  //  Local PnL/stats update after game
-  // ══════════════════════════════════════════
-
-  function updateLocalStats(won, currentStake) {
+  // Local PnL/stats update after game — uses shared utility
+  function updateLocalStatsWrapper(won, currentStake) {
     if (isDevDuel) return
-    const payout = won ? Math.floor(currentStake * 2 * 0.95) : 0
-    const pnlChange = won ? (payout - currentStake) : -currentStake
+    updateLocalStats({ won, stake: currentStake, userId: user?.id })
 
-    // 1. Daily stats
-    const now = new Date()
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const updated = [...dailyStats]
-    const idx = updated.findIndex(d => d.date === today)
-    if (idx >= 0) {
-      updated[idx] = {
-        ...updated[idx],
-        pnl: updated[idx].pnl + pnlChange,
-        games: (updated[idx].games || 0) + 1,
-        wins: (updated[idx].wins || 0) + (won ? 1 : 0),
-      }
-    } else {
-      updated.push({ date: today, pnl: pnlChange, games: 1, wins: won ? 1 : 0 })
-    }
-    setDailyStats(updated)
-
-    // 2. Total PnL
-    setTotalPnl(totalPnl + pnlChange)
-
-    // 3. Leaderboard
-    if (leaderboard.length > 0) {
-      const updatedLb = leaderboard.map(p =>
-        p.id === user.id
-          ? { ...p, total_pnl: (p.total_pnl || 0) + pnlChange, wins: won ? (p.wins || 0) + 1 : (p.wins || 0), losses: won ? (p.losses || 0) : (p.losses || 0) + 1 }
-          : p
-      ).sort((a, b) => (b.total_pnl || 0) - (a.total_pnl || 0))
-      setLeaderboard(updatedLb)
-    }
-
-    // 4. Guild PnL
-    if (guild) {
-      setGuild({ ...guild, pnl: (guild.pnl || 0) + pnlChange })
-      if (guildMembers.length > 0) {
-        const updatedMembers = guildMembers.map(m =>
-          m.user_id === user.id ? { ...m, pnl: (m.pnl || 0) + pnlChange } : m
-        ).sort((a, b) => (b.pnl || 0) - (a.pnl || 0))
-        setGuildMembers(updatedMembers)
-      }
-      if (topGuilds.length > 0) {
-        const updatedTopGuilds = topGuilds.map(g =>
-          g.id === guild.id ? { ...g, pnl: (g.pnl || 0) + pnlChange } : g
-        ).sort((a, b) => (b.pnl || 0) - (a.pnl || 0))
-        setTopGuilds(updatedTopGuilds)
-      }
-    }
-
-    // 5. Guild season prize pool
-    if (guildSeason) {
-      const guildFee = Math.floor(currentStake * 2 * 0.005)
-      setGuildSeason({ ...guildSeason, prize_pool: (guildSeason.prize_pool || 0) + guildFee })
-    }
-
-    // 6. Refresh balance + user stats from server
+    // Refresh balance + user stats from server
     supabase.from('users').select('balance, wins, losses').eq('id', user.id).single().then(({ data }) => {
       if (data) {
         setBalance(data.balance)
@@ -1020,7 +968,7 @@ export default function Blackjack() {
     setResult({ won, draw: false, pScore, oScore, payout })
 
     // Local stats update (PnL, leaderboard, guild, etc.)
-    if (won !== null) updateLocalStats(won, currentStake)
+    if (won !== null) updateLocalStatsWrapper(won, currentStake)
 
     setTimeout(() => {
       setLastResult({
