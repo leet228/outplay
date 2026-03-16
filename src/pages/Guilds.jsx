@@ -86,13 +86,19 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
     if (balance < EDIT_COST) {
       haptic('light')
       setEditError(t.guildsNotEnoughBalance)
-      setTimeout(() => setEditError(''), 2500)
+      setTimeout(() => setEditError(''), 3000)
       return
     }
     haptic('medium')
     setSaving(true)
     setEditError('')
-    await onEdit(editName || null, editDesc || null, editAvatar || null)
+    const result = await onEdit(editName || null, editDesc || null, editAvatar || null)
+    if (result?.error) {
+      setEditError(result.error)
+      setTimeout(() => setEditError(''), 3000)
+      setSaving(false)
+      return
+    }
     setSaving(false)
     setEditing(false)
   }
@@ -409,13 +415,17 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
     if (balance < CREATE_COST) {
       haptic('light')
       setError(t.guildsNotEnoughBalance)
-      setTimeout(() => setError(''), 2500)
+      setTimeout(() => setError(''), 3000)
       return
     }
     haptic('medium')
     setCreating(true)
     setError('')
-    await onCreated(name.trim(), desc.trim(), avatar)
+    const result = await onCreated(name.trim(), desc.trim(), avatar)
+    if (result?.error) {
+      setError(result.error)
+      setTimeout(() => setError(''), 3000)
+    }
     setCreating(false)
   }
 
@@ -704,20 +714,19 @@ export default function Guilds() {
   }
 
   async function handleGuildCreated(name, desc, avatarUrl) {
-    if (!user?.id || user.id === 'dev') return
+    if (!user?.id || user.id === 'dev') return { error: 'dev' }
     const result = await createGuild(user.id, name, desc, avatarUrl)
     if (result?.error) {
       const msg = result.error === 'insufficient_balance' ? (t.guildsNotEnoughBalance || 'Not enough balance')
         : result.error === 'name_taken' ? (t.guildsNameTaken || 'Название уже занято')
+        : result.error === 'already_in_guild' ? (t.guildsAlreadyInGuild || 'Вы уже в гильдии')
         : result.error
-      showToast(msg)
-      return
+      return { error: msg }
     }
-    // Deduct balance locally
     setBalance(balance - CREATE_COST)
-    // Refresh guild data
     await refreshGuildData()
     setCreateOpen(false)
+    return { ok: true }
   }
 
   async function handleJoinFromFind(guildId) {
@@ -744,17 +753,18 @@ export default function Guilds() {
   }
 
   async function handleEditGuild(name, desc, avatarUrl) {
-    if (!user?.id || !guild?.id || user.id === 'dev') return
+    if (!user?.id || !guild?.id || user.id === 'dev') return { error: 'dev' }
     const result = await editGuild(user.id, guild.id, name, desc, avatarUrl)
     if (result?.error) {
       const msg = result.error === 'insufficient_balance' ? (t.guildsNotEnoughBalance || 'Not enough balance')
         : result.error === 'name_taken' ? (t.guildsNameTaken || 'Название уже занято')
+        : result.error === 'not_creator' ? (t.guildsNotCreator || 'Только создатель может редактировать')
         : result.error
-      showToast(msg)
-      return
+      return { error: msg }
     }
     setBalance(balance - EDIT_COST)
     await refreshGuildData()
+    return { ok: true }
   }
 
   async function handleJoinFromDetail(guildId) {
