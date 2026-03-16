@@ -33,6 +33,7 @@ CREATE OR REPLACE FUNCTION submit_bug_report(
 )
 RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_report_id UUID;
@@ -54,3 +55,5 @@ BEGIN
   RETURN jsonb_build_object('ok', true, 'report_id', v_report_id);
 END;
 $$;
+
+GRANT EXECUTE ON FUNCTION submit_bug_report(UUID, TEXT, TEXT[], TEXT, JSONB) TO anon, authenticated;
