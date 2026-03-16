@@ -855,6 +855,21 @@ DECLARE
   v_cost     INTEGER := 2000;
   v_balance  INTEGER;
 BEGIN
+  -- Validate name length
+  IF LENGTH(TRIM(p_name)) < 2 OR LENGTH(TRIM(p_name)) > 50 THEN
+    RETURN jsonb_build_object('error', 'invalid_name');
+  END IF;
+
+  -- Check name uniqueness (case-insensitive)
+  IF EXISTS (SELECT 1 FROM guilds WHERE LOWER(name) = LOWER(TRIM(p_name))) THEN
+    RETURN jsonb_build_object('error', 'name_taken');
+  END IF;
+
+  -- Validate description length
+  IF LENGTH(COALESCE(p_description, '')) > 1000 THEN
+    RETURN jsonb_build_object('error', 'description_too_long');
+  END IF;
+
   SELECT balance INTO v_balance FROM users WHERE id = p_user_id;
   IF v_balance < v_cost THEN
     RETURN jsonb_build_object('error', 'insufficient_balance');
@@ -950,6 +965,21 @@ BEGIN
     SELECT 1 FROM guilds WHERE id = p_guild_id AND creator_id = p_user_id
   ) THEN
     RETURN jsonb_build_object('error', 'not_creator');
+  END IF;
+
+  -- Validate new name if provided
+  IF p_name IS NOT NULL THEN
+    IF LENGTH(TRIM(p_name)) < 2 OR LENGTH(TRIM(p_name)) > 50 THEN
+      RETURN jsonb_build_object('error', 'invalid_name');
+    END IF;
+    IF EXISTS (SELECT 1 FROM guilds WHERE LOWER(name) = LOWER(TRIM(p_name)) AND id != p_guild_id) THEN
+      RETURN jsonb_build_object('error', 'name_taken');
+    END IF;
+  END IF;
+
+  -- Validate description length if provided
+  IF p_description IS NOT NULL AND LENGTH(p_description) > 1000 THEN
+    RETURN jsonb_build_object('error', 'description_too_long');
   END IF;
 
   SELECT balance INTO v_balance FROM users WHERE id = p_user_id;

@@ -125,6 +125,10 @@ const useGameStore = create((set, get) => ({
   withdrawalOpen: false,
   setWithdrawalOpen: (v) => set({ withdrawalOpen: v }),
 
+  // Bug report sheet
+  bugReportOpen: false,
+  setBugReportOpen: (v) => set({ bugReportOpen: v }),
+
   // App settings (feature flags)
   appSettings: {},
   setAppSettings: (s) => set({ appSettings: s }),

@@ -186,15 +186,15 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
                       placeholder={guild.name}
                       value={editName}
                       onChange={e => setEditName(e.target.value)}
-                      maxLength={24}
+                      maxLength={50}
                     />
                     <textarea
                       className="guilds-sheet-input gd-edit-desc"
                       placeholder={guild.description || ''}
                       value={editDesc}
                       onChange={e => setEditDesc(e.target.value)}
-                      maxLength={120}
-                      rows={2}
+                      maxLength={1000}
+                      rows={3}
                     />
                     <div className="gd-edit-cost">
                       <span className="gd-edit-cost-label">{t.guildsEditCost}</span>
@@ -461,7 +461,7 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
             placeholder={t.guildsNamePlaceholder}
             value={name}
             onChange={e => setName(e.target.value)}
-            maxLength={24}
+            maxLength={50}
           />
         </div>
 
@@ -473,7 +473,7 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
             placeholder={t.guildsDescPlaceholder}
             value={desc}
             onChange={e => setDesc(e.target.value)}
-            maxLength={120}
+            maxLength={1000}
             rows={3}
           />
         </div>
@@ -707,7 +707,10 @@ export default function Guilds() {
     if (!user?.id || user.id === 'dev') return
     const result = await createGuild(user.id, name, desc, avatarUrl)
     if (result?.error) {
-      showToast(result.error === 'insufficient_balance' ? (t.guildsNotEnoughBalance || 'Not enough balance') : result.error)
+      const msg = result.error === 'insufficient_balance' ? (t.guildsNotEnoughBalance || 'Not enough balance')
+        : result.error === 'name_taken' ? (t.guildsNameTaken || 'Название уже занято')
+        : result.error
+      showToast(msg)
       return
     }
     // Deduct balance locally
@@ -744,7 +747,10 @@ export default function Guilds() {
     if (!user?.id || !guild?.id || user.id === 'dev') return
     const result = await editGuild(user.id, guild.id, name, desc, avatarUrl)
     if (result?.error) {
-      showToast(result.error === 'insufficient_balance' ? (t.guildsNotEnoughBalance || 'Not enough balance') : result.error)
+      const msg = result.error === 'insufficient_balance' ? (t.guildsNotEnoughBalance || 'Not enough balance')
+        : result.error === 'name_taken' ? (t.guildsNameTaken || 'Название уже занято')
+        : result.error
+      showToast(msg)
       return
     }
     setBalance(balance - EDIT_COST)

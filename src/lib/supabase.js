@@ -556,6 +556,32 @@ export function subscribeBlackjackActions(duelId, callback) {
   return channel
 }
 
+// ── Bug Reports ──
+
+export async function uploadBugPhoto(userId, file) {
+  const timestamp = Date.now()
+  const path = `${userId}/${timestamp}_${Math.random().toString(36).slice(2, 6)}.jpg`
+  const { error } = await supabase.storage.from('bug-photos').upload(path, file, {
+    contentType: 'image/jpeg',
+    upsert: false,
+  })
+  if (error) { console.error('uploadBugPhoto error:', error); return null }
+  const { data: urlData } = supabase.storage.from('bug-photos').getPublicUrl(path)
+  return urlData?.publicUrl || null
+}
+
+export async function submitBugReport(userId, description, photos, deviceInfo, context) {
+  const { data, error } = await supabase.rpc('submit_bug_report', {
+    p_user_id: userId,
+    p_description: description,
+    p_photos: photos,
+    p_device_info: deviceInfo,
+    p_context: context,
+  })
+  if (error) { console.error('submitBugReport error:', error); throw error }
+  return data
+}
+
 export async function getRecentCryptoDeposits(limit = 10) {
   const { data, error } = await supabase
     .from('crypto_processed_txs')
