@@ -88,6 +88,7 @@ export const translations = {
     bjWin: 'Победа!',
     bjLose: 'Поражение',
     bjDeckEmpty: 'Колода пуста',
+    bjRound: 'Раунд',
     bjDraw: 'Ничья!',
     bjDrawSub: 'Новый раунд...',
 
@@ -365,6 +366,7 @@ export const translations = {
     bjWin: 'Victory!',
     bjLose: 'Defeat',
     bjDeckEmpty: 'Deck empty',
+    bjRound: 'Round',
     bjDraw: 'Draw!',
     bjDrawSub: 'New round...',
 

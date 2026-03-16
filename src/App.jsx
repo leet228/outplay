@@ -11,7 +11,7 @@ import SplashScreen from './components/SplashScreen'
 import Onboarding from './pages/Onboarding'
 
 import Home from './pages/Home'
-import Duel from './pages/Duel'
+// Duel.jsx is legacy — matchmaking fully handled by Home.jsx GameSheet + findMatch RPC
 import Game from './pages/Game'
 import Result from './pages/Result'
 import Leaderboard from './pages/Leaderboard'
@@ -56,7 +56,7 @@ function Layout() {
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/duel" element={<Duel />} />
+        {/* /duel removed: legacy page bypassed balance deduction and matchmaking */}
         <Route path="/game/:duelId" element={<Game />} />
         <Route path="/blackjack/:duelId" element={<Blackjack />} />
         <Route path="/result" element={<Result />} />

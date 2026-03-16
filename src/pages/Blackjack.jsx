@@ -1000,7 +1000,7 @@ export default function Blackjack() {
   return (
     <div className="bj-table">
       {roundNum > 1 && (
-        <div className="bj-round-badge">Раунд {roundNum}</div>
+        <div className="bj-round-badge">{t.bjRound || 'Раунд'} {roundNum}</div>
       )}
 
       {/* Opponent area */}
