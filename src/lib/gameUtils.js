@@ -1,18 +1,32 @@
 import useGameStore from '../store/useGameStore'
 
 /**
- * Update local store stats after a game finishes (PnL, leaderboard, guild).
+ * Update local store stats after a game finishes.
+ * Updates: balance, user wins/losses, PnL, rank, leaderboard, guild.
  * Call this after any game (quiz or blackjack) to keep stats fresh without server refetch.
  */
 export function updateLocalStats({ won, stake, userId }) {
   const store = useGameStore.getState()
   const {
+    user, balance,
     dailyStats, totalPnl, leaderboard, guild, guildMembers, topGuilds, guildSeason,
+    setUser, setBalance, setRank,
     setDailyStats, setTotalPnl, setLeaderboard, setGuild, setGuildMembers, setTopGuilds, setGuildSeason,
   } = store
 
   const payout = won ? Math.floor(stake * 2 * 0.95) : 0
   const pnlChange = won ? (payout - stake) : -stake
+
+  // 0. Balance + user wins/losses (instant local update)
+  const balanceChange = won ? payout - stake : -stake
+  setBalance(balance + balanceChange)
+  if (user) {
+    setUser({
+      ...user,
+      wins: (user.wins || 0) + (won ? 1 : 0),
+      losses: (user.losses || 0) + (won ? 0 : 1),
+    })
+  }
 
   // 1. Daily stats
   const now = new Date()
@@ -76,5 +90,12 @@ export function updateLocalStats({ won, stake, userId }) {
   if (guildSeason) {
     const guildFee = Math.floor(stake * 2 * 0.005)
     setGuildSeason({ ...guildSeason, prize_pool: (guildSeason.prize_pool || 0) + guildFee })
+  }
+
+  // 6. Approximate rank from leaderboard
+  const newTotalPnl = totalPnl + pnlChange
+  if (leaderboard.length > 0) {
+    const rank = leaderboard.filter(p => (p.total_pnl || 0) > newTotalPnl && p.id !== userId).length + 1
+    setRank(rank)
   }
 }

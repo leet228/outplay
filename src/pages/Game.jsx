@@ -19,8 +19,6 @@ export default function Game() {
   const lang = useGameStore(s => s.lang)
   const setLastResult = useGameStore(s => s.setLastResult)
   const setActiveDuel = useGameStore(s => s.setActiveDuel)
-  const setBalance = useGameStore(s => s.setBalance)
-  const setUser = useGameStore(s => s.setUser)
   const tr = translations[lang] || translations.ru
 
   const [duel, setDuel] = useState(null)
@@ -466,16 +464,9 @@ export default function Game() {
         }
       }
 
-      // Refresh balance
-      const { data: userData } = await supabase
-        .from('users').select('balance, wins, losses').eq('id', user.id).single()
-      if (userData) {
-        setBalance(userData.balance)
-        setUser({ ...user, wins: userData.wins, losses: userData.losses })
-      }
     }
 
-    // Local state updates (skip in dev mode)
+    // Local state updates (balance, wins/losses, PnL, rank, guild — skip in dev mode)
     if (!isDevDuel && won !== null) {
       updateLocalStats({ won, stake: duel.stake, userId: user.id })
     }

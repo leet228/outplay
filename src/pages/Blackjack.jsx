@@ -256,9 +256,7 @@ export default function Blackjack() {
   const navigate = useNavigate()
   const user = useGameStore(s => s.user)
   const lang = useGameStore(s => s.lang)
-  const setUser = useGameStore(s => s.setUser)
   const setLastResult = useGameStore(s => s.setLastResult)
-  const setBalance = useGameStore(s => s.setBalance)
   const t = translations[lang] || translations.ru
 
   // Mode detection
@@ -933,14 +931,6 @@ export default function Blackjack() {
   function updateLocalStatsWrapper(won, currentStake) {
     if (isDevDuel) return
     updateLocalStats({ won, stake: currentStake, userId: user?.id })
-
-    // Refresh balance + user stats from server
-    supabase.from('users').select('balance, wins, losses').eq('id', user.id).single().then(({ data }) => {
-      if (data) {
-        setBalance(data.balance)
-        setUser({ ...user, wins: data.wins, losses: data.losses })
-      }
-    })
   }
 
   // ══════════════════════════════════════════

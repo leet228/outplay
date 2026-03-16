@@ -408,14 +408,34 @@ export async function getBotStarsBalance() {
 export const BOT_USER_ID = '00000000-0000-0000-0000-000000000001'
 
 export async function createBotDuel(userId, category, stakes, gameType = 'quiz') {
-  const { data, error } = await supabase.rpc('create_bot_duel', {
-    p_user_id: userId,
-    p_category: category,
-    p_stakes: stakes,
-    p_game_type: gameType,
-  })
-  if (error) { console.error('createBotDuel error:', error); return null }
-  return data
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data, error } = await supabase.rpc('create_bot_duel', {
+        p_user_id: userId,
+        p_category: category,
+        p_stakes: stakes,
+        p_game_type: gameType,
+      })
+      if (error) {
+        console.error(`createBotDuel attempt ${attempt + 1} error:`, error)
+        // Transient errors — retry
+        if (attempt < 2 && (error.message?.includes('fetch') || error.message?.includes('network') || error.message?.includes('connection') || error.code === 'PGRST301' || error.code === '57014')) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+          continue
+        }
+        return null
+      }
+      return data
+    } catch (e) {
+      console.error(`createBotDuel attempt ${attempt + 1} exception:`, e)
+      if (attempt < 2) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+        continue
+      }
+      return null
+    }
+  }
+  return null
 }
 
 // ── Matchmaking ─────────────────────────────────

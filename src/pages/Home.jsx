@@ -386,20 +386,30 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     }, 3000)
 
     // Bot timer: подключить бота через 30-60 сек если не нашёл человека
+    // Если первая попытка не удалась — повтор через 10с
     if (appSettings?.bot_enabled !== false) {
       const botDelay = (30 + Math.floor(Math.random() * 31)) * 1000
-      botTimerRef.current = setTimeout(async () => {
-        // Guard: если уже нашли матч или отменили — не создаём бот-дуэль
-        if (matchFoundRef.current || !findingRef.current) return
+      const tryCreateBot = async (retries = 2) => {
+        if (matchFoundRef.current) return
         try {
           const res = await createBotDuel(user.id, game.id, selectedStakes, gameType)
+          if (matchFoundRef.current) return
           if (res?.status === 'matched') {
             handleMatchFound(res.duel_id)
+          } else if (retries > 0 && res?.status !== 'error') {
+            // null response or unexpected — retry after 10s
+            botTimerRef.current = setTimeout(() => tryCreateBot(retries - 1), 10000)
+          } else if (res?.status === 'error' && res?.error !== 'not_in_queue' && retries > 0) {
+            botTimerRef.current = setTimeout(() => tryCreateBot(retries - 1), 10000)
           }
         } catch (e) {
           console.error('Bot duel creation failed:', e)
+          if (retries > 0) {
+            botTimerRef.current = setTimeout(() => tryCreateBot(retries - 1), 10000)
+          }
         }
-      }, botDelay)
+      }
+      botTimerRef.current = setTimeout(() => tryCreateBot(2), botDelay)
     }
   }
 
