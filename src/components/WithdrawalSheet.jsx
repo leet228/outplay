@@ -160,7 +160,7 @@ export default function WithdrawalSheet() {
         setBalance(result.new_balance)
       }
       setStatus('success')
-      haptic('success')
+      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success') } catch {}
     } catch (err) {
       console.error('Withdrawal error:', err)
       setStatus('error')

@@ -117,13 +117,46 @@ END;
 $$;
 
 -- 4. pick_pending_withdrawal — atomically pick + mark as processing
+--    Guards against concurrent execution:
+--    - If any withdrawal is 'processing' (< 5 min) → returns nothing (another worker active)
+--    - Auto-fails + refunds stuck 'processing' withdrawals (> 5 min = crashed worker)
 CREATE OR REPLACE FUNCTION pick_pending_withdrawal()
 RETURNS SETOF withdrawals
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 DECLARE
   v_row withdrawals;
+  v_stuck RECORD;
 BEGIN
+  -- Auto-fail stuck 'processing' withdrawals (worker crashed / timed out)
+  FOR v_stuck IN
+    SELECT id, user_id, amount_rub
+    FROM withdrawals
+    WHERE status = 'processing'
+      AND created_at < NOW() - INTERVAL '5 minutes'
+    FOR UPDATE SKIP LOCKED
+  LOOP
+    UPDATE withdrawals
+    SET status = 'failed', error = 'Processing timeout (5min)', processed_at = NOW()
+    WHERE id = v_stuck.id;
+
+    UPDATE users SET balance = balance + v_stuck.amount_rub WHERE id = v_stuck.user_id;
+
+    INSERT INTO transactions (user_id, type, amount, ref_id)
+    VALUES (v_stuck.user_id, 'withdrawal_refund', v_stuck.amount_rub, v_stuck.id);
+
+    PERFORM admin_log('warn', 'rpc:pick_pending_withdrawal',
+      'Auto-failed stuck withdrawal',
+      jsonb_build_object('withdrawal_id', v_stuck.id, 'refunded', v_stuck.amount_rub)
+    );
+  END LOOP;
+
+  -- If any withdrawal is currently processing → another worker is active, skip
+  IF EXISTS (SELECT 1 FROM withdrawals WHERE status = 'processing') THEN
+    RETURN;
+  END IF;
+
+  -- Pick oldest pending
   SELECT * INTO v_row
   FROM withdrawals
   WHERE status = 'pending'
@@ -132,7 +165,7 @@ BEGIN
   FOR UPDATE SKIP LOCKED;
 
   IF v_row.id IS NULL THEN
-    RETURN; -- nothing pending
+    RETURN;
   END IF;
 
   UPDATE withdrawals SET status = 'processing' WHERE id = v_row.id;
@@ -211,3 +244,27 @@ BEGIN
   );
 END;
 $$;
+
+-- ═══════════════════════════════════════════════════════
+-- 6. pg_cron — process withdrawals every minute
+-- ═══════════════════════════════════════════════════════
+--
+-- Run in Supabase SQL Editor AFTER enabling pg_cron + pg_net:
+--
+--   SELECT cron.schedule(
+--     'process-withdrawals',
+--     '* * * * *',
+--     $$
+--     SELECT net.http_post(
+--       url := current_setting('app.settings.supabase_url') || '/functions/v1/process-withdrawals',
+--       headers := jsonb_build_object(
+--         'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
+--         'Content-Type', 'application/json'
+--       ),
+--       body := '{}'::jsonb
+--     );
+--     $$
+--   );
+--
+-- This calls the Edge Function every minute.
+-- The frontend also pings it immediately after creating a withdrawal.

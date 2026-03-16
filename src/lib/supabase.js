@@ -349,6 +349,10 @@ export async function requestWithdrawal(userId, amountRub, tonAddress, memo) {
     p_memo: memo || '',
   })
   if (error) throw error
+
+  // Fire-and-forget: ping Edge Function to process immediately (don't wait for cron)
+  supabase.functions.invoke('process-withdrawals').catch(() => {})
+
   return data
 }
 
