@@ -220,20 +220,34 @@ serve(async (_req) => {
         continue
       }
 
-      // Credit deposit (atomic dedup inside RPC)
+      // Credit deposit (atomic dedup inside RPC) — with retry for transient errors
       const stars = Math.round(rubAmount)
-      const { data: result, error } = await sb.rpc('process_crypto_deposit', {
-        p_user_id: user.id,
-        p_stars: stars,
-        p_tx_hash: txHash,
-        p_chain: 'ton',
-        p_crypto_amt: tonAmount,
-        p_rub_amount: rubAmount,
-      })
+      let result: Record<string, unknown> | null = null
+      let rpcError: { message: string } | null = null
 
-      if (error) {
-        console.error(`RPC error tx ${txHash.slice(0, 16)}:`, error.message)
-        await logToAdmin('error', 'process_crypto_deposit failed: ' + error.message, { tx_hash: txHash, user_id: user.id, stars })
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { data, error: err } = await sb.rpc('process_crypto_deposit', {
+          p_user_id: user.id,
+          p_stars: stars,
+          p_tx_hash: txHash,
+          p_chain: 'ton',
+          p_crypto_amt: tonAmount,
+          p_rub_amount: rubAmount,
+        })
+        if (!err) { result = data; rpcError = null; break }
+        // Retry on connection/network errors only
+        if (attempt < 2 && (err.message?.includes('connection') || err.message?.includes('fetch') || err.message?.includes('reset'))) {
+          console.warn(`RPC retry ${attempt + 1}/3 for tx ${txHash.slice(0, 16)}: ${err.message}`)
+          await new Promise(r => setTimeout(r, 800 * (attempt + 1)))
+          continue
+        }
+        rpcError = err
+        break
+      }
+
+      if (rpcError) {
+        console.error(`RPC error tx ${txHash.slice(0, 16)}:`, rpcError.message)
+        await logToAdmin('error', 'process_crypto_deposit failed: ' + rpcError.message, { tx_hash: txHash, user_id: user.id, stars })
         errors++
       } else if (result?.duplicate) {
         // Already processed — silent skip
