@@ -16,14 +16,20 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // @ton/* — use npm: specifiers (Deno supports npm packages)
-import { TonClient, WalletContractV4, internal } from 'npm:@ton/ton@15'
+// Import Address and toNano from @ton/ton (re-exports from @ton/core)
+// to avoid version mismatch between separate @ton/core import
+import { TonClient, WalletContractV4, internal, Address, toNano } from 'npm:@ton/ton@15'
 import { mnemonicToPrivateKey } from 'npm:@ton/crypto@3'
-import { Address, toNano } from 'npm:@ton/core@0.58'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const WALLET_TON_MNEMONIC = Deno.env.get('WALLET_TON_MNEMONIC')!
 const TONCENTER_API_KEY = Deno.env.get('TONCENTER_API_KEY') || undefined
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
 const TONCENTER_ENDPOINT = 'https://toncenter.com/api/v2/jsonRPC'
 const CONFIRMATION_TIMEOUT_MS = 45_000 // 45s per tx (leave room for loop overhead)
@@ -119,6 +125,11 @@ async function sendTon(toAddress: string, amountTon: number, memo = ''): Promise
   const client = getTonClient()
   const contract = client.open(wallet)
 
+  // Parse and re-stringify address to normalize format
+  const dest = Address.parse(toAddress)
+  const destStr = dest.toString({ bounceable: true })
+  console.log(`[ton] Destination: ${destStr}`)
+
   const seqno = await contract.getSeqno()
 
   await contract.sendTransfer({
@@ -126,7 +137,7 @@ async function sendTon(toAddress: string, amountTon: number, memo = ''): Promise
     secretKey: keyPair.secretKey,
     messages: [
       internal({
-        to: Address.parse(toAddress),
+        to: destStr,
         value: toNano(amountTon.toFixed(9)),
         body: memo || undefined,
       }),
@@ -216,7 +227,12 @@ async function processOne(sb: ReturnType<typeof createClient>, tonPriceRub: numb
 
 // ── Main: loop until queue empty or wall-clock limit ──
 
-serve(async (_req) => {
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
   const startTime = Date.now()
 
   try {
@@ -303,6 +319,6 @@ serve(async (_req) => {
 function jsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })
 }
