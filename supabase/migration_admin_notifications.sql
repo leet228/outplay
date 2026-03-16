@@ -64,8 +64,8 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_bot TEXT := '8774811583:AAF5ZyJ4rXrmtLXW67PI5bdHPxXvR_9QD04';
-  v_chat TEXT := '945676433';
+  v_bot TEXT;
+  v_chat TEXT;
   v_icon TEXT;
   v_msg TEXT;
   v_details TEXT;
@@ -73,6 +73,11 @@ BEGIN
   IF NEW.level NOT IN ('error', 'warn') THEN
     RETURN NEW;
   END IF;
+
+  SELECT decrypted_secret INTO v_bot FROM vault.decrypted_secrets WHERE name = 'telegram_bot_token' LIMIT 1;
+  SELECT decrypted_secret INTO v_chat FROM vault.decrypted_secrets WHERE name = 'admin_tg_id' LIMIT 1;
+  IF v_bot IS NULL THEN RETURN NEW; END IF;
+  v_chat := COALESCE(v_chat, '945676433');
 
   IF NEW.level = 'error' THEN v_icon := '🔴'; ELSE v_icon := '🟡'; END IF;
 
@@ -115,13 +120,18 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_bot TEXT := '8774811583:AAF5ZyJ4rXrmtLXW67PI5bdHPxXvR_9QD04';
-  v_chat TEXT := '945676433';
+  v_bot TEXT;
+  v_chat TEXT;
   v_username TEXT;
   v_msg TEXT;
   v_photo TEXT;
   v_photo_count INT;
 BEGIN
+  SELECT decrypted_secret INTO v_bot FROM vault.decrypted_secrets WHERE name = 'telegram_bot_token' LIMIT 1;
+  SELECT decrypted_secret INTO v_chat FROM vault.decrypted_secrets WHERE name = 'admin_tg_id' LIMIT 1;
+  IF v_bot IS NULL THEN RETURN NEW; END IF;
+  v_chat := COALESCE(v_chat, '945676433');
+
   SELECT username INTO v_username FROM users WHERE id = NEW.user_id;
 
   v_msg := '🐛 <b>Новый баг-репорт</b>' || chr(10) ||

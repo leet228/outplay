@@ -7,8 +7,8 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 
-const BOT_TOKEN = '8434131902:AAF5c2_zQObsoD5157KgvdaLT9r4zIA26RU'
-const ADMIN_CHAT_ID = '945676433'
+const BOT_TOKEN = Deno.env.get('SUPPORT_BOT_TOKEN')!
+const ADMIN_CHAT_ID = Deno.env.get('ADMIN_TG_ID') || '945676433'
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`
 
 async function sendMessage(chatId: string | number, text: string, replyTo?: number) {
