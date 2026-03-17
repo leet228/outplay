@@ -16,7 +16,6 @@ const SOUND_FILES = {
   timer:      '/sounds/timer.wav',
   gameStart:  '/sounds/app-open.wav',
   coin:       '/sounds/coin.wav',
-  appOpen:    '/sounds/app-open.wav',
 }
 
 // Volume levels (0-1)
@@ -185,7 +184,6 @@ export const sound = {
   defeat:    () => playHTML('defeat', 0.8),
   coin:      () => playHTML('coin', 0.6),
   gameStart: () => playHTML('gameStart', 0.5),
-  appOpen:   () => playHTML('appOpen', 0.4),
 
   // Timer uses Web Audio API so it can be stopped mid-play
   timerStart: () => {
