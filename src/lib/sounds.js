@@ -36,24 +36,29 @@ function getContext() {
   return audioCtx
 }
 
-/** Unlock audio on first user gesture — required by browsers */
+/** Unlock audio — call from splash screen or on first user gesture */
 export function unlockAudio() {
   if (unlocked) return
-  const ctx = getContext()
-  if (ctx.state === 'suspended') {
-    ctx.resume().then(() => {
+  try {
+    const ctx = getContext()
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        if (unlocked) return
+        unlocked = true
+        _flushQueue()
+      })
+    } else {
       unlocked = true
-      // Play only appOpen from queue (skip stale game sounds)
-      const appOpenItem = pendingQueue.find(q => q.name === 'appOpen')
-      if (appOpenItem) playSound(appOpenItem.name, appOpenItem.opts)
-      pendingQueue = []
-    })
-  } else {
-    unlocked = true
-    const appOpenItem = pendingQueue.find(q => q.name === 'appOpen')
-    if (appOpenItem) playSound(appOpenItem.name, appOpenItem.opts)
-    pendingQueue = []
-  }
+      _flushQueue()
+    }
+  } catch {}
+}
+
+function _flushQueue() {
+  // Play only appOpen from queue (skip stale game sounds)
+  const appOpenItem = pendingQueue.find(q => q.name === 'appOpen')
+  pendingQueue = []
+  if (appOpenItem) playSound(appOpenItem.name, appOpenItem.opts)
 }
 
 // Listen for first user interaction to unlock audio
