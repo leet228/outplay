@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { supabase } from '../lib/supabase'
 import { findMatch, cancelMatchmaking, createBotDuel } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
+import sound from '../lib/sounds'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendsData, sendGameInvite, acceptGameInvite, rejectGameInvite, cancelAllPendingInvites, getPendingInvites } from '../lib/supabase'
@@ -275,6 +276,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     cleanupSearch()
     setMatched(true)
     haptic('heavy')
+    sound.gameStart()
     setTimeout(() => {
       setSearching(false)
       setMatched(false)
@@ -316,6 +318,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       setSearchTime(0)
       setTimeout(() => {
         setSearching(false)
+        sound.gameStart()
         const devRoute = game.id === 'blackjack' ? '/blackjack' : game.id === 'sequence' ? '/sequence' : '/game'
         navigate(`${devRoute}/dev-${game.id}-${selectedStakes[0]}`)
       }, 1500)
@@ -780,6 +783,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
     if (result?.duel_id) {
       setGameInvites(gameInvites.filter(i => i.id !== inv.id))
       onClose()
+      sound.gameStart()
       const route = inv.game_type === 'blackjack' ? '/blackjack' : inv.game_type === 'sequence' ? '/sequence' : '/game'
       navigate(`${route}/${result.duel_id}`)
     } else if (result?.error === 'insufficient_balance' || result?.error === 'sender_insufficient_balance') {
@@ -1178,6 +1182,7 @@ export default function Home() {
     if (pendingGameNav) {
       const { duelId, gameType } = pendingGameNav
       setPendingGameNav(null)
+      sound.gameStart()
       const route = gameType === 'blackjack' ? '/blackjack' : gameType === 'sequence' ? '/sequence' : '/game'
       navigate(`${route}/${duelId}`)
     }

@@ -454,7 +454,6 @@ export default function Blackjack() {
     const rem = d.slice(2)
 
     setPhase('dealing')
-    sound.gameStart()
     setTimeout(() => { setPlayerHand([playerCards[0]]); setPlayerScore(calcScore([playerCards[0]])); setDealStep(1) }, 600)
     setTimeout(() => { setOpponentHand([phantomCard1]); setDealStep(2) }, 1100)
     setTimeout(() => { setPlayerHand(playerCards); setPlayerScore(calcScore(playerCards)); setDealStep(3) }, 1600)

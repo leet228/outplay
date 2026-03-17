@@ -55,11 +55,6 @@ export default function Game() {
     return () => cleanupAll()
   }, [duelId])
 
-  // Play game-start sound when questions load
-  useEffect(() => {
-    if (!loading && questions.length > 0) sound.gameStart()
-  }, [loading])
-
   // Timer countdown — keeps running even after confirm (both players see same timer)
   useEffect(() => {
     if (loading || finished) return

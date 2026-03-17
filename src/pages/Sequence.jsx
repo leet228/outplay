@@ -143,11 +143,6 @@ export default function Sequence() {
     setLoading(false)
   }
 
-  // ── Game start sound ──
-  useEffect(() => {
-    if (!loading && duel) sound.gameStart()
-  }, [loading])
-
   // ── Countdown ──
   useEffect(() => {
     if (loading || phase !== 'countdown') return
