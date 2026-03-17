@@ -188,13 +188,18 @@ export default function WithdrawalSheet() {
 
     // 1. Try Telegram's clipboard API (works inside WebApp)
     if (tg?.readTextFromClipboard) {
-      tg.readTextFromClipboard((text) => {
+      try {
+        const text = await new Promise((resolve) => {
+          tg.readTextFromClipboard((t) => resolve(t || ''))
+          // Timeout fallback in case callback never fires
+          setTimeout(() => resolve(''), 1000)
+        })
         if (text) {
           setWallet(text.trim())
           setWalletTouched(true)
+          return
         }
-      })
-      return
+      } catch { /* ignore */ }
     }
 
     // 2. Fallback to browser clipboard API

@@ -116,12 +116,26 @@ export default function AdminWallet() {
     haptic('light')
   }
 
-  function handlePaste() {
-    navigator.clipboard.readText().then(t => {
-      const trimmed = t.trim()
-      if (trimmed) setWdAddress(trimmed)
-    }).catch(() => {})
+  async function handlePaste() {
     haptic('light')
+    const tg = window.Telegram?.WebApp
+
+    // 1. Try Telegram clipboard API
+    if (tg?.readTextFromClipboard) {
+      try {
+        const text = await new Promise((resolve) => {
+          tg.readTextFromClipboard((t) => resolve(t || ''))
+          setTimeout(() => resolve(''), 1000)
+        })
+        if (text) { setWdAddress(text.trim()); return }
+      } catch { /* ignore */ }
+    }
+
+    // 2. Fallback to browser clipboard API
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) setWdAddress(text.trim())
+    } catch { /* clipboard denied */ }
   }
 
   async function handleWithdraw() {
