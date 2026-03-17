@@ -184,32 +184,31 @@ export default function WithdrawalSheet() {
 
   async function handlePaste() {
     haptic('light')
-    const tg = window.Telegram?.WebApp
 
-    // 1. Try Telegram's clipboard API (works inside WebApp)
-    if (tg?.readTextFromClipboard) {
-      try {
-        const text = await new Promise((resolve) => {
-          tg.readTextFromClipboard((t) => resolve(t || ''))
-          // Timeout fallback in case callback never fires
-          setTimeout(() => resolve(''), 1000)
-        })
-        if (text) {
-          setWallet(text.trim())
-          setWalletTouched(true)
-          return
-        }
-      } catch { /* ignore */ }
-    }
-
-    // 2. Fallback to browser clipboard API
+    // 1. Browser clipboard API first — shows native iOS "Allow Paste" prompt
     try {
       const text = await navigator.clipboard.readText()
       if (text) {
         setWallet(text.trim())
         setWalletTouched(true)
+        return
       }
-    } catch { /* clipboard denied */ }
+    } catch { /* not available or denied */ }
+
+    // 2. Fallback: Telegram WebApp clipboard API
+    const tg = window.Telegram?.WebApp
+    if (tg?.readTextFromClipboard) {
+      try {
+        const text = await new Promise((resolve) => {
+          tg.readTextFromClipboard((t) => resolve(t || ''))
+          setTimeout(() => resolve(''), 1500)
+        })
+        if (text) {
+          setWallet(text.trim())
+          setWalletTouched(true)
+        }
+      } catch { /* ignore */ }
+    }
   }
 
   const showWalletError = walletTouched && wallet.length > 0 && !walletValid
