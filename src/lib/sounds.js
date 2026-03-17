@@ -37,7 +37,7 @@ function getContext() {
 }
 
 /** Unlock audio on first user gesture — required by browsers */
-function unlockAudio() {
+export function unlockAudio() {
   if (unlocked) return
   const ctx = getContext()
   if (ctx.state === 'suspended') {
@@ -206,7 +206,17 @@ export const sound = {
   defeat:    () => playSound('defeat', { volume: 0.8 }),
   coin:      () => playSound('coin', { volume: 0.6 }),
   gameStart: () => playSound('gameStart', { volume: 0.5 }),
-  appOpen:   () => playSound('appOpen', { volume: 0.4 }),
+  appOpen:   () => {
+    // Try Web Audio API first, fallback to HTML Audio for webview compat
+    const node = playSound('appOpen', { volume: 0.4 })
+    if (!node && soundEnabled) {
+      try {
+        const a = new Audio('/sounds/app-open.wav')
+        a.volume = 0.4 * masterVolume
+        a.play().catch(() => {})
+      } catch {}
+    }
+  },
 
   // Timer: plays the 5s countdown tick sound
   timerStart: () => playSound('timer', { volume: 0.5 }),
