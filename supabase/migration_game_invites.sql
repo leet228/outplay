@@ -172,10 +172,7 @@ BEGIN
 
   ELSIF v_inv.game_type = 'sequence' THEN
     v_category := 'sequence';
-    -- sequence uses client-side generation, similar to quiz
-    SELECT ARRAY(
-      SELECT id FROM questions ORDER BY RANDOM() LIMIT 5
-    ) INTO v_question_ids;
+    -- sequence is fully client-side, no questions needed
   END IF;
 
   -- Создаём дуэль (from_id = creator, to_id = opponent)
