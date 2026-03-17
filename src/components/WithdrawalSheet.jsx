@@ -182,24 +182,6 @@ export default function WithdrawalSheet() {
     return formatCurrency(netDisplay, currency, rates)
   }
 
-  function handlePaste() {
-    // clipboard.readText() MUST be the very first call in the click handler
-    // Any call before it (haptic, setState, etc) can consume the iOS user gesture
-    if (navigator.clipboard && navigator.clipboard.readText) {
-      navigator.clipboard.readText().then(text => {
-        haptic('light')
-        if (text && text.trim()) {
-          setWallet(text.trim())
-          setWalletTouched(true)
-        }
-      }).catch(() => {
-        haptic('light')
-      })
-    } else {
-      haptic('light')
-    }
-  }
-
   const showWalletError = walletTouched && wallet.length > 0 && !walletValid
   const showAmountError = amountTouched && numAmount > 0 && !amountValid
 
@@ -273,14 +255,10 @@ export default function WithdrawalSheet() {
                     autoComplete="off"
                     spellCheck="false"
                   />
-                  {wallet && walletValid ? (
+                  {wallet && walletValid && (
                     <svg className="wd-input-icon valid" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round">
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
-                  ) : !wallet && (
-                    <button className="wd-paste-btn" onClick={handlePaste} type="button">
-                      {lang === 'ru' ? 'Вставить' : 'Paste'}
-                    </button>
                   )}
                 </div>
                 {showWalletError && (
