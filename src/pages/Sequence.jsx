@@ -290,9 +290,33 @@ export default function Sequence() {
     return () => clearInterval(iv)
   }, [phase, roundIndex])
 
-  // ── End round — direct setTimeout, NO useEffect ──
-  // useEffect cleanup was killing the timeout when deps changed.
-  // Direct setTimeout + refs = no React interference.
+  // ── End round + auto-transition ──
+  const transitionDoneRef = useRef(false)
+
+  function doTransition() {
+    if (transitionDoneRef.current) return
+    transitionDoneRef.current = true
+
+    try {
+      const currentRound = roundIndexRef.current
+      console.log('[SEQ] transition. round:', currentRound, 'scores:', scoresRef.current)
+
+      if (currentRound >= 2) {
+        finishGame(scoresRef.current)
+      } else {
+        roundIndexRef.current = currentRound + 1
+        setRoundIndex(currentRound + 1)
+        setPhase('roundIntro')
+      }
+    } catch (err) {
+      console.error('[SEQ] TRANSITION ERROR:', err)
+      // Force next round on error
+      roundIndexRef.current += 1
+      setRoundIndex(roundIndexRef.current)
+      setPhase('roundIntro')
+    }
+  }
+
   function endRound(passed) {
     if (inputLocked.current) return
     inputLocked.current = true
@@ -315,20 +339,23 @@ export default function Sequence() {
     }
 
     setPhase('feedback')
+    transitionDoneRef.current = false
 
-    // Direct transition after 1200ms — refs only, no stale closure risk
-    setTimeout(() => {
-      const currentRound = roundIndexRef.current
-      console.log('[SEQ] feedback→next. currentRound:', currentRound, 'scores:', scoresRef.current)
+    // Primary: setTimeout
+    window.setTimeout(doTransition, 1200)
 
-      if (currentRound >= 2) {
-        finishGame(scoresRef.current)
-      } else {
-        roundIndexRef.current = currentRound + 1
-        setRoundIndex(currentRound + 1)
-        setPhase('roundIntro')
+    // Backup: requestAnimationFrame loop in case setTimeout is throttled
+    const start = Date.now()
+    function backupCheck() {
+      if (transitionDoneRef.current) return
+      if (Date.now() - start >= 1500) {
+        console.warn('[SEQ] backup rAF triggered — setTimeout did not fire')
+        doTransition()
+        return
       }
-    }, 1200)
+      requestAnimationFrame(backupCheck)
+    }
+    requestAnimationFrame(backupCheck)
   }
 
   // ── Finish game — bot logic + backend submission ──
