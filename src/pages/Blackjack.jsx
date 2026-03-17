@@ -12,6 +12,7 @@ import {
   supabase,
 } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
+import sound from '../lib/sounds'
 import './Blackjack.css'
 
 // ── Card engine ──
@@ -450,6 +451,7 @@ export default function Blackjack() {
     const rem = d.slice(2)
 
     setPhase('dealing')
+    sound.gameStart()
     setTimeout(() => { setPlayerHand([playerCards[0]]); setPlayerScore(calcScore([playerCards[0]])); setDealStep(1) }, 600)
     setTimeout(() => { setOpponentHand([phantomCard1]); setDealStep(2) }, 1100)
     setTimeout(() => { setPlayerHand(playerCards); setPlayerScore(calcScore(playerCards)); setDealStep(3) }, 1600)
@@ -926,6 +928,7 @@ export default function Blackjack() {
 
     const payout = won ? Math.floor(stake * 2 * 0.95) : 0
     setResult({ won, draw: false, pScore, oScore: botScore, payout })
+    if (won) { sound.victory(); sound.coin() } else { sound.defeat() }
 
     // Finalize on server (if not dev mode)
     if (!isDevDuel && duelInfo) {
@@ -983,6 +986,7 @@ export default function Blackjack() {
     const currentStake = stakeRef.current || stake
     const payout = won ? Math.floor(currentStake * 2 * 0.95) : 0
     setResult({ won, draw: false, pScore, oScore, payout })
+    if (won) { sound.victory(); sound.coin() } else { sound.defeat() }
 
     // Local stats update (PnL, leaderboard, guild, etc.)
     if (won !== null) updateLocalStatsWrapper(won, currentStake)

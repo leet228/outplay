@@ -5,6 +5,7 @@ import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { supabase, getSequenceDuel, submitSequenceResult } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
+import sound from '../lib/sounds'
 import './Sequence.css'
 
 // ── Constants ──
@@ -141,6 +142,11 @@ export default function Sequence() {
 
     setLoading(false)
   }
+
+  // ── Game start sound ──
+  useEffect(() => {
+    if (!loading && duel) sound.gameStart()
+  }, [loading])
 
   // ── Countdown ──
   useEffect(() => {
@@ -282,13 +288,15 @@ export default function Sequence() {
       timeLeftRef.current -= 1
       const next = timeLeftRef.current
       setTimeLeft(next)
+      if (next === 5) sound.timerStart()
       if (next <= 0) {
         clearInterval(iv)
+        sound.timerStop()
         endRound(false)
       }
     }, 1000)
 
-    return () => clearInterval(iv)
+    return () => { clearInterval(iv); sound.timerStop() }
   }, [phase, roundIndex])
 
   // ── End round + auto-transition ──
@@ -331,12 +339,15 @@ export default function Sequence() {
     scoresRef.current = [...scoresRef.current, passed]
     setScores(scoresRef.current)
 
+    sound.timerStop()
     if (passed) {
       setRoundPassed(true)
       haptic('success')
+      sound.correct()
     } else {
       setRoundFailed(true)
       haptic('error')
+      sound.incorrect()
     }
 
     setPhase('feedback')

@@ -1,8 +1,10 @@
+import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { useShallow } from 'zustand/react/shallow'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
+import sound from '../lib/sounds'
 import './Result.css'
 
 export default function Result() {
@@ -26,6 +28,19 @@ export default function Result() {
   const isSeq = gameType === 'sequence'
 
   const isWin = won === true
+
+  // Play victory/defeat + coin sounds on mount (skip for blackjack — it plays its own)
+  const soundPlayedRef = useRef(false)
+  useEffect(() => {
+    if (soundPlayedRef.current || gameType === 'blackjack') return
+    soundPlayedRef.current = true
+    if (isWin) {
+      sound.victory()
+      setTimeout(() => sound.coin(), 500)
+    } else {
+      sound.defeat()
+    }
+  }, [])
 
   function formatCurrency(amount) {
     const rate = rates[currency?.code] || 1

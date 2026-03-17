@@ -5,6 +5,7 @@ import { supabase, submitAnswer, BOT_USER_ID } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { updateLocalStats } from '../lib/gameUtils'
+import sound from '../lib/sounds'
 import './Game.css'
 
 const QUESTION_COUNT = 5
@@ -54,9 +55,20 @@ export default function Game() {
     return () => cleanupAll()
   }, [duelId])
 
+  // Play game-start sound when questions load
+  useEffect(() => {
+    if (!loading && questions.length > 0) sound.gameStart()
+  }, [loading])
+
   // Timer countdown — keeps running even after confirm (both players see same timer)
   useEffect(() => {
     if (loading || finished) return
+
+    // Start timer tick sound at exactly 5 seconds
+    if (timeLeft === 5 && !confirmed) sound.timerStart()
+    // Stop timer sound if answered or time ran out
+    if (timeLeft <= 0 || confirmed) sound.timerStop()
+
     if (timeLeft <= 0) {
       if (!submittingRef.current) {
         // Not yet answered — auto-submit timeout
@@ -374,9 +386,12 @@ export default function Game() {
 
     setWaitingOpponent(false)
     setShowResult(true)
+    sound.timerStop()
 
     const q = questions[qIndex]
-    haptic(selected !== null && q?.correct_index === selected ? 'medium' : 'light')
+    const isCorrect = selected !== null && q?.correct_index === selected
+    haptic(isCorrect ? 'medium' : 'light')
+    if (isCorrect) sound.correct(); else sound.incorrect()
 
     setTimeout(() => {
       if (qIndex + 1 >= questions.length) {

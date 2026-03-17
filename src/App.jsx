@@ -4,6 +4,7 @@ import { initTelegram, getTelegramUser, getStartParam } from './lib/telegram'
 import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings } from './lib/supabase'
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
+import { initSounds, preloadAll, sound } from './lib/sounds'
 import './App.css'
 import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
@@ -113,6 +114,10 @@ export default function App() {
   useEffect(() => {
     const tg = initTelegram()
     applyTelegramTheme(tg)
+
+    // Init sound system + preload all sounds in background
+    initSounds()
+    preloadAll()
 
     const isOnboarded = localStorage.getItem('outplay_onboarded')
     const SPLASH_MIN = 1400 // ms
@@ -447,6 +452,15 @@ export default function App() {
       }
     }
   }
+
+  // Play app-open sound once when entering app
+  const soundPlayedRef = useRef(false)
+  useEffect(() => {
+    if (phase === 'app' && !soundPlayedRef.current) {
+      soundPlayedRef.current = true
+      sound.appOpen()
+    }
+  }, [phase])
 
   if (phase === 'splash') return <SplashScreen />
 
