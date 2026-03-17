@@ -101,6 +101,12 @@ export default function Sequence() {
 
   const roundStartTime = useRef(0)
   const inputLocked = useRef(false)
+  const endRoundTimer = useRef(null)
+
+  // ── Cleanup endRound timer on unmount ──
+  useEffect(() => {
+    return () => { if (endRoundTimer.current) clearTimeout(endRoundTimer.current) }
+  }, [])
 
   // ── Load duel ──
   useEffect(() => {
@@ -299,7 +305,8 @@ export default function Sequence() {
 
     const currentRound = roundIndexRef.current
 
-    setTimeout(() => {
+    endRoundTimer.current = setTimeout(() => {
+      endRoundTimer.current = null
       if (currentRound >= 2) {
         finishGame(updatedScores)
       } else {
