@@ -116,25 +116,23 @@ export default function AdminWallet() {
     haptic('light')
   }
 
-  async function handlePaste() {
+  function handlePaste() {
     haptic('light')
 
-    // 1. Browser clipboard API first — shows native iOS "Allow Paste" prompt
-    try {
-      const text = await navigator.clipboard.readText()
-      if (text) { setWdAddress(text.trim()); return }
-    } catch { /* not available or denied */ }
-
-    // 2. Fallback: Telegram WebApp clipboard API
-    const tg = window.Telegram?.WebApp
-    if (tg?.readTextFromClipboard) {
-      try {
-        const text = await new Promise((resolve) => {
-          tg.readTextFromClipboard((t) => resolve(t || ''))
-          setTimeout(() => resolve(''), 1500)
-        })
-        if (text) setWdAddress(text.trim())
-      } catch { /* ignore */ }
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(text => {
+        if (text && text.trim()) setWdAddress(text.trim())
+      }).catch(() => {
+        const tg = window.Telegram?.WebApp
+        if (tg?.readTextFromClipboard) {
+          tg.readTextFromClipboard((t) => { if (t) setWdAddress(t.trim()) })
+        }
+      })
+    } else {
+      const tg = window.Telegram?.WebApp
+      if (tg?.readTextFromClipboard) {
+        tg.readTextFromClipboard((t) => { if (t) setWdAddress(t.trim()) })
+      }
     }
   }
 
