@@ -75,6 +75,7 @@ export default function Sequence() {
   const [scores, setScores] = useState([])
   const [totalTime, setTotalTime] = useState(0)
   const [finished, setFinished] = useState(false)
+  const [waitingOpponent, setWaitingOpponent] = useState(false)
 
   // Refs — survive closures, always current
   const scoresRef = useRef([])
@@ -399,6 +400,9 @@ export default function Sequence() {
       // Submit player result
       await submitSequenceResult(duelId, user.id, myScore, myTime)
 
+      // Show waiting while bot "finishes"
+      setWaitingOpponent(true)
+
       // Submit bot result (with realistic delay)
       const botDelay = Math.max(0.5, Math.min(4, botTime - myTime))
       await new Promise(r => setTimeout(r, Math.max(500, botDelay * 1000)))
@@ -407,12 +411,14 @@ export default function Sequence() {
       // Fetch final duel state
       await new Promise(r => setTimeout(r, 500))
       let finalDuel = null
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 5; attempt++) {
         const { data } = await supabase
           .from('duels').select('*').eq('id', duelId).single()
         if (data?.status === 'finished') { finalDuel = data; break }
         await new Promise(r => setTimeout(r, 1500))
       }
+
+      setWaitingOpponent(false)
 
       if (finalDuel?.status === 'finished') {
         won = finalDuel.winner_id === user.id
@@ -429,23 +435,19 @@ export default function Sequence() {
 
     } else {
       // PvP — submit own result, wait for opponent
-      const result = await submitSequenceResult(duelId, user.id, myScore, myTime)
-
-      if (result?.status === 'already_finished' || result?.result === 'win') {
-        // Both submitted — result available
-      } else {
-        // Wait for opponent
-        await new Promise(r => setTimeout(r, 1000))
-      }
+      setWaitingOpponent(true)
+      await submitSequenceResult(duelId, user.id, myScore, myTime)
 
       // Poll for finished state
       let finalDuel = null
-      for (let attempt = 0; attempt < 20; attempt++) {
+      for (let attempt = 0; attempt < 30; attempt++) {
         const { data } = await supabase
           .from('duels').select('*').eq('id', duelId).single()
         if (data?.status === 'finished') { finalDuel = data; break }
         await new Promise(r => setTimeout(r, 2000))
       }
+
+      setWaitingOpponent(false)
 
       const isCreator = duel.creator_id === user.id
       if (finalDuel?.status === 'finished') {
@@ -750,6 +752,36 @@ export default function Sequence() {
               {simonSequence.map((_, i) => (
                 <div key={i} className={`seq-simon-dot ${i < simonInputIndex ? 'done' : i === simonInputIndex ? 'current' : ''}`} />
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Done — waiting for opponent */}
+      {phase === 'done' && (
+        <div className="seq-done">
+          {/* Score summary */}
+          <div className="seq-done-scores">
+            <span className="seq-done-title">{lang === 'ru' ? 'Ваш результат' : 'Your result'}</span>
+            <div className="seq-done-rounds">
+              {scores.map((passed, i) => (
+                <div key={i} className={`seq-done-round ${passed ? 'pass' : 'fail'}`}>
+                  <span>{lang === 'ru' ? 'Раунд' : 'Round'} {i + 1}</span>
+                  <span>{passed ? '✓' : '✗'}</span>
+                </div>
+              ))}
+            </div>
+            <div className="seq-done-total">
+              {scores.filter(Boolean).length}/3 {lang === 'ru' ? 'раундов' : 'rounds'}
+            </div>
+          </div>
+
+          {waitingOpponent && (
+            <div className="seq-waiting">
+              <div className="game-waiting-dots">
+                <span /><span /><span />
+              </div>
+              <span>{lang === 'ru' ? 'Ждём соперника...' : 'Waiting for opponent...'}</span>
             </div>
           )}
         </div>
