@@ -1570,7 +1570,7 @@
 }
 
 .invite-game-card {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1584,6 +1584,7 @@
   transition: all 0.15s;
   -webkit-tap-highlight-color: transparent;
   min-width: 0;
+  overflow: hidden;
 }
 
 .invite-game-card:active {
@@ -1607,6 +1608,8 @@
   font-weight: 700;
   text-align: center;
   line-height: 1.2;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .invite-stake-input {
