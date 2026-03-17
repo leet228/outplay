@@ -290,7 +290,9 @@ export default function Sequence() {
     return () => clearInterval(iv)
   }, [phase, roundIndex])
 
-  // ── End round — just set feedback phase, no setTimeout ──
+  // ── End round — direct setTimeout, NO useEffect ──
+  // useEffect cleanup was killing the timeout when deps changed.
+  // Direct setTimeout + refs = no React interference.
   function endRound(passed) {
     if (inputLocked.current) return
     inputLocked.current = true
@@ -298,7 +300,6 @@ export default function Sequence() {
 
     const elapsed = (Date.now() - roundStartTime.current) / 1000
 
-    // Update refs first
     totalTimeRef.current += elapsed
     setTotalTime(totalTimeRef.current)
 
@@ -313,18 +314,12 @@ export default function Sequence() {
       haptic('error')
     }
 
-    // Transition to feedback phase — useEffect handles the rest
     setPhase('feedback')
-  }
 
-  // ── Feedback phase → auto-transition after 1200ms ──
-  useEffect(() => {
-    if (phase !== 'feedback') return
-    console.log('[SEQ] feedback phase, will transition in 1200ms. roundIndexRef:', roundIndexRef.current)
-
-    const timer = setTimeout(() => {
+    // Direct transition after 1200ms — refs only, no stale closure risk
+    setTimeout(() => {
       const currentRound = roundIndexRef.current
-      console.log('[SEQ] feedback timeout fired. currentRound:', currentRound, 'scores:', scoresRef.current)
+      console.log('[SEQ] feedback→next. currentRound:', currentRound, 'scores:', scoresRef.current)
 
       if (currentRound >= 2) {
         finishGame(scoresRef.current)
@@ -334,9 +329,7 @@ export default function Sequence() {
         setPhase('roundIntro')
       }
     }, 1200)
-
-    return () => clearTimeout(timer)
-  }, [phase, roundIndex])
+  }
 
   // ── Finish game — bot logic + backend submission ──
   async function finishGame(finalScores) {

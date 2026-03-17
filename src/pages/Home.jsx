@@ -780,7 +780,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
     if (result?.duel_id) {
       setGameInvites(gameInvites.filter(i => i.id !== inv.id))
       onClose()
-      const route = inv.game_type === 'blackjack' ? '/blackjack' : '/game'
+      const route = inv.game_type === 'blackjack' ? '/blackjack' : inv.game_type === 'sequence' ? '/sequence' : '/game'
       navigate(`${route}/${result.duel_id}`)
     } else if (result?.error === 'insufficient_balance' || result?.error === 'sender_insufficient_balance') {
       haptic('error')
@@ -1177,7 +1177,7 @@ export default function Home() {
     if (pendingGameNav) {
       const { duelId, gameType } = pendingGameNav
       setPendingGameNav(null)
-      const route = gameType === 'blackjack' ? '/blackjack' : '/game'
+      const route = gameType === 'blackjack' ? '/blackjack' : gameType === 'sequence' ? '/sequence' : '/game'
       navigate(`${route}/${duelId}`)
     }
   }, [pendingGameNav])
