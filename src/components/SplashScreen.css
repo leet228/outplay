@@ -8,6 +8,12 @@
   justify-content: center;
   gap: 48px;
   z-index: 2000;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.splash--ready {
+  cursor: pointer;
 }
 
 .splash-logo {
@@ -38,6 +44,18 @@
 @keyframes splashSpinnerIn {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+.splash-tap {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-muted);
+  animation: splashTapPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes splashTapPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 
 @keyframes spin {

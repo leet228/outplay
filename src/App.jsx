@@ -4,7 +4,7 @@ import { initTelegram, getTelegramUser, getStartParam } from './lib/telegram'
 import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings } from './lib/supabase'
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
-import { initSounds, preloadAll, sound } from './lib/sounds'
+import { initSounds, preloadAll, sound, unlockAudio } from './lib/sounds'
 import './App.css'
 import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
@@ -108,8 +108,9 @@ function writeCache(data) {
 export default function App() {
   const setUser = useGameStore(s => s.setUser)
   const setBalance = useGameStore(s => s.setBalance)
-  // 'splash' | 'onboarding' | 'app'
+  // 'splash' | 'ready' | 'onboarding' | 'app'
   const [phase, setPhase] = useState('splash')
+  const nextPhaseRef = useRef(null)  // what comes after splash: 'onboarding' or 'app'
 
   useEffect(() => {
     const tg = initTelegram()
@@ -123,21 +124,20 @@ export default function App() {
     const SPLASH_MIN = 1400 // ms
     const hasCached = hydrateFromCache()
 
+    const target = isOnboarded ? 'app' : 'onboarding'
+    nextPhaseRef.current = target
+
     if (hasCached) {
-      // Cache exists → show app after splash, refresh data in background
+      // Cache exists → show "tap to start" after splash, refresh data in background
       bootstrap().catch(() => {})
-      setTimeout(() => {
-        setPhase(isOnboarded ? 'app' : 'onboarding')
-      }, SPLASH_MIN)
+      setTimeout(() => setPhase('ready'), SPLASH_MIN)
     } else {
       // No cache → wait for bootstrap to finish
       const splashStart = Date.now()
       bootstrap().then(() => {
         const elapsed = Date.now() - splashStart
         const delay = Math.max(0, SPLASH_MIN - elapsed)
-        setTimeout(() => {
-          setPhase(isOnboarded ? 'app' : 'onboarding')
-        }, delay)
+        setTimeout(() => setPhase('ready'), delay)
       })
     }
   }, [])
@@ -453,16 +453,15 @@ export default function App() {
     }
   }
 
-  // Play app-open sound once when entering app
-  const soundPlayedRef = useRef(false)
-  useEffect(() => {
-    if (phase === 'app' && !soundPlayedRef.current) {
-      soundPlayedRef.current = true
-      sound.appOpen()
-    }
-  }, [phase])
+  function handleSplashTap() {
+    if (phase !== 'ready') return
+    unlockAudio()
+    sound.appOpen()
+    setPhase(nextPhaseRef.current || 'app')
+  }
 
   if (phase === 'splash') return <SplashScreen />
+  if (phase === 'ready') return <SplashScreen ready onTap={handleSplashTap} />
 
   if (phase === 'onboarding') {
     return <Onboarding onComplete={() => setPhase('app')} />
