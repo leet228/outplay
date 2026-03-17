@@ -108,9 +108,8 @@ function writeCache(data) {
 export default function App() {
   const setUser = useGameStore(s => s.setUser)
   const setBalance = useGameStore(s => s.setBalance)
-  // 'splash' | 'ready' | 'onboarding' | 'app'
+  // 'splash' | 'onboarding' | 'app'
   const [phase, setPhase] = useState('splash')
-  const nextPhaseRef = useRef(null)  // what comes after splash: 'onboarding' or 'app'
 
   useEffect(() => {
     const tg = initTelegram()
@@ -124,20 +123,21 @@ export default function App() {
     const SPLASH_MIN = 1400 // ms
     const hasCached = hydrateFromCache()
 
-    const target = isOnboarded ? 'app' : 'onboarding'
-    nextPhaseRef.current = target
-
     if (hasCached) {
-      // Cache exists → show "tap to start" after splash, refresh data in background
+      // Cache exists → show app after splash, refresh data in background
       bootstrap().catch(() => {})
-      setTimeout(() => setPhase('ready'), SPLASH_MIN)
+      setTimeout(() => {
+        setPhase(isOnboarded ? 'app' : 'onboarding')
+      }, SPLASH_MIN)
     } else {
       // No cache → wait for bootstrap to finish
       const splashStart = Date.now()
       bootstrap().then(() => {
         const elapsed = Date.now() - splashStart
         const delay = Math.max(0, SPLASH_MIN - elapsed)
-        setTimeout(() => setPhase('ready'), delay)
+        setTimeout(() => {
+          setPhase(isOnboarded ? 'app' : 'onboarding')
+        }, delay)
       })
     }
   }, [])
@@ -453,15 +453,16 @@ export default function App() {
     }
   }
 
-  function handleSplashTap() {
-    if (phase !== 'ready') return
-    unlockAudio()
-    sound.appOpen()
-    setPhase(nextPhaseRef.current || 'app')
-  }
+  // Play app-open sound once when entering app
+  const soundPlayedRef = useRef(false)
+  useEffect(() => {
+    if (phase === 'app' && !soundPlayedRef.current) {
+      soundPlayedRef.current = true
+      sound.appOpen()
+    }
+  }, [phase])
 
   if (phase === 'splash') return <SplashScreen />
-  if (phase === 'ready') return <SplashScreen ready onTap={handleSplashTap} />
 
   if (phase === 'onboarding') {
     return <Onboarding onComplete={() => setPhase('app')} />

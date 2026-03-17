@@ -1,7 +1,11 @@
 /**
- * Sound engine using Web Audio API
- * Plays sounds as overlay — does NOT interrupt background music
- * Uses AudioContext + fetch → decodeAudioData → buffer source
+ * Sound engine — hybrid approach:
+ * 1. HTML5 Audio pool for one-shot sounds (works in WebView autoplay)
+ * 2. Web Audio API fallback for precise control (timer stop, etc.)
+ *
+ * HTML5 Audio in Telegram WebView typically allows autoplay because
+ * the user gesture of opening the mini app counts as activation.
+ * Web Audio API AudioContext is stricter, so we use it only when needed.
  */
 
 const SOUND_FILES = {
@@ -10,189 +14,151 @@ const SOUND_FILES = {
   victory:    '/sounds/victory.mp3',
   defeat:     '/sounds/defeat.mp3',
   timer:      '/sounds/timer.wav',
-  gameStart:  '/sounds/app-open.wav',   // reuse app-open for game start
+  gameStart:  '/sounds/app-open.wav',
   coin:       '/sounds/coin.wav',
   appOpen:    '/sounds/app-open.wav',
 }
-
-let audioCtx = null
-const bufferCache = {}  // name → AudioBuffer
-const activeNodes = {}  // name → AudioBufferSourceNode (for stopping loops/timer)
-let pendingQueue = []   // sounds queued before audio unlock
-let unlocked = false
 
 // Volume levels (0-1)
 let masterVolume = 1.0
 let soundEnabled = true
 
-function getContext() {
+// ── HTML5 Audio pool (primary — best WebView compat) ──
+const audioPool = {}  // name → Audio element
+
+function getAudioElement(name) {
+  const url = SOUND_FILES[name]
+  if (!url) return null
+  if (!audioPool[name]) {
+    audioPool[name] = new Audio(url)
+    audioPool[name].preload = 'auto'
+  }
+  return audioPool[name]
+}
+
+/** Preload all sounds via HTML5 Audio */
+export function preloadAll() {
+  Object.keys(SOUND_FILES).forEach(name => {
+    const a = getAudioElement(name)
+    if (a) a.load()
+  })
+}
+
+// ── Web Audio API (secondary — for timer stop control) ──
+let audioCtx = null
+const waBuffers = {}    // name → AudioBuffer
+const waNodes = {}      // name → AudioBufferSourceNode
+
+function getWAContext() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)()
   }
-  // Resume if suspended (browser autoplay policy)
-  if (audioCtx.state === 'suspended') {
-    audioCtx.resume()
-  }
+  if (audioCtx.state === 'suspended') audioCtx.resume()
   return audioCtx
 }
 
-/** Unlock audio — call from splash screen or on first user gesture */
-export function unlockAudio() {
-  if (unlocked) return
+async function waPreload(name) {
+  if (waBuffers[name]) return
+  const url = SOUND_FILES[name]
+  if (!url) return
   try {
-    const ctx = getContext()
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(() => {
-        if (unlocked) return
-        unlocked = true
-        _flushQueue()
-      })
-    } else {
-      unlocked = true
-      _flushQueue()
-    }
+    const ctx = getWAContext()
+    const resp = await fetch(url)
+    const buf = await resp.arrayBuffer()
+    waBuffers[name] = await ctx.decodeAudioData(buf)
   } catch {}
 }
 
-function _flushQueue() {
-  // Play only appOpen from queue (skip stale game sounds)
-  const appOpenItem = pendingQueue.find(q => q.name === 'appOpen')
-  pendingQueue = []
-  if (appOpenItem) playSound(appOpenItem.name, appOpenItem.opts)
+function waPlay(name, volume = 1.0) {
+  try {
+    const ctx = getWAContext()
+    if (ctx.state === 'suspended') return false
+    const buffer = waBuffers[name]
+    if (!buffer) return false
+
+    waStop(name)
+    const source = ctx.createBufferSource()
+    source.buffer = buffer
+    const gain = ctx.createGain()
+    gain.gain.value = volume * masterVolume
+    source.connect(gain)
+    gain.connect(ctx.destination)
+    source.start(0)
+    waNodes[name] = source
+    source.onended = () => { if (waNodes[name] === source) delete waNodes[name] }
+    return true
+  } catch { return false }
 }
 
-// Listen for first user interaction to unlock audio
+function waStop(name) {
+  if (waNodes[name]) {
+    try { waNodes[name].stop() } catch {}
+    delete waNodes[name]
+  }
+}
+
+// ── Unlock Web Audio on first gesture (for timer etc.) ──
 if (typeof window !== 'undefined') {
-  const events = ['touchstart', 'touchend', 'mousedown', 'click', 'keydown']
+  const events = ['touchstart', 'touchend', 'mousedown', 'click']
   const handler = () => {
-    unlockAudio()
+    try {
+      const ctx = getWAContext()
+      if (ctx.state === 'suspended') ctx.resume()
+    } catch {}
+    // Preload timer into Web Audio API for stoppable playback
+    waPreload('timer')
     events.forEach(e => window.removeEventListener(e, handler, true))
   }
-  events.forEach(e => window.addEventListener(e, handler, { capture: true, once: false, passive: true }))
+  events.forEach(e => window.addEventListener(e, handler, { capture: true, passive: true }))
 }
 
-/** Preload a sound into buffer cache */
-async function preload(name) {
-  if (bufferCache[name]) return bufferCache[name]
-  const url = SOUND_FILES[name]
-  if (!url) return null
+// ── Main play function using HTML5 Audio ──
+
+function playHTML(name, volume = 1.0) {
+  if (!soundEnabled) return
+  const a = getAudioElement(name)
+  if (!a) return
   try {
-    const ctx = getContext()
-    const response = await fetch(url)
-    const arrayBuffer = await response.arrayBuffer()
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
-    bufferCache[name] = audioBuffer
-    return audioBuffer
-  } catch (e) {
-    console.warn(`[Sound] Failed to preload "${name}":`, e)
-    return null
-  }
-}
-
-/** Preload all sounds */
-export async function preloadAll() {
-  const names = Object.keys(SOUND_FILES)
-  await Promise.allSettled(names.map(n => preload(n)))
-}
-
-/**
- * Play a sound by name
- * @param {string} name - Sound name from SOUND_FILES
- * @param {object} opts - { volume?: number, loop?: boolean }
- * @returns {AudioBufferSourceNode|null}
- */
-export function playSound(name, opts = {}) {
-  if (!soundEnabled) return null
-  const url = SOUND_FILES[name]
-  if (!url) return null
-
-  const ctx = getContext()
-
-  // If audio not unlocked yet, queue this sound (will play on first touch)
-  if (ctx.state === 'suspended' && !unlocked) {
-    pendingQueue.push({ name, opts })
-    return null
-  }
-
-  const buffer = bufferCache[name]
-
-  if (buffer) {
-    return _playBuffer(name, buffer, ctx, opts)
-  }
-
-  // Load on demand if not preloaded
-  preload(name).then(buf => {
-    if (buf) _playBuffer(name, buf, ctx, opts)
-  })
-  return null
-}
-
-function _playBuffer(name, buffer, ctx, opts = {}) {
-  const { volume = 1.0, loop = false } = opts
-
-  // Stop previous instance of this sound if playing
-  stopSound(name)
-
-  const source = ctx.createBufferSource()
-  source.buffer = buffer
-  source.loop = loop
-
-  const gainNode = ctx.createGain()
-  gainNode.gain.value = volume * masterVolume
-
-  source.connect(gainNode)
-  gainNode.connect(ctx.destination)
-
-  source.start(0)
-  activeNodes[name] = source
-
-  source.onended = () => {
-    if (activeNodes[name] === source) {
-      delete activeNodes[name]
-    }
-  }
-
-  return source
+    a.volume = volume * masterVolume
+    a.currentTime = 0
+    a.play().catch(() => {
+      // HTML5 Audio blocked — try Web Audio API as fallback
+      waPlay(name, volume)
+    })
+  } catch {}
 }
 
 /** Stop a specific sound */
 export function stopSound(name) {
-  if (activeNodes[name]) {
-    try {
-      activeNodes[name].stop()
-    } catch {}
-    delete activeNodes[name]
+  // Stop HTML5 Audio
+  const a = audioPool[name]
+  if (a) {
+    try { a.pause(); a.currentTime = 0 } catch {}
   }
+  // Stop Web Audio
+  waStop(name)
 }
 
 /** Stop all playing sounds */
 export function stopAll() {
-  Object.keys(activeNodes).forEach(name => stopSound(name))
+  Object.keys(audioPool).forEach(name => stopSound(name))
+  Object.keys(waNodes).forEach(name => waStop(name))
 }
 
 /** Enable/disable sounds */
 export function setSoundEnabled(enabled) {
   soundEnabled = enabled
   if (!enabled) stopAll()
-  try {
-    localStorage.setItem('outplay_sound', enabled ? '1' : '0')
-  } catch {}
+  try { localStorage.setItem('outplay_sound', enabled ? '1' : '0') } catch {}
 }
 
-/** Check if sounds are enabled */
-export function isSoundEnabled() {
-  return soundEnabled
-}
+export function isSoundEnabled() { return soundEnabled }
 
-/** Set master volume (0-1) */
 export function setMasterVolume(vol) {
   masterVolume = Math.max(0, Math.min(1, vol))
-  try {
-    localStorage.setItem('outplay_volume', String(masterVolume))
-  } catch {}
+  try { localStorage.setItem('outplay_volume', String(masterVolume)) } catch {}
 }
 
-/** Initialize sound settings from localStorage */
 export function initSounds() {
   try {
     const stored = localStorage.getItem('outplay_sound')
@@ -202,30 +168,36 @@ export function initSounds() {
   } catch {}
 }
 
+// Kept for compat but no longer needed
+export function unlockAudio() {
+  try {
+    const ctx = getWAContext()
+    if (ctx.state === 'suspended') ctx.resume()
+  } catch {}
+}
+
 // ── Convenience helpers ──
 
 export const sound = {
-  correct:   () => playSound('correct', { volume: 0.7 }),
-  incorrect: () => playSound('incorrect', { volume: 0.7 }),
-  victory:   () => playSound('victory', { volume: 0.8 }),
-  defeat:    () => playSound('defeat', { volume: 0.8 }),
-  coin:      () => playSound('coin', { volume: 0.6 }),
-  gameStart: () => playSound('gameStart', { volume: 0.5 }),
-  appOpen:   () => {
-    // Try Web Audio API first, fallback to HTML Audio for webview compat
-    const node = playSound('appOpen', { volume: 0.4 })
-    if (!node && soundEnabled) {
-      try {
-        const a = new Audio('/sounds/app-open.wav')
-        a.volume = 0.4 * masterVolume
-        a.play().catch(() => {})
-      } catch {}
-    }
-  },
+  correct:   () => playHTML('correct', 0.7),
+  incorrect: () => playHTML('incorrect', 0.7),
+  victory:   () => playHTML('victory', 0.8),
+  defeat:    () => playHTML('defeat', 0.8),
+  coin:      () => playHTML('coin', 0.6),
+  gameStart: () => playHTML('gameStart', 0.5),
+  appOpen:   () => playHTML('appOpen', 0.4),
 
-  // Timer: plays the 5s countdown tick sound
-  timerStart: () => playSound('timer', { volume: 0.5 }),
-  timerStop:  () => stopSound('timer'),
+  // Timer uses Web Audio API so it can be stopped mid-play
+  timerStart: () => {
+    if (!soundEnabled) return
+    // Try Web Audio first (stoppable), fallback to HTML5
+    waPreload('timer').then(() => {
+      if (!waPlay('timer', 0.5)) {
+        playHTML('timer', 0.5)
+      }
+    })
+  },
+  timerStop: () => stopSound('timer'),
 }
 
 export default sound
