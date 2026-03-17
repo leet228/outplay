@@ -8,7 +8,7 @@ import { TON_ADDRESS } from '../lib/addresses'
 import './DepositSheet.css'
 
 const PRESETS = [100, 500, 1000]
-const MIN_STARS = 1
+const MIN_STARS = 100
 
 function TonIcon({ size = 22 }) {
   return (
