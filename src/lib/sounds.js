@@ -18,6 +18,8 @@ const SOUND_FILES = {
 let audioCtx = null
 const bufferCache = {}  // name → AudioBuffer
 const activeNodes = {}  // name → AudioBufferSourceNode (for stopping loops/timer)
+let pendingQueue = []   // sounds queued before audio unlock
+let unlocked = false
 
 // Volume levels (0-1)
 let masterVolume = 1.0
@@ -32,6 +34,36 @@ function getContext() {
     audioCtx.resume()
   }
   return audioCtx
+}
+
+/** Unlock audio on first user gesture — required by browsers */
+function unlockAudio() {
+  if (unlocked) return
+  const ctx = getContext()
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(() => {
+      unlocked = true
+      // Play only appOpen from queue (skip stale game sounds)
+      const appOpenItem = pendingQueue.find(q => q.name === 'appOpen')
+      if (appOpenItem) playSound(appOpenItem.name, appOpenItem.opts)
+      pendingQueue = []
+    })
+  } else {
+    unlocked = true
+    const appOpenItem = pendingQueue.find(q => q.name === 'appOpen')
+    if (appOpenItem) playSound(appOpenItem.name, appOpenItem.opts)
+    pendingQueue = []
+  }
+}
+
+// Listen for first user interaction to unlock audio
+if (typeof window !== 'undefined') {
+  const events = ['touchstart', 'touchend', 'mousedown', 'click', 'keydown']
+  const handler = () => {
+    unlockAudio()
+    events.forEach(e => window.removeEventListener(e, handler, true))
+  }
+  events.forEach(e => window.addEventListener(e, handler, { capture: true, once: false, passive: true }))
 }
 
 /** Preload a sound into buffer cache */
@@ -70,6 +102,13 @@ export function playSound(name, opts = {}) {
   if (!url) return null
 
   const ctx = getContext()
+
+  // If audio not unlocked yet, queue this sound (will play on first touch)
+  if (ctx.state === 'suspended' && !unlocked) {
+    pendingQueue.push({ name, opts })
+    return null
+  }
+
   const buffer = bufferCache[name]
 
   if (buffer) {

@@ -342,9 +342,11 @@ export default function Blackjack() {
       setTurnTimer(TURN_TIME)
       timerRef.current = setInterval(() => {
         setTurnTimer(prev => {
+          if (prev === 6) sound.timerStart()  // triggers at transition to 5
           if (prev <= 1) {
             clearInterval(timerRef.current)
             timerRef.current = null
+            sound.timerStop()
             return 0
           }
           return prev - 1
@@ -353,6 +355,7 @@ export default function Blackjack() {
       return () => {
         clearInterval(timerRef.current)
         timerRef.current = null
+        sound.timerStop()
       }
     }
   }, [phase, playerStand, animatingHit, roundNum, isMyTurn])
