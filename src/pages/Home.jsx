@@ -1071,15 +1071,18 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
             </div>
 
             <span className="invite-sheet-label">{t.inviteStake}</span>
-            <input
-              type="number"
-              className="invite-stake-input"
-              placeholder={t.inviteStakePlaceholder}
-              value={inviteStake}
-              onChange={e => setInviteStake(e.target.value)}
-              min="50"
-              inputMode="numeric"
-            />
+            <div className="invite-stake-buttons">
+              {STAKES.map(amount => (
+                <button
+                  key={amount}
+                  className={`invite-stake-btn ${inviteStake == amount ? 'active' : ''} ${amount > balance ? 'disabled' : ''}`}
+                  disabled={amount > balance}
+                  onClick={() => { haptic('light'); setInviteStake(amount) }}
+                >
+                  {formatCurrency(amount, currency, rates)}
+                </button>
+              ))}
+            </div>
 
             <div className={`invite-msg ${inviteMsg ? 'visible' : ''}`}>
               {inviteMsg === 'sent' ? t.inviteSent

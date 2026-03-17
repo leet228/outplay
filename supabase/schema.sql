@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS duels (
   opponent_id     UUID REFERENCES users(id),
   category        TEXT NOT NULL,
   stake           INTEGER NOT NULL DEFAULT 50
-                  CHECK (stake IN (50, 100, 300, 500, 1000)),
+                  CHECK (stake > 0),
   status          TEXT NOT NULL DEFAULT 'waiting'
                   CHECK (status IN ('waiting','active','finished','cancelled')),
   creator_score   INTEGER,
