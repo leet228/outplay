@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS } from '../lib/addresses'
+import { adminRequestWithdrawal } from '../lib/supabase'
+import useGameStore from '../store/useGameStore'
 
 // ── Chain icon ──
 function TonIcon() {
@@ -25,12 +27,10 @@ async function fetchTonBalance(addr) {
 let _priceCache = null
 async function fetchPrices() {
   try {
-    // CoinLore: TON id=54683, цена в USD
     const r = await fetch('https://api.coinlore.net/api/ticker/?id=54683')
     if (!r.ok) throw new Error()
     const d = await r.json()
     const usd = parseFloat(d[0]?.price_usd) || 3
-    // USD → RUB
     let rubRate = 90
     try {
       const rr = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
@@ -39,9 +39,7 @@ async function fetchPrices() {
         rubRate = rd.rates?.RUB ?? 90
       }
     } catch {}
-    _priceCache = {
-      ton: { usd, rub: usd * rubRate },
-    }
+    _priceCache = { ton: { usd, rub: usd * rubRate } }
     return _priceCache
   } catch {
     if (_priceCache) return _priceCache
@@ -61,13 +59,25 @@ function fmtFiat(v, cur) {
   return '$' + v.toFixed(2)
 }
 
+const TON_ADDR_RE = /^(UQ|EQ|kQ|0:)[A-Za-z0-9_\-+/]{32,}/
+
 export default function AdminWallet() {
+  const user = useGameStore(s => s.user)
   const [tonBalance, setTonBalance] = useState(null)
   const [prices, setPrices] = useState(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
+
+  // Withdraw form
+  const [showWithdraw, setShowWithdraw] = useState(false)
+  const [wdAddress, setWdAddress] = useState('')
+  const [wdAmount, setWdAmount] = useState('')
+  const [wdMemo, setWdMemo] = useState('')
+  const [wdSending, setWdSending] = useState(false)
+  const [wdError, setWdError] = useState('')
+  const [wdSuccess, setWdSuccess] = useState(false)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -106,7 +116,62 @@ export default function AdminWallet() {
     haptic('light')
   }
 
+  function handlePaste() {
+    navigator.clipboard.readText().then(t => {
+      const trimmed = t.trim()
+      if (trimmed) setWdAddress(trimmed)
+    }).catch(() => {})
+    haptic('light')
+  }
+
+  async function handleWithdraw() {
+    setWdError('')
+
+    const amount = parseFloat(wdAmount)
+    if (!amount || amount <= 0) {
+      setWdError('Введите сумму')
+      return
+    }
+    if (!TON_ADDR_RE.test(wdAddress.trim())) {
+      setWdError('Невалидный TON адрес')
+      return
+    }
+    if (tonBalance !== null && amount > tonBalance - 0.05) {
+      setWdError(`Макс. ${(tonBalance - 0.05).toFixed(4)} TON (оставить на газ)`)
+      return
+    }
+
+    setWdSending(true)
+    haptic('medium')
+
+    try {
+      const result = await adminRequestWithdrawal(user.id, wdAddress.trim(), amount, wdMemo.trim())
+      if (result?.error) {
+        setWdError(result.error)
+        haptic('error')
+      } else {
+        setWdSuccess(true)
+        haptic('success')
+        setTimeout(() => {
+          setWdSuccess(false)
+          setShowWithdraw(false)
+          setWdAddress('')
+          setWdAmount('')
+          setWdMemo('')
+          fetchAll()
+        }, 2000)
+      }
+    } catch (err) {
+      setWdError(err.message || 'Ошибка')
+      haptic('error')
+    } finally {
+      setWdSending(false)
+    }
+  }
+
   const fiatVal = tonBalance != null && prices ? tonBalance * prices.ton[fiatCur] : 0
+  const amountNum = parseFloat(wdAmount) || 0
+  const fiatPreview = amountNum > 0 && prices ? amountNum * prices.ton[fiatCur] : 0
 
   return (
     <div className="admin-wallet">
@@ -184,7 +249,119 @@ export default function AdminWallet() {
                 )}
               </button>
             </div>
+
+            {/* Withdraw button */}
+            <button
+              className="admin-wd-toggle"
+              onClick={() => { setShowWithdraw(!showWithdraw); haptic('light') }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M19 12l-7 7-7-7"/>
+              </svg>
+              Вывести TON
+            </button>
           </div>
+
+          {/* Withdraw form */}
+          {showWithdraw && (
+            <div className="admin-wd-form">
+              {wdSuccess ? (
+                <div className="admin-wd-success">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M9 12l2 2 4-4"/>
+                  </svg>
+                  <span>Вывод отправлен в очередь</span>
+                </div>
+              ) : (
+                <>
+                  <div className="admin-wd-field">
+                    <label className="admin-wd-label">TON адрес</label>
+                    <div className="admin-wd-input-wrap">
+                      <input
+                        className="admin-wd-input"
+                        placeholder="UQ... или EQ..."
+                        value={wdAddress}
+                        onChange={e => setWdAddress(e.target.value)}
+                        spellCheck={false}
+                        autoComplete="off"
+                      />
+                      <button className="admin-wd-paste" onClick={handlePaste}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="9" y="9" width="13" height="13" rx="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="admin-wd-field">
+                    <label className="admin-wd-label">Сумма TON</label>
+                    <div className="admin-wd-amount-row">
+                      <input
+                        className="admin-wd-input admin-wd-input--amount"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={wdAmount}
+                        onChange={e => setWdAmount(e.target.value)}
+                        inputMode="decimal"
+                      />
+                      {tonBalance != null && (
+                        <button
+                          className="admin-wd-max"
+                          onClick={() => {
+                            const max = Math.max(0, tonBalance - 0.05)
+                            setWdAmount(max.toFixed(4))
+                            haptic('light')
+                          }}
+                        >
+                          MAX
+                        </button>
+                      )}
+                    </div>
+                    {fiatPreview > 0 && (
+                      <span className="admin-wd-fiat-preview">
+                        ~ {fmtFiat(fiatPreview, fiatCur)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="admin-wd-field">
+                    <label className="admin-wd-label">Memo <span className="admin-wd-optional">(необязательно)</span></label>
+                    <input
+                      className="admin-wd-input"
+                      placeholder="Комментарий..."
+                      value={wdMemo}
+                      onChange={e => setWdMemo(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="admin-wd-info">
+                    <span>Комиссия</span>
+                    <span className="admin-wd-no-fee">Без комиссии</span>
+                  </div>
+
+                  {wdError && (
+                    <div className="admin-wd-error">{wdError}</div>
+                  )}
+
+                  <button
+                    className="admin-wd-submit"
+                    onClick={handleWithdraw}
+                    disabled={wdSending || !wdAmount || !wdAddress}
+                  >
+                    {wdSending ? (
+                      <span className="admin-wd-spinner" />
+                    ) : (
+                      <>Отправить {amountNum > 0 ? `${amountNum} TON` : ''}</>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 

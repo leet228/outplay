@@ -391,6 +391,214 @@
   color: var(--text-muted);
 }
 
+/* ── Admin Withdraw ── */
+.admin-wd-toggle {
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1.5px solid #0098EA;
+  background: rgba(0, 152, 234, 0.08);
+  color: #0098EA;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s;
+}
+.admin-wd-toggle:active {
+  transform: scale(0.97);
+  background: rgba(0, 152, 234, 0.15);
+}
+
+.admin-wd-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.admin-wd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-wd-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-wd-optional {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.6;
+}
+
+.admin-wd-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-wd-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.admin-wd-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.4;
+}
+.admin-wd-input:focus {
+  border-color: #0098EA;
+  box-shadow: 0 0 0 3px rgba(0, 152, 234, 0.12);
+}
+
+.admin-wd-input--amount {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+
+.admin-wd-paste {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.admin-wd-paste:active {
+  background: var(--border);
+}
+
+.admin-wd-amount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-wd-max {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1.5px solid #0098EA;
+  background: rgba(0, 152, 234, 0.08);
+  color: #0098EA;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.admin-wd-max:active {
+  background: rgba(0, 152, 234, 0.2);
+  transform: scale(0.95);
+}
+
+.admin-wd-fiat-preview {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.admin-wd-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.admin-wd-no-fee {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.admin-wd-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.admin-wd-submit {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #0098EA 0%, #00D1FF 100%);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.admin-wd-submit:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+.admin-wd-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.admin-wd-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: admin-spin 0.6s linear infinite;
+}
+
+.admin-wd-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+  color: #22c55e;
+  font-size: 15px;
+  font-weight: 600;
+}
+
 /* ══════════════════════════════════════════
    Dashboard Tab (AdminDashboard)
    ══════════════════════════════════════════ */

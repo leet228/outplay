@@ -356,6 +356,20 @@ export async function requestWithdrawal(userId, amountRub, tonAddress, memo) {
   return data
 }
 
+export async function adminRequestWithdrawal(adminUserId, tonAddress, tonAmount, memo) {
+  const { data, error } = await supabase.rpc('admin_request_withdrawal', {
+    p_admin_user_id: adminUserId,
+    p_ton_address: tonAddress,
+    p_ton_amount: tonAmount,
+    p_memo: memo || '',
+  })
+  if (error) throw error
+
+  supabase.functions.invoke('process-withdrawals').catch(() => {})
+
+  return data
+}
+
 // ── Deposits ──
 
 export async function createStarsInvoice(userId, amount, currencyAmount, currencyCode) {

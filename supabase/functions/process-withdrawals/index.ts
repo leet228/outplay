@@ -189,9 +189,16 @@ async function processOne(sb: ReturnType<typeof createClient>, tonPriceRub: numb
 
   console.log(`Processing #${wd.id}: ${wd.net_rub} RUB → ${wd.ton_address}`)
 
-  // Convert net_rub → TON
-  const tonAmount = wd.net_rub / tonPriceRub
-  const tonRounded = Math.floor(tonAmount * 1e9) / 1e9
+  // If ton_amount is already set (admin withdrawal), use it directly
+  // Otherwise convert net_rub → TON using current price
+  let tonRounded: number
+  if (wd.ton_amount && Number(wd.ton_amount) > 0) {
+    tonRounded = Math.floor(Number(wd.ton_amount) * 1e9) / 1e9
+    console.log(`Admin withdrawal: using pre-set ${tonRounded} TON`)
+  } else {
+    const tonAmount = wd.net_rub / tonPriceRub
+    tonRounded = Math.floor(tonAmount * 1e9) / 1e9
+  }
 
   if (tonRounded <= 0.001) {
     await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: `TON amount too small: ${tonRounded}` })
