@@ -19,7 +19,13 @@ export function getStartParam() {
 }
 
 export function haptic(style = 'light') {
-  tg?.HapticFeedback?.impactOccurred(style)
+  // notificationOccurred accepts: 'success', 'warning', 'error'
+  if (style === 'success' || style === 'warning' || style === 'error') {
+    tg?.HapticFeedback?.notificationOccurred(style)
+  } else {
+    // impactOccurred accepts: 'light', 'medium', 'heavy', 'rigid', 'soft'
+    tg?.HapticFeedback?.impactOccurred(style)
+  }
 }
 
 // Telegram Stars payment
