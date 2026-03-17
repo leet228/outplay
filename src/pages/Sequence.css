@@ -1,0 +1,378 @@
+.seq-page {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px;
+  background: var(--bg);
+  color: var(--text);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Progress bar ── */
+.seq-progress {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  z-index: 2;
+}
+
+.seq-progress-dot {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  transition: background 0.3s;
+}
+.seq-progress-dot.active {
+  background: var(--accent);
+}
+.seq-progress-dot.pass {
+  background: #22c55e;
+}
+.seq-progress-dot.fail {
+  background: #ef4444;
+}
+
+/* ── Countdown ── */
+.seq-countdown {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.seq-countdown-num {
+  font-size: 72px;
+  font-weight: 800;
+  color: var(--accent);
+  animation: seq-pop 0.5s ease-out;
+}
+
+@keyframes seq-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ── Round intro ── */
+.seq-round-intro {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  animation: seq-fade-in 0.4s ease-out;
+}
+
+.seq-round-number {
+  font-size: 14px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.seq-round-icon {
+  font-size: 56px;
+  animation: seq-pop 0.5s ease-out 0.2s both;
+}
+
+.seq-round-name {
+  font-size: 22px;
+  font-weight: 700;
+  animation: seq-fade-in 0.4s ease-out 0.3s both;
+}
+
+@keyframes seq-fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Game area ── */
+.seq-game-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 340px;
+  position: relative;
+}
+
+.seq-round-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 16px;
+}
+
+.seq-round-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.seq-round-type {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.seq-watch-hint,
+.seq-input-hint {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  min-height: 22px;
+  text-align: center;
+}
+
+.seq-watch-hint {
+  color: #f59e0b;
+  animation: seq-pulse 1s ease-in-out infinite;
+}
+
+.seq-input-hint {
+  color: var(--accent);
+}
+
+@keyframes seq-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── Feedback overlay ── */
+.seq-feedback {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: seq-feedback-in 0.3s ease-out;
+}
+
+.seq-feedback.pass .seq-feedback-icon {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+.seq-feedback.fail .seq-feedback-icon {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.seq-feedback-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 800;
+}
+
+.seq-feedback-text {
+  font-size: 18px;
+  font-weight: 700;
+}
+.seq-feedback.pass .seq-feedback-text { color: #22c55e; }
+.seq-feedback.fail .seq-feedback-text { color: #ef4444; }
+
+@keyframes seq-feedback-in {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+/* ── Simon Says grid ── */
+.seq-simon-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 260px;
+  margin-top: 16px;
+}
+
+.seq-simon-btn {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 16px;
+  border: none;
+  background: var(--btn-color);
+  opacity: 0.35;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.seq-simon-btn.lit,
+.seq-simon-btn:active:not(:disabled) {
+  opacity: 1;
+  transform: scale(1.05);
+  box-shadow: 0 0 24px var(--btn-color), 0 0 48px color-mix(in srgb, var(--btn-color) 40%, transparent);
+}
+
+.seq-simon-btn:disabled {
+  cursor: default;
+}
+
+.seq-simon-progress {
+  display: flex;
+  gap: 6px;
+  margin-top: 24px;
+}
+
+.seq-simon-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.2s, transform 0.2s;
+}
+.seq-simon-dot.done {
+  background: #22c55e;
+  transform: scale(1.1);
+}
+.seq-simon-dot.current {
+  background: var(--accent);
+  animation: seq-pulse 0.8s ease-in-out infinite;
+}
+
+/* ── 4x4 Grid (Chimp + Pattern) ── */
+.seq-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 280px;
+  margin-top: 16px;
+}
+
+.seq-cell {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  position: relative;
+}
+
+.seq-cell:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+.seq-cell:disabled {
+  cursor: default;
+}
+
+/* Chimp: numbered cells */
+.seq-cell.numbered {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.seq-cell.found {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: #22c55e;
+}
+
+.seq-cell.wrong-target {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  animation: seq-shake 0.3s ease-out;
+}
+
+.seq-cell-number {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.seq-cell-check {
+  font-size: 18px;
+  color: #22c55e;
+  font-weight: 800;
+}
+
+/* Pattern: active cells */
+.seq-cell.pattern-active {
+  background: #8B5CF6;
+  border-color: #8B5CF6;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+}
+
+.seq-cell.pattern-correct {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+}
+
+.seq-cell.pattern-wrong {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  animation: seq-shake 0.3s ease-out;
+}
+
+@keyframes seq-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* ── Timer ── */
+.seq-timer {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 12px;
+}
+
+.seq-timer-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.seq-timer-bg {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 4;
+}
+
+.seq-timer-ring {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear, stroke 0.5s;
+}
+
+.seq-timer-num {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.seq-timer-num.danger {
+  color: #ef4444;
+  animation: seq-pulse 0.5s ease-in-out infinite;
+}

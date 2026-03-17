@@ -524,6 +524,28 @@ export async function finalizeDuel(duelId) {
   return data
 }
 
+// ── Sequence ────────────────────────────────────
+export async function getSequenceDuel(duelId) {
+  const { data, error } = await supabase
+    .from('duels')
+    .select('id, creator_id, opponent_id, stake, status, is_bot_game, bot_should_win, game_type, creator_score, opponent_score, winner_id')
+    .eq('id', duelId)
+    .single()
+  if (error) { console.error('getSequenceDuel error:', error); return null }
+  return data
+}
+
+export async function submitSequenceResult(duelId, userId, score, time) {
+  const { data, error } = await supabase.rpc('submit_sequence_result', {
+    p_duel_id: duelId,
+    p_user_id: userId,
+    p_score: score,
+    p_time: time,
+  })
+  if (error) { console.error('submitSequenceResult error:', error); return null }
+  return data
+}
+
 // ── Blackjack ───────────────────────────────────
 export async function getBlackjackState(duelId) {
   const { data, error } = await supabase

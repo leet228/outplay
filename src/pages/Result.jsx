@@ -23,6 +23,7 @@ export default function Result() {
 
   const { won, myScore, oppScore, total, payout, stake, tiebreak, timeDiff, gameType } = lastResult
   const isBJ = gameType === 'blackjack'
+  const isSeq = gameType === 'sequence'
 
   const isWin = won === true
 
@@ -75,13 +76,13 @@ export default function Result() {
         <div className="result-score-row">
           <span className="result-score-label">Вы</span>
           <div className="result-score-dots" />
-          <span className="result-score-val">{isBJ ? `${myScore} очков` : `${myScore}/${total}`}</span>
+          <span className="result-score-val">{isBJ ? `${myScore} очков` : isSeq ? `${myScore}/${total} раундов` : `${myScore}/${total}`}</span>
         </div>
         {oppScore !== null && oppScore !== undefined && (
           <div className="result-score-row">
             <span className="result-score-label">Соперник</span>
             <div className="result-score-dots" />
-            <span className="result-score-val">{isBJ ? `${oppScore} очков` : `${oppScore}/${total}`}</span>
+            <span className="result-score-val">{isBJ ? `${oppScore} очков` : isSeq ? `${oppScore}/${total} раундов` : `${oppScore}/${total}`}</span>
           </div>
         )}
       </div>

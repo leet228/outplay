@@ -278,7 +278,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     setTimeout(() => {
       setSearching(false)
       setMatched(false)
-      const route = game?.id === 'blackjack' ? '/blackjack' : '/game'
+      const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : '/game'
       navigate(`${route}/${duelId}`)
     }, 1500)
   }
@@ -316,7 +316,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       setSearchTime(0)
       setTimeout(() => {
         setSearching(false)
-        const devRoute = game.id === 'blackjack' ? '/blackjack' : '/game'
+        const devRoute = game.id === 'blackjack' ? '/blackjack' : game.id === 'sequence' ? '/sequence' : '/game'
         navigate(`${devRoute}/dev-${game.id}-${selectedStakes[0]}`)
       }, 1500)
       return
@@ -326,7 +326,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     cancelAllPendingInvites(user.id).catch(() => {})
 
     // Send all selected stakes — backend tries each one
-    const gameType = game.id === 'blackjack' ? 'blackjack' : 'quiz'
+    const gameType = game.id === 'blackjack' ? 'blackjack' : game.id === 'sequence' ? 'sequence' : 'quiz'
     const result = await findMatch(user.id, game.id, selectedStakes, gameType)
 
     if (!result || result.status === 'error') {
@@ -1267,6 +1267,10 @@ export default function Home() {
                 {!g.available && <div className="game-card-badge">{t.soon}</div>}
               </button>
             ))}
+          </div>
+
+          <div className="games-more-soon">
+            <span>{t.moreGamesSoon}</span>
           </div>
 
         </div>
