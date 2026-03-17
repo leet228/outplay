@@ -380,10 +380,6 @@ export default function Profile() {
           )}
 
           <div className="settings-item">
-            <span className="settings-item-label">{t.notifications}</span>
-            <span className="settings-item-value settings-soon">{t.soon}</span>
-          </div>
-          <div className="settings-item">
             <span className="settings-item-label">{t.version}</span>
             <span className="settings-item-value">0.1.0</span>
           </div>
