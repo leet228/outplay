@@ -183,39 +183,20 @@ export default function WithdrawalSheet() {
   }
 
   function handlePaste() {
-    haptic('light')
-
-    // Must call clipboard.readText() SYNCHRONOUSLY in click handler
-    // async/await breaks iOS user gesture context in WKWebView
+    // clipboard.readText() MUST be the very first call in the click handler
+    // Any call before it (haptic, setState, etc) can consume the iOS user gesture
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(text => {
+        haptic('light')
         if (text && text.trim()) {
           setWallet(text.trim())
           setWalletTouched(true)
         }
       }).catch(() => {
-        // Clipboard denied — try Telegram API
-        const tg = window.Telegram?.WebApp
-        if (tg?.readTextFromClipboard) {
-          tg.readTextFromClipboard((t) => {
-            if (t) {
-              setWallet(t.trim())
-              setWalletTouched(true)
-            }
-          })
-        }
+        haptic('light')
       })
     } else {
-      // No browser clipboard — try Telegram API
-      const tg = window.Telegram?.WebApp
-      if (tg?.readTextFromClipboard) {
-        tg.readTextFromClipboard((t) => {
-          if (t) {
-            setWallet(t.trim())
-            setWalletTouched(true)
-          }
-        })
-      }
+      haptic('light')
     }
   }
 

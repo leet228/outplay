@@ -117,22 +117,16 @@ export default function AdminWallet() {
   }
 
   function handlePaste() {
-    haptic('light')
-
+    // clipboard.readText() MUST be the very first call — haptic() before it kills iOS user gesture
     if (navigator.clipboard && navigator.clipboard.readText) {
       navigator.clipboard.readText().then(text => {
+        haptic('light')
         if (text && text.trim()) setWdAddress(text.trim())
       }).catch(() => {
-        const tg = window.Telegram?.WebApp
-        if (tg?.readTextFromClipboard) {
-          tg.readTextFromClipboard((t) => { if (t) setWdAddress(t.trim()) })
-        }
+        haptic('light')
       })
     } else {
-      const tg = window.Telegram?.WebApp
-      if (tg?.readTextFromClipboard) {
-        tg.readTextFromClipboard((t) => { if (t) setWdAddress(t.trim()) })
-      }
+      haptic('light')
     }
   }
 
