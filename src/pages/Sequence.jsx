@@ -75,6 +75,12 @@ export default function Sequence() {
   const [totalTime, setTotalTime] = useState(0)
   const [finished, setFinished] = useState(false)
 
+  // Refs to avoid stale closures in timers/callbacks
+  const scoresRef = useRef([])
+  const totalTimeRef = useRef(0)
+  const roundIndexRef = useRef(0)
+  const finishedRef = useRef(false)
+
   // Round-specific state
   const [simonSequence, setSimonSequence] = useState([])
   const [simonPlayIndex, setSimonPlayIndex] = useState(-1)
@@ -243,23 +249,27 @@ export default function Sequence() {
   }, [phase, roundIndex])
 
   // ── Timer during input phase ──
+  const timeLeftRef = useRef(TIME_LIMIT)
+
   useEffect(() => {
     if (phase !== 'input') {
       setTimeLeft(TIME_LIMIT)
+      timeLeftRef.current = TIME_LIMIT
       return
     }
     if (inputLocked.current) return
 
+    timeLeftRef.current = TIME_LIMIT
+    setTimeLeft(TIME_LIMIT)
+
     const iv = setInterval(() => {
-      setTimeLeft(prev => {
-        const next = prev - 1
-        if (next <= 0) {
-          clearInterval(iv)
-          endRound(false)
-          return 0
-        }
-        return next
-      })
+      timeLeftRef.current -= 1
+      const next = timeLeftRef.current
+      setTimeLeft(next)
+      if (next <= 0) {
+        clearInterval(iv)
+        endRound(false)
+      }
     }, 1000)
 
     return () => clearInterval(iv)
@@ -279,14 +289,22 @@ export default function Sequence() {
       haptic('error')
     }
 
-    setTotalTime(prev => prev + elapsed)
-    setScores(prev => [...prev, passed])
+    // Update via refs to avoid stale closures
+    totalTimeRef.current += elapsed
+    setTotalTime(totalTimeRef.current)
+
+    const updatedScores = [...scoresRef.current, passed]
+    scoresRef.current = updatedScores
+    setScores(updatedScores)
+
+    const currentRound = roundIndexRef.current
 
     setTimeout(() => {
-      if (roundIndex >= 2) {
-        finishGame([...scores, passed])
+      if (currentRound >= 2) {
+        finishGame(updatedScores)
       } else {
-        setRoundIndex(prev => prev + 1)
+        roundIndexRef.current = currentRound + 1
+        setRoundIndex(currentRound + 1)
         setPhase('roundIntro')
       }
     }, 1200)
@@ -294,12 +312,13 @@ export default function Sequence() {
 
   // ── Finish game — bot logic + backend submission ──
   async function finishGame(finalScores) {
-    if (finished) return
+    if (finishedRef.current) return
+    finishedRef.current = true
     setFinished(true)
     setPhase('done')
 
     const myScore = finalScores.filter(Boolean).length
-    const myTime = Math.round(totalTime * 10) / 10
+    const myTime = Math.round(totalTimeRef.current * 10) / 10
 
     let won, oppScore, payout, tiebreak, timeDiff
 
