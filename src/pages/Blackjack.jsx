@@ -302,6 +302,8 @@ export default function Blackjack() {
   const playerStandRef = useRef(false)
   const stakeRef = useRef(0)
 
+  const pvpPollRef = useRef(null)          // PvP polling interval
+
   // Bot phantom state (only for bot games)
   const botRealTakenRef = useRef([])       // real cards bot took from deck
   const botPlannedHitsRef = useRef(0)      // how many cards bot plans to take
@@ -316,9 +318,14 @@ export default function Blackjack() {
     }
   }
 
+  function cleanupPvpPoll() {
+    if (pvpPollRef.current) { clearInterval(pvpPollRef.current); pvpPollRef.current = null }
+  }
+
   useEffect(() => {
     return () => {
       cleanupChannel()
+      cleanupPvpPoll()
       clearInterval(timerRef.current)
     }
   }, [])
@@ -355,6 +362,49 @@ export default function Blackjack() {
       handleStandInternal()
     }
   }, [turnTimer])
+
+  // ── PvP polling fallback — detects opponent actions if realtime fails ──
+  useEffect(() => {
+    if (!isPvP || phase !== 'opponent_turn') { cleanupPvpPoll(); return }
+
+    pvpPollRef.current = setInterval(async () => {
+      try {
+        const data = await getBlackjackState(duelId)
+        if (!data) return
+        const p1 = isPlayer1Ref.current
+        const bjState = data.bj_state
+        if (!bjState) return
+
+        // Check if game finished
+        if (data.status === 'finished' || bjState.phase === 'finished') {
+          cleanupPvpPoll()
+          handleFinishedFromServer(bjState)
+          return
+        }
+
+        // Check if it's now our turn
+        const myTurnRole = p1 ? 'player1' : 'player2'
+        if (bjState.current_turn === myTurnRole && !playerStandRef.current) {
+          cleanupPvpPoll()
+          // Refresh full state
+          deckRef.current = data.bj_deck
+          const oppHandKey = p1 ? 'player2_hand' : 'player1_hand'
+          const oppStandKey = p1 ? 'player2_stand' : 'player1_stand'
+          const oppCards = deckToCards(data.bj_deck, bjState[oppHandKey])
+          setOpponentHand(oppCards)
+          setOpponentScore(calcScore(oppCards))
+          setRemaining(getRemainingCards(data.bj_deck, bjState.deck_index))
+          if (bjState[oppStandKey]) setOpponentStand(true)
+          setIsMyTurn(true)
+          setPhase('player_turn')
+        }
+      } catch (e) {
+        console.error('PvP poll error:', e)
+      }
+    }, 3000)
+
+    return () => cleanupPvpPoll()
+  }, [isPvP, phase])
 
   // ══════════════════════════════════════════
   //  BOT / DEV: Start new round (client-side)

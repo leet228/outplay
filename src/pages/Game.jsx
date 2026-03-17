@@ -36,6 +36,7 @@ export default function Game() {
 
   const timerRef = useRef(null)
   const channelRef = useRef(null)
+  const pollIntervalRef = useRef(null)
   const submittingRef = useRef(false)
   const advancingRef = useRef(false)
   const botAnswersRef = useRef([])       // трекинг ответов бота
@@ -72,6 +73,7 @@ export default function Game() {
   function cleanupAll() {
     clearTimeout(timerRef.current)
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
+    if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null }
   }
 
   function loadDevDuel() {
@@ -308,11 +310,12 @@ export default function Game() {
   function startWaitingForOpponent(qi) {
     // Cleanup previous listeners
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
+    if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null }
 
-    // Check immediately
+    // Check immediately — opponent might have already answered
     checkBothAnswered(qi)
 
-    // Realtime
+    // Realtime subscription
     const channel = supabase
       .channel(`duel-q-${duelId}-${qi}`)
       .on('postgres_changes', {
@@ -325,24 +328,37 @@ export default function Game() {
           onBothAnswered()
         }
       })
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') {
-          setTimeout(() => checkBothAnswered(qi), 3000)
-        }
-      })
+      .subscribe()
     channelRef.current = channel
+
+    // Periodic polling fallback every 2s — covers realtime failures
+    pollIntervalRef.current = setInterval(() => {
+      checkBothAnswered(qi)
+    }, 2000)
   }
 
   async function checkBothAnswered(qi) {
-    const { count } = await supabase
-      .from('duel_answers')
-      .select('*', { count: 'exact', head: true })
-      .eq('duel_id', duelId)
-      .eq('question_index', qi)
+    try {
+      const { count } = await supabase
+        .from('duel_answers')
+        .select('*', { count: 'exact', head: true })
+        .eq('duel_id', duelId)
+        .eq('question_index', qi)
 
-    if (count >= 2) {
-      onBothAnswered()
-      return true
+      if (count >= 2) {
+        onBothAnswered()
+        return true
+      }
+
+      // Also check if duel is already finished (opponent may have answered all questions)
+      const { data: duelCheck } = await supabase
+        .from('duels').select('status').eq('id', duelId).single()
+      if (duelCheck?.status === 'finished') {
+        onBothAnswered()
+        return true
+      }
+    } catch (e) {
+      console.error('checkBothAnswered error:', e)
     }
     return false
   }
@@ -352,8 +368,9 @@ export default function Game() {
     if (advancingRef.current) return
     advancingRef.current = true
 
-    // Cleanup listeners
+    // Cleanup listeners + polling
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
+    if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null }
 
     setWaitingOpponent(false)
     setShowResult(true)
@@ -412,14 +429,21 @@ export default function Game() {
       }
       payout = won ? Math.floor(duel.stake * 2 * 0.95) : 0
     } else {
-      // Production — fetch from DB
+      // Production — fetch from DB, wait for finalization
       await new Promise(r => setTimeout(r, 500))
 
       let finalDuel = null
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 8; attempt++) {
         const { data } = await supabase
           .from('duels').select('*').eq('id', duelId).single()
         if (data?.status === 'finished') { finalDuel = data; break }
+
+        // On 4th attempt, try to manually trigger finalize_duel
+        // (both scores should be set by submit_answer auto-finalize, but as fallback)
+        if (attempt === 3 && data?.creator_score != null && data?.opponent_score != null) {
+          try { await supabase.rpc('finalize_duel', { p_duel_id: duelId }) } catch (e) { console.error('Manual finalize error:', e) }
+        }
+
         await new Promise(r => setTimeout(r, 1500))
       }
 
