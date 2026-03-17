@@ -66,16 +66,17 @@ export default function Sequence() {
   const isBotGameRef = useRef(false)
   const botShouldWinRef = useRef(false)
 
-  // Game state
-  const [phase, setPhase] = useState('countdown') // countdown | roundIntro | watch | input | feedback | done
+  // Game state — phase drives everything via useEffect
+  // countdown → roundIntro → watch → input → feedback → (repeat or done)
+  const [phase, setPhase] = useState('countdown')
   const [countdown, setCountdown] = useState(3)
   const [roundIndex, setRoundIndex] = useState(0)
   const [roundTypes] = useState(() => shuffleArray(ROUND_TYPES))
-  const [scores, setScores] = useState([]) // boolean[] per round
+  const [scores, setScores] = useState([])
   const [totalTime, setTotalTime] = useState(0)
   const [finished, setFinished] = useState(false)
 
-  // Refs to avoid stale closures in timers/callbacks
+  // Refs — survive closures, always current
   const scoresRef = useRef([])
   const totalTimeRef = useRef(0)
   const roundIndexRef = useRef(0)
@@ -101,17 +102,10 @@ export default function Sequence() {
 
   const roundStartTime = useRef(0)
   const inputLocked = useRef(false)
-  const endRoundTimer = useRef(null)
-
-  // ── Cleanup endRound timer on unmount ──
-  useEffect(() => {
-    return () => { if (endRoundTimer.current) clearTimeout(endRoundTimer.current) }
-  }, [])
 
   // ── Load duel ──
   useEffect(() => {
     if (isDevDuel) {
-      // Dev mode — mock duel
       const parts = duelId.replace('dev-', '').split('-')
       const stake = parseInt(parts[1]) || 100
       const mockDuel = {
@@ -158,9 +152,10 @@ export default function Sequence() {
     return () => clearTimeout(timer)
   }, [loading, phase, countdown])
 
-  // ── Round intro ──
+  // ── Round intro → watch ──
   useEffect(() => {
     if (phase !== 'roundIntro') return
+    console.log('[SEQ] roundIntro, roundIndex:', roundIndex)
     const timer = setTimeout(() => {
       initRound(roundTypes[roundIndex])
       setPhase('watch')
@@ -170,6 +165,7 @@ export default function Sequence() {
 
   // ── Init round data ──
   const initRound = useCallback((type) => {
+    console.log('[SEQ] initRound:', type)
     setRoundFailed(false)
     setRoundPassed(false)
     inputLocked.current = false
@@ -197,33 +193,46 @@ export default function Sequence() {
   useEffect(() => {
     if (phase !== 'watch' || roundTypes[roundIndex] !== 'simon') return
     let i = 0
+    let cancelled = false
     setSimonPlayIndex(-1)
+
+    const timeouts = []
 
     const startDelay = setTimeout(() => {
       function playNext() {
+        if (cancelled) return
         if (i >= simonSequence.length) {
           setSimonPlayIndex(-1)
           setActiveButton(null)
-          setTimeout(() => {
+          const t = setTimeout(() => {
+            if (cancelled) return
             roundStartTime.current = Date.now()
             setPhase('input')
           }, 400)
+          timeouts.push(t)
           return
         }
         setSimonPlayIndex(i)
         setActiveButton(simonSequence[i])
         haptic('light')
 
-        setTimeout(() => {
+        const t1 = setTimeout(() => {
+          if (cancelled) return
           setActiveButton(null)
           i++
-          setTimeout(playNext, 200)
+          const t2 = setTimeout(playNext, 200)
+          timeouts.push(t2)
         }, 500)
+        timeouts.push(t1)
       }
       playNext()
     }, 500)
 
-    return () => clearTimeout(startDelay)
+    return () => {
+      cancelled = true
+      clearTimeout(startDelay)
+      timeouts.forEach(t => clearTimeout(t))
+    }
   }, [phase, roundIndex, simonSequence])
 
   // ── Watch phase: Chimp Test ──
@@ -281,11 +290,20 @@ export default function Sequence() {
     return () => clearInterval(iv)
   }, [phase, roundIndex])
 
-  // ── End round ──
+  // ── End round — just set feedback phase, no setTimeout ──
   function endRound(passed) {
     if (inputLocked.current) return
     inputLocked.current = true
+    console.log('[SEQ] endRound:', passed, 'round:', roundIndexRef.current)
+
     const elapsed = (Date.now() - roundStartTime.current) / 1000
+
+    // Update refs first
+    totalTimeRef.current += elapsed
+    setTotalTime(totalTimeRef.current)
+
+    scoresRef.current = [...scoresRef.current, passed]
+    setScores(scoresRef.current)
 
     if (passed) {
       setRoundPassed(true)
@@ -295,27 +313,30 @@ export default function Sequence() {
       haptic('error')
     }
 
-    // Update via refs to avoid stale closures
-    totalTimeRef.current += elapsed
-    setTotalTime(totalTimeRef.current)
+    // Transition to feedback phase — useEffect handles the rest
+    setPhase('feedback')
+  }
 
-    const updatedScores = [...scoresRef.current, passed]
-    scoresRef.current = updatedScores
-    setScores(updatedScores)
+  // ── Feedback phase → auto-transition after 1200ms ──
+  useEffect(() => {
+    if (phase !== 'feedback') return
+    console.log('[SEQ] feedback phase, will transition in 1200ms. roundIndexRef:', roundIndexRef.current)
 
-    const currentRound = roundIndexRef.current
+    const timer = setTimeout(() => {
+      const currentRound = roundIndexRef.current
+      console.log('[SEQ] feedback timeout fired. currentRound:', currentRound, 'scores:', scoresRef.current)
 
-    endRoundTimer.current = setTimeout(() => {
-      endRoundTimer.current = null
       if (currentRound >= 2) {
-        finishGame(updatedScores)
+        finishGame(scoresRef.current)
       } else {
         roundIndexRef.current = currentRound + 1
         setRoundIndex(currentRound + 1)
         setPhase('roundIntro')
       }
     }, 1200)
-  }
+
+    return () => clearTimeout(timer)
+  }, [phase])
 
   // ── Finish game — bot logic + backend submission ──
   async function finishGame(finalScores) {
@@ -323,6 +344,7 @@ export default function Sequence() {
     finishedRef.current = true
     setFinished(true)
     setPhase('done')
+    console.log('[SEQ] finishGame, scores:', finalScores)
 
     const myScore = finalScores.filter(Boolean).length
     const myTime = Math.round(totalTimeRef.current * 10) / 10
@@ -449,9 +471,8 @@ export default function Sequence() {
     if (shouldWin) {
       if (myScore < 3) {
         score = Math.min(3, myScore + 1)
-        time = 10 + Math.random() * 20 // 10-30s, doesn't matter
+        time = 10 + Math.random() * 20
       } else {
-        // Player got 3/3 — bot ties and wins by time
         score = 3
         time = Math.max(3, myTime - (0.5 + Math.random() * 2.5))
       }
@@ -460,7 +481,6 @@ export default function Sequence() {
         score = Math.max(0, myScore - 1)
         time = 10 + Math.random() * 20
       } else {
-        // Player got 0/3 — bot ties and loses by time
         score = 0
         time = myTime + (1 + Math.random() * 2)
       }
@@ -591,7 +611,7 @@ export default function Sequence() {
             {[0, 1, 2].map(i => (
               <div
                 key={i}
-                className={`seq-progress-dot ${i < roundIndex ? (scores[i] ? 'pass' : 'fail') : i === roundIndex && phase !== 'countdown' ? 'active' : ''}`}
+                className={`seq-progress-dot ${i < roundIndex ? (scores[i] ? 'pass' : 'fail') : i === roundIndex ? 'active' : ''}`}
               />
             ))}
           </div>
