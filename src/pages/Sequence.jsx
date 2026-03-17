@@ -336,7 +336,7 @@ export default function Sequence() {
     }, 1200)
 
     return () => clearTimeout(timer)
-  }, [phase])
+  }, [phase, roundIndex])
 
   // ── Finish game — bot logic + backend submission ──
   async function finishGame(finalScores) {

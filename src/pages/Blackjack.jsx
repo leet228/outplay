@@ -869,33 +869,10 @@ export default function Blackjack() {
     setOpponentScore(botScore)
     setRevealOpponent(true)
 
-    // Determine winner
-    const playerBust = pScore > 21
-    const botBust = botScore > 21
-    let won = null
-
-    if (playerBust && botBust) {
-      won = pScore === botScore ? null : pScore < botScore
-    } else if (playerBust) {
-      won = false
-    } else if (botBust) {
-      won = true
-    } else {
-      won = pScore === botScore ? null : pScore > botScore
-    }
-
-    // Draw?
-    if (won === null) {
-      setResult({ draw: true, pScore, oScore: botScore })
-      setDrawMessage(true)
-      haptic('medium')
-      setTimeout(() => {
-        setDrawMessage(false)
-        setRoundNum(n => n + 1)
-        startNewRoundBot()
-      }, 2500)
-      return
-    }
+    // Determine winner — use bot_should_win as source of truth (backend does the same)
+    // Phantom cards TRY to match visually, but fallback can produce wrong card outcome
+    // bot_should_win=true means BOT wins → user loses, so won = !shouldWin
+    const won = !shouldWin
 
     const payout = won ? Math.floor(stake * 2 * 0.95) : 0
     setResult({ won, draw: false, pScore, oScore: botScore, payout })
