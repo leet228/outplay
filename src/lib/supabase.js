@@ -5,6 +5,69 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// ── Retry wrapper for Supabase RPC calls ──
+// Retries transient errors (network, timeout, 5xx) with exponential backoff
+// Does NOT retry business logic errors (insufficient_balance, etc.)
+async function rpcWithRetry(fnName, params, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const { data, error } = await supabase.rpc(fnName, params)
+      if (error) {
+        const isTransient = error.message?.includes('fetch') ||
+          error.message?.includes('network') ||
+          error.message?.includes('Failed to fetch') ||
+          error.message?.includes('connection') ||
+          error.message?.includes('timeout') ||
+          error.code === 'PGRST301' ||
+          error.code === '57014' ||
+          error.code === '500' ||
+          error.code === '502' ||
+          error.code === '503'
+        if (isTransient && attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+          continue
+        }
+        // Non-transient or last attempt — return error
+        return { data: null, error }
+      }
+      return { data, error: null }
+    } catch (e) {
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+        continue
+      }
+      return { data: null, error: { message: e.message || 'network_error' } }
+    }
+  }
+  return { data: null, error: { message: 'max_retries_exceeded' } }
+}
+
+// ── Retry wrapper for Supabase queries (select/update/insert) ──
+async function queryWithRetry(fn, maxRetries = 1) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fn()
+      if (result.error) {
+        const msg = result.error.message || ''
+        const isTransient = msg.includes('fetch') || msg.includes('network') ||
+          msg.includes('Failed to fetch') || msg.includes('timeout')
+        if (isTransient && attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+          continue
+        }
+      }
+      return result
+    } catch (e) {
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+        continue
+      }
+      return { data: null, error: { message: e.message || 'network_error' } }
+    }
+  }
+  return { data: null, error: { message: 'max_retries_exceeded' } }
+}
+
 // PRO commission helper: PRO users pay 2.5% rake, regular 5%
 export function calcPayout(stake, isPro) {
   const mult = isPro ? 0.975 : 0.95
@@ -117,7 +180,7 @@ export async function getUserRank(balance) {
 
 // Profile — single RPC (rank + daily_stats + total_pnl)
 export async function getUserProfile(userId, days = 30) {
-  const { data, error } = await supabase.rpc('get_user_profile', {
+  const { data, error } = await rpcWithRetry('get_user_profile', {
     p_user_id: userId,
     p_days: days,
   })
@@ -141,18 +204,17 @@ export function syncUserSettings(userId, settings) {
 
 // Plans — PRO subscription options from DB
 export async function getPlans() {
-  const { data, error } = await supabase
-    .from('plans')
-    .select('id, months, price, per_month, savings')
-    .eq('is_active', true)
-    .order('months', { ascending: true })
+  const { data, error } = await queryWithRetry(() =>
+    supabase.from('plans').select('id, months, price, per_month, savings')
+      .eq('is_active', true).order('months', { ascending: true })
+  )
   if (error) { console.error('getPlans error:', error); return [] }
   return data ?? []
 }
 
 // Referrals list with per-period earnings (paginated)
 export async function getReferralsList(userId, limit = 50, offset = 0) {
-  const { data, error } = await supabase.rpc('get_referrals_list', {
+  const { data, error } = await rpcWithRetry('get_referrals_list', {
     p_user_id: userId,
     p_limit:   limit,
     p_offset:  offset,
@@ -163,21 +225,21 @@ export async function getReferralsList(userId, limit = 50, offset = 0) {
 
 // Leaderboard (ranked by real PnL from duels, not balance)
 export async function getLeaderboard(limit = 50) {
-  const { data, error } = await supabase.rpc('get_leaderboard', { p_limit: limit })
+  const { data, error } = await rpcWithRetry('get_leaderboard', { p_limit: limit })
   if (error) { console.error('getLeaderboard error:', error); return [] }
   return data ?? []
 }
 
 // Guild data — user's guild + top guilds + season (single RPC)
 export async function getGuildData(userId) {
-  const { data, error } = await supabase.rpc('get_guild_data', { p_user_id: userId })
+  const { data, error } = await rpcWithRetry('get_guild_data', { p_user_id: userId })
   if (error) { console.error('getGuildData error:', error); return null }
   return data
 }
 
 // Recent opponents from finished duels
 export async function getRecentOpponents(userId, limit = 20) {
-  const { data, error } = await supabase.rpc('get_recent_opponents', {
+  const { data, error } = await rpcWithRetry('get_recent_opponents', {
     p_user_id: userId,
     p_limit: limit,
   })
@@ -255,7 +317,7 @@ export async function deleteGuild(userId, guildId) {
 
 // Friends — single RPC for all friends data (bootstrap)
 export async function getFriendsData(userId) {
-  const { data, error } = await supabase.rpc('get_friends_data', { p_user_id: userId })
+  const { data, error } = await rpcWithRetry('get_friends_data', { p_user_id: userId })
   if (error) { console.error('getFriendsData error:', error); return null }
   return data
 }
@@ -351,13 +413,12 @@ export async function cancelAllPendingInvites(userId) {
 }
 
 export async function getPendingInvites(userId) {
-  const { data, error } = await supabase
-    .from('game_invites')
-    .select('*')
-    .eq('to_id', userId)
-    .eq('status', 'pending')
-    .gt('expires_at', new Date().toISOString())
-    .order('created_at', { ascending: false })
+  const { data, error } = await queryWithRetry(() =>
+    supabase.from('game_invites').select('*')
+      .eq('to_id', userId).eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+  )
   if (error) { console.error('getPendingInvites error:', error); return [] }
   return data || []
 }
@@ -419,7 +480,7 @@ export async function processDeposit(userId, amount, txId, currencyAmount, curre
 // ── Admin ──
 
 export async function getAppSettings() {
-  const { data, error } = await supabase.rpc('get_app_settings')
+  const { data, error } = await rpcWithRetry('get_app_settings')
   if (error) { console.error('getAppSettings error:', error); return null }
   return data
 }
