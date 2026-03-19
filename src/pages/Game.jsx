@@ -533,8 +533,14 @@ export default function Game() {
     )
   }
 
-  const q = questions[qIndex]
-  if (!q) return null
+  const qRaw = questions[qIndex]
+  if (!qRaw) return null
+  // Use English fields if available and lang is 'en'
+  const q = {
+    ...qRaw,
+    question: (lang === 'en' && qRaw.question_en) ? qRaw.question_en : qRaw.question,
+    options: (lang === 'en' && qRaw.options_en) ? qRaw.options_en : qRaw.options,
+  }
 
   const timerFrac = timeLeft / TIME_PER_QUESTION
   const dashOffset = CIRCLE_C * (1 - timerFrac)
