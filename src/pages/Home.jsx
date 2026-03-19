@@ -280,6 +280,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     setTimeout(() => {
       setSearching(false)
       setMatched(false)
+      findingRef.current = false
       const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : '/game'
       navigate(`${route}/${duelId}`)
     }, 1500)
@@ -351,6 +352,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     }
 
     if (result.status === 'matched') {
+      findingRef.current = false
       handleMatchFound(result.duel_id)
       return
     }
