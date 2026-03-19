@@ -424,6 +424,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     setSearching(false)
     setSearchTime(0)
     findingRef.current = false
+    matchFoundRef.current = false
     haptic('light')
   }
 
@@ -590,6 +591,11 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
   const [inviteMsg, setInviteMsg] = useState(null) // 'sent' | 'error' | 'balance' | 'offline'
   const [acceptError, setAcceptError] = useState(null) // invite id with balance error
   const debounceRef = useRef(null)
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [])
 
   // Refresh friends + invites on open
   useEffect(() => {

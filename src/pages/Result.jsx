@@ -16,6 +16,7 @@ export default function Result() {
   const currency = useGameStore(s => s.currency)
   const rates = useGameStore(s => s.rates)
   const resetGame = useGameStore(s => s.resetGame)
+  const clearDuel = useGameStore(s => s.clearDuel)
   const tr = translations[lang] || translations.ru
 
   if (!lastResult) {
@@ -51,6 +52,7 @@ export default function Result() {
   function handleHome() {
     haptic('light')
     resetGame()
+    clearDuel()
     navigate('/')
   }
 

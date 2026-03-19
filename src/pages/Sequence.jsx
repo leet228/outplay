@@ -105,8 +105,17 @@ export default function Sequence() {
   const roundStartTime = useRef(0)
   const inputLocked = useRef(false)
 
+  // ── Cleanup on unmount ──
+  useEffect(() => {
+    return () => {
+      finishedRef.current = false
+      sound.timerStop()
+    }
+  }, [])
+
   // ── Load duel ──
   useEffect(() => {
+    finishedRef.current = false
     if (isDevDuel) {
       const parts = duelId.replace('dev-', '').split('-')
       const stake = parseInt(parts[1]) || 100

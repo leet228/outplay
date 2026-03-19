@@ -81,6 +81,9 @@ export default function Game() {
     clearTimeout(timerRef.current)
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null }
+    submittingRef.current = false
+    advancingRef.current = false
+    sound.timerStop()
   }
 
   function loadDevDuel() {

@@ -329,6 +329,9 @@ export default function Blackjack() {
       cleanupChannel()
       cleanupPvpPoll()
       clearInterval(timerRef.current)
+      gameOverRef.current = false
+      playerStandRef.current = false
+      sound.timerStop()
     }
   }, [])
 
