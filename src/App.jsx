@@ -253,7 +253,7 @@ export default function App() {
               localStorage.setItem('outplay_user', JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, username: user.username }))
               // Continue with real user bootstrap below
               const cachedResults = await Promise.allSettled([
-                getUserProfile(user.id), getPlans(), getLeaderboard(50), getGuildData(user.id),
+                getUserProfile(user.id), getPlans(), getLeaderboard(10), getGuildData(user.id),
                 getRecentOpponents(user.id), getFriendsData(user.id), fetchRates(), getAppSettings(),
               ])
               const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] =
@@ -371,7 +371,7 @@ export default function App() {
     const results = await Promise.allSettled([
       getUserProfile(user.id),
       getPlans(),
-      getLeaderboard(50),
+      getLeaderboard(10),
       getGuildData(user.id),
       getRecentOpponents(user.id),
       getFriendsData(user.id),
