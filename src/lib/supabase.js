@@ -11,6 +11,44 @@ export function calcPayout(stake, isPro) {
   return Math.floor(stake * 2 * mult)
 }
 
+// PRO subscription purchase
+export async function purchasePro(userId, planPrice, planMonths) {
+  // 1. Check balance
+  const { data: user } = await supabase
+    .from('users')
+    .select('balance')
+    .eq('id', userId)
+    .single()
+
+  if (!user || user.balance < planPrice) {
+    return { error: 'insufficient_balance' }
+  }
+
+  // 2. Deduct balance
+  const { error: balErr } = await supabase
+    .from('users')
+    .update({
+      balance: user.balance - planPrice,
+      is_pro: true,
+      pro_expires: new Date(Date.now() + planMonths * 30 * 86400000).toISOString(),
+    })
+    .eq('id', userId)
+
+  if (balErr) {
+    console.error('purchasePro balance error:', balErr)
+    return { error: 'update_failed' }
+  }
+
+  // 3. Record transaction
+  await supabase.from('transactions').insert({
+    user_id: userId,
+    type: 'pro_subscription',
+    amount: -planPrice,
+  })
+
+  return { ok: true, newBalance: user.balance - planPrice }
+}
+
 // Users
 export async function getOrCreateUser(telegramUser, referrerId = null) {
   const { data: existing } = await supabase

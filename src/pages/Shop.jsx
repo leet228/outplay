@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import useGameStore from '../store/useGameStore'
-import { getReferralsList } from '../lib/supabase'
+import { getReferralsList, purchasePro } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
@@ -51,10 +51,14 @@ function avatarColor(name) {
 }
 
 /* ── Plan Sheet ── */
-function PlanSheet({ plan, t, currency, rates, onClose, appSettings }) {
+function PlanSheet({ plan, t, currency, rates, onClose, appSettings, balance, user, onPurchased }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
   useEffect(() => {
     if (plan) {
       document.body.style.overflow = 'hidden'
+      setError(null)
     } else {
       document.body.style.overflow = ''
     }
@@ -74,10 +78,42 @@ function PlanSheet({ plan, t, currency, rates, onClose, appSettings }) {
     return () => tg.BackButton.offClick(onClose)
   }, [plan, onClose])
 
-  function handleSubscribe() {
-    if (appSettings?.subscriptions === false) return alert('Подписки временно отключены')
+  const canAfford = balance >= (plan?.price ?? Infinity)
+
+  async function handleSubscribe() {
+    if (appSettings?.subscriptions === false) return setError(t.proDisabled || 'Подписки временно отключены')
+    if (!canAfford) {
+      haptic('error')
+      setError(t.proNotEnough || 'Недостаточно средств на балансе')
+      return
+    }
+    if (loading) return
     haptic('medium')
-    // TODO: Telegram Stars payment
+    setLoading(true)
+    setError(null)
+
+    if (!user?.id || user.id === 'dev') {
+      // Dev mode — simulate purchase
+      await new Promise(r => setTimeout(r, 800))
+      setLoading(false)
+      onPurchased?.(plan)
+      return
+    }
+
+    const result = await purchasePro(user.id, plan.price, plan.months)
+    setLoading(false)
+
+    if (result?.error) {
+      if (result.error === 'insufficient_balance') {
+        setError(t.proNotEnough || 'Недостаточно средств на балансе')
+      } else {
+        setError(t.proError || 'Ошибка. Попробуйте позже')
+      }
+      haptic('error')
+      return
+    }
+
+    onPurchased?.(plan, result.newBalance)
   }
 
   const periodLabel = plan
@@ -122,6 +158,14 @@ function PlanSheet({ plan, t, currency, rates, onClose, appSettings }) {
           )}
         </div>
 
+        {/* Balance info */}
+        <div className="plan-sheet-balance">
+          <span className="plan-sheet-balance-label">{t.balance || 'Баланс'}</span>
+          <span className={`plan-sheet-balance-amount ${!canAfford ? 'insufficient' : ''}`}>
+            {formatCurrency(balance, currency, rates)}
+          </span>
+        </div>
+
         {/* Features */}
         <div className="plan-sheet-features">
           <span className="sheet-label">{t.proWhatsIncluded}</span>
@@ -138,13 +182,25 @@ function PlanSheet({ plan, t, currency, rates, onClose, appSettings }) {
           ))}
         </div>
 
+        {/* Error */}
+        {error && (
+          <div className="plan-sheet-error">{error}</div>
+        )}
+
         {/* CTA */}
         <button
-          className="plan-subscribe-btn"
-          style={{ background: plan?.gradient, '--plan-glow': plan?.glow }}
+          className={`plan-subscribe-btn ${loading ? 'loading' : ''} ${!canAfford ? 'plan-subscribe-btn--disabled' : ''}`}
+          style={{ background: canAfford ? plan?.gradient : '#333', '--plan-glow': plan?.glow }}
           onClick={handleSubscribe}
+          disabled={loading}
         >
-          {t.proSubscribe} · {plan ? formatCurrency(plan.price, currency, rates) : ''}
+          {loading ? (
+            <span className="plan-btn-spinner" />
+          ) : !canAfford ? (
+            <>{t.proNotEnoughShort || 'Недостаточно средств'}</>
+          ) : (
+            <>{t.proSubscribe} · {plan ? formatCurrency(plan.price, currency, rates) : ''}</>
+          )}
         </button>
       </div>
     </>
@@ -418,7 +474,9 @@ function PurchaseSuccessOverlay({ visible, onClose, t }) {
 
 /* ── Shop ── */
 export default function Shop() {
-  const { lang, currency, rates, user, plans, appSettings } = useGameStore(useShallow(s => ({ lang: s.lang, currency: s.currency, rates: s.rates, user: s.user, plans: s.plans, appSettings: s.appSettings })))
+  const { lang, currency, rates, user, balance, plans, appSettings } = useGameStore(useShallow(s => ({ lang: s.lang, currency: s.currency, rates: s.rates, user: s.user, balance: s.balance, plans: s.plans, appSettings: s.appSettings })))
+  const setUser = useGameStore(s => s.setUser)
+  const setBalance = useGameStore(s => s.setBalance)
   const t = translations[lang]
   const PLANS = plans.length > 0 ? mergePlans(plans) : STATIC_PLANS
   const [active, setActive] = useState(1)
@@ -426,6 +484,18 @@ export default function Shop() {
   const [showSuccess, setShowSuccess] = useState(false)
   const trackRef = useRef(null)
   const isPro = user?.is_pro && user?.pro_expires && new Date(user.pro_expires) > new Date()
+
+  function handlePurchased(plan, newBalance) {
+    // Update local state
+    const expires = new Date(Date.now() + plan.months * 30 * 86400000).toISOString()
+    setUser({ ...user, is_pro: true, pro_expires: expires })
+    if (newBalance != null) setBalance(newBalance)
+    else setBalance(balance - plan.price)
+    setSheetPlan(null)
+    // Show success overlay with slight delay for smooth transition
+    setTimeout(() => setShowSuccess(true), 300)
+    haptic('success')
+  }
 
   useEffect(() => {
     // Immediate reset — fires right after paint
@@ -561,6 +631,9 @@ export default function Shop() {
           rates={rates}
           onClose={closeSheet}
           appSettings={appSettings}
+          balance={balance}
+          user={user}
+          onPurchased={handlePurchased}
         />
       )}
 

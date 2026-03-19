@@ -541,6 +541,87 @@
   opacity: 0.9;
 }
 
+.plan-subscribe-btn--disabled {
+  background: #333 !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+.plan-subscribe-btn--disabled:active {
+  transform: none;
+}
+
+.plan-subscribe-btn.loading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+/* Balance in sheet */
+.plan-sheet-balance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #ffffff06;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  margin-bottom: 16px;
+}
+
+.plan-sheet-balance-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.plan-sheet-balance-amount {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.plan-sheet-balance-amount.insufficient {
+  color: #ef4444;
+}
+
+/* Error in sheet */
+.plan-sheet-error {
+  padding: 10px 14px;
+  background: #ef444418;
+  border: 1px solid #ef444444;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ef4444;
+  text-align: center;
+  margin-bottom: 12px;
+  animation: plan-error-shake 0.4s ease;
+}
+
+@keyframes plan-error-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+/* Spinner */
+.plan-btn-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: plan-spin 0.6s linear infinite;
+}
+
+@keyframes plan-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ══════════════════════════════════════
    REFERRAL SECTION
 ══════════════════════════════════════ */
