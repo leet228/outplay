@@ -139,7 +139,13 @@ export default function Sequence() {
   }, [duelId])
 
   async function loadDuel() {
-    const duelData = await getSequenceDuel(duelId)
+    // Retry up to 3 times — duel may not be available immediately after creation
+    let duelData = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      duelData = await getSequenceDuel(duelId)
+      if (duelData) break
+      await new Promise(r => setTimeout(r, 1000))
+    }
     if (!duelData) { navigate('/'); return }
     setDuel(duelData)
     setActiveDuel(duelData)

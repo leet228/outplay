@@ -540,8 +540,15 @@ export default function Blackjack() {
     }
 
     async function loadDuel() {
-      const data = await getBlackjackState(duelId)
-      if (!data || data.game_type !== 'blackjack') {
+      // Retry up to 3 times — duel may not be available immediately after creation
+      let data = null
+      for (let attempt = 0; attempt < 3; attempt++) {
+        data = await getBlackjackState(duelId)
+        if (data && data.game_type === 'blackjack') break
+        data = null
+        await new Promise(r => setTimeout(r, 1000))
+      }
+      if (!data) {
         console.error('Invalid blackjack duel:', duelId)
         navigate('/')
         return

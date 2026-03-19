@@ -124,8 +124,14 @@ export default function Game() {
   }
 
   async function loadDuel() {
-    const { data: duelData } = await supabase
-      .from('duels').select('*').eq('id', duelId).single()
+    // Retry up to 3 times — duel may not be available immediately after creation
+    let duelData = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data } = await supabase
+        .from('duels').select('*').eq('id', duelId).single()
+      if (data) { duelData = data; break }
+      await new Promise(r => setTimeout(r, 1000))
+    }
 
     if (!duelData) { navigate('/'); return }
     setDuel(duelData)
