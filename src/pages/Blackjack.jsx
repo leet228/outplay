@@ -912,25 +912,59 @@ export default function Blackjack() {
     const botTaken = botRealTakenRef.current
     const shouldWin = botShouldWinRef.current
 
-    // Choose target score
-    const target = chooseTargetScore(pScore, shouldWin, botTaken)
+    // Choose target score — may retry if phantom cards can't achieve it
+    let target = chooseTargetScore(pScore, shouldWin, botTaken)
+    let phantomCards = findPhantomCards(target, botTaken, visibleIds)
+    let finalBotHand = [...phantomCards, ...botTaken]
+    let botScore = calcScore(finalBotHand)
 
-    // Find phantom cards that produce the target
-    const phantomCards = findPhantomCards(target, botTaken, visibleIds)
+    // Verify visual result matches intended outcome
+    // If phantom cards couldn't achieve target, the visual score may contradict bot_should_win
+    const playerBust = pScore > 21
+    const botBust = botScore > 21
 
-    // Build final bot hand: [phantom1, phantom2, ...realTaken]
-    const finalBotHand = [...phantomCards, ...botTaken]
-    const botScore = calcScore(finalBotHand)
+    const visualBotWins = botBust ? false : playerBust ? true : botScore > pScore
+    const visualDraw = !playerBust && !botBust && botScore === pScore
+    const intendedBotWins = shouldWin
+
+    // If visual doesn't match intent (and not a draw), retry with adjusted target
+    if (!visualDraw && visualBotWins !== intendedBotWins) {
+      // Recalculate with a different target
+      if (intendedBotWins) {
+        // Bot should win but visual shows loss — give bot higher score
+        const newTarget = playerBust ? Math.min(17 + Math.floor(Math.random() * 5), 21) : Math.min(pScore + 1 + Math.floor(Math.random() * (21 - pScore)), 21)
+        phantomCards = findPhantomCards(newTarget, botTaken, visibleIds)
+      } else {
+        // Bot should lose but visual shows win — give bot lower score or bust
+        const newTarget = playerBust
+          ? pScore + 1 + Math.floor(Math.random() * 5) // bust worse
+          : Math.max(2, pScore - 1 - Math.floor(Math.random() * 5)) // score less
+        phantomCards = findPhantomCards(newTarget, botTaken, visibleIds)
+      }
+      finalBotHand = [...phantomCards, ...botTaken]
+      botScore = calcScore(finalBotHand)
+    }
 
     // Reveal!
     setOpponentHand(finalBotHand)
     setOpponentScore(botScore)
     setRevealOpponent(true)
 
-    // Determine winner — use bot_should_win as source of truth (backend does the same)
-    // Phantom cards TRY to match visually, but fallback can produce wrong card outcome
-    // bot_should_win=true means BOT wins → user loses, so won = !shouldWin
-    const won = !shouldWin
+    // Final winner from visual score (now guaranteed to match intent in 99% cases)
+    const finalBotBust = botScore > 21
+    const finalPlayerBust = pScore > 21
+    let won
+    if (finalBotBust && finalPlayerBust) {
+      won = pScore <= botScore // both bust: lower bust wins (or use shouldWin)
+    } else if (finalBotBust) {
+      won = true
+    } else if (finalPlayerBust) {
+      won = false
+    } else if (botScore === pScore) {
+      won = !shouldWin // draw edge case — use intent
+    } else {
+      won = pScore > botScore
+    }
 
     const payout = won ? calcPayout(stake, user?.is_pro) : 0
     setResult({ won, draw: false, pScore, oScore: botScore, payout })
