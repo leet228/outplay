@@ -90,7 +90,7 @@ export default function Profile() {
   const [withdrawError, setWithdrawError] = useState(false)
   const withdrawTimer = useRef(null)
 
-  const MIN_WITHDRAW = 50
+  const MIN_WITHDRAW = 1000
   const canWithdraw = balance >= MIN_WITHDRAW
 
   function handleWithdraw() {
