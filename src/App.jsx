@@ -10,6 +10,7 @@ import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
 import WithdrawalSheet from './components/WithdrawalSheet'
 import SplashScreen from './components/SplashScreen'
+import NotTelegram from './components/NotTelegram'
 import Onboarding from './pages/Onboarding'
 
 import Home from './pages/Home'
@@ -28,6 +29,10 @@ import Sequence from './pages/Sequence'
 if ('scrollRestoration' in history) {
   history.scrollRestoration = 'manual'
 }
+
+// Block access outside Telegram in production (allow dev on localhost)
+const IS_TELEGRAM = !!window.Telegram?.WebApp?.initData
+const IS_DEV = import.meta.env.DEV
 
 const CACHE_KEY = 'outplay_data'
 
@@ -454,6 +459,9 @@ export default function App() {
   }
 
   if (phase === 'splash') return <SplashScreen />
+
+  // Block non-Telegram users in production
+  if (!IS_DEV && !IS_TELEGRAM) return <NotTelegram />
 
   if (phase === 'onboarding') {
     return <Onboarding onComplete={() => setPhase('app')} />
