@@ -207,6 +207,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const pollRef = useRef(null)
   const timerRef = useRef(null)
   const botTimerRef = useRef(null)
+  const searchCancelledRef = useRef(false)
 
   useEffect(() => {
     setSelectedStakes([])
@@ -261,6 +262,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   useEffect(() => { return () => cleanupSearch() }, [])
 
   function cleanupSearch() {
+    searchCancelledRef.current = true
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
@@ -311,6 +313,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     }
     findingRef.current = true
     matchFoundRef.current = false
+    searchCancelledRef.current = false
     haptic('medium')
 
     // Dev mode — skip matchmaking, go straight to game
@@ -395,10 +398,10 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (appSettings?.bot_enabled !== false) {
       const botDelay = (30 + Math.floor(Math.random() * 31)) * 1000
       const tryCreateBot = async (retries = 2) => {
-        if (matchFoundRef.current) return
+        if (matchFoundRef.current || searchCancelledRef.current) return
         try {
           const res = await createBotDuel(user.id, game.id, selectedStakes, gameType)
-          if (matchFoundRef.current) return
+          if (matchFoundRef.current || searchCancelledRef.current) return
           if (res?.status === 'matched') {
             handleMatchFound(res.duel_id)
           } else if (retries > 0 && res?.status !== 'error') {
