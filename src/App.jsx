@@ -277,7 +277,7 @@ export default function App() {
         } catch (e) { console.warn('Cached user parse error:', e) }
       }
       // ── Dev fallback ──
-      setUser({ id: 'dev', first_name: 'Dev', username: 'dev', wins: 3, losses: 1, is_pro: true })
+      setUser({ id: 'dev', first_name: 'Dev', username: 'dev', wins: 3, losses: 1, is_pro: true, pro_expires: new Date(Date.now() + 25 * 86400000).toISOString() })
       setBalance(500)
       store.setRank(1)
       store.setTotalPnl(575)

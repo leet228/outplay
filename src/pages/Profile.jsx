@@ -307,6 +307,41 @@ export default function Profile() {
         </div>
       </div>
 
+      {/* PRO Extended Stats */}
+      {user?.is_pro && (
+        <div className="pro-stats-card">
+          <div className="pro-stats-header">
+            <span className="pro-stats-title">
+              <span className="pro-user-badge pro-user-badge--sm" style={{ marginRight: 6 }}>PRO</span>
+              {t.proStatsTitle || 'Статистика по категориям'}
+            </span>
+          </div>
+          <div className="pro-stats-bars">
+            {(user.category_stats || [
+              { category: 'general', wins: 8, total: 12 },
+              { category: 'history', wins: 5, total: 8 },
+              { category: 'science', wins: 3, total: 7 },
+              { category: 'sport', wins: 6, total: 9 },
+              { category: 'movies', wins: 4, total: 5 },
+              { category: 'music', wins: 2, total: 4 },
+            ]).map(cat => {
+              const wr = cat.total > 0 ? Math.round((cat.wins / cat.total) * 100) : 0
+              const labels = { general: '🧠 ' + (t.catGeneral || 'Общие'), history: '📜 ' + (t.catHistory || 'История'), science: '🔬 ' + (t.catScience || 'Наука'), sport: '⚽ ' + (t.catSport || 'Спорт'), movies: '🎬 ' + (t.catMovies || 'Кино'), music: '🎵 ' + (t.catMusic || 'Музыка') }
+              return (
+                <div key={cat.category} className="pro-stats-row">
+                  <span className="pro-stats-label">{labels[cat.category] || cat.category}</span>
+                  <div className="pro-stats-bar-track">
+                    <div className="pro-stats-bar-fill" style={{ width: `${wr}%`, background: wr >= 60 ? '#22c55e' : wr >= 40 ? '#f59e0b' : '#ef4444' }} />
+                  </div>
+                  <span className="pro-stats-wr">{wr}%</span>
+                  <span className="pro-stats-count">{cat.wins}/{cat.total}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Settings overlay */}
       <div
         className={`settings-overlay ${settingsOpen ? 'visible' : ''}`}

@@ -140,6 +140,8 @@ button {
   flex-shrink: 0;
   text-transform: uppercase;
   box-shadow: 0 1px 4px #f59e0b40;
+  vertical-align: middle;
+  transform: translateY(-0.5px);
 }
 
 .pro-user-badge--sm {
@@ -158,16 +160,26 @@ button {
   position: absolute;
   inset: -3px;
   border-radius: 50%;
-  border: 2px solid transparent;
-  background: linear-gradient(135deg, #f59e0b, #fbbf24, #f59e0b) border-box;
+  border: 2.5px solid transparent;
+  background: linear-gradient(135deg, #d97706, #fbbf24, #f59e0b, #fbbf24, #d97706) border-box;
+  background-size: 300% 300%;
   -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
-  animation: pro-frame-glow 3s ease-in-out infinite;
+  animation: pro-frame-rotate 4s linear infinite;
+  filter: drop-shadow(0 0 6px #f59e0b60);
 }
 
-@keyframes pro-frame-glow {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
+/* Profile-specific larger frame */
+.profile-avatar-wrap.pro-avatar-frame::after {
+  inset: -4px;
+  border-width: 3px;
+  filter: drop-shadow(0 0 10px #f59e0b80) drop-shadow(0 0 20px #f59e0b30);
+}
+
+@keyframes pro-frame-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }

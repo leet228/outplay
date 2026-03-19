@@ -288,6 +288,16 @@ export const translations = {
     proFeat4: 'Скидка на создание и редактирование гильдии',
     proSubscribe: 'Подключить PRO',
     proTapToSubscribe: 'Нажмите для оформления',
+    proActiveTitle: 'PRO активен',
+    proDay: 'день',
+    proDays2: 'дня',
+    proDays: 'дней',
+    proLeft: 'осталось',
+    proExpired: 'Истекла',
+    proSuccessTitle: 'Добро пожаловать в PRO!',
+    proSuccessText: 'Теперь ты получаешь больше за каждую победу',
+    proSuccessBtn: 'Отлично!',
+    proStatsTitle: 'Статистика по категориям',
 
     // Referral
     refTitle: 'Реферальная программа',
@@ -594,6 +604,16 @@ export const translations = {
     proFeat4: 'Discount on guild creation and editing',
     proSubscribe: 'Get PRO',
     proTapToSubscribe: 'Tap to subscribe',
+    proActiveTitle: 'PRO is active',
+    proDay: 'day',
+    proDays2: 'days',
+    proDays: 'days',
+    proLeft: 'left',
+    proExpired: 'Expired',
+    proSuccessTitle: 'Welcome to PRO!',
+    proSuccessText: 'You now earn more for every win',
+    proSuccessBtn: 'Awesome!',
+    proStatsTitle: 'Stats by category',
 
     // Referral
     refTitle: 'Referral Program',

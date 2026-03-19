@@ -365,6 +365,57 @@ function ReferralSection({ t, currency, rates, user }) {
   )
 }
 
+/* ── PRO Active Card ── */
+function ProActiveCard({ user, t }) {
+  const expiresDate = user?.pro_expires ? new Date(user.pro_expires) : null
+  const daysLeft = expiresDate ? Math.max(0, Math.ceil((expiresDate - Date.now()) / 86400000)) : 0
+
+  return (
+    <div className="pro-active-card">
+      <div className="pro-active-glow" />
+      <div className="pro-active-header">
+        <div className="pro-active-crown">👑</div>
+        <div className="pro-active-info">
+          <span className="pro-active-title">{t.proActiveTitle || 'PRO активен'}</span>
+          <span className="pro-active-days">
+            {daysLeft > 0
+              ? `${daysLeft} ${daysLeft === 1 ? (t.proDay || 'день') : daysLeft < 5 ? (t.proDays2 || 'дня') : (t.proDays || 'дней')} ${t.proLeft || 'осталось'}`
+              : t.proExpired || 'Истекла'
+            }
+          </span>
+        </div>
+        <span className="pro-user-badge" style={{ fontSize: 11, padding: '3px 8px' }}>PRO</span>
+      </div>
+      <div className="pro-active-features">
+        {PRO_FEATURES.map(f => (
+          <div key={f.key} className="pro-active-feature">
+            <span className="pro-active-check">✓</span>
+            <span>{t[f.key]}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ── Purchase Success Overlay ── */
+function PurchaseSuccessOverlay({ visible, onClose, t }) {
+  if (!visible) return null
+  return (
+    <div className="pro-success-overlay" onClick={onClose}>
+      <div className="pro-success-content" onClick={e => e.stopPropagation()}>
+        <div className="pro-success-crown">👑</div>
+        <div className="pro-success-sparkles">✨</div>
+        <h2 className="pro-success-title">{t.proSuccessTitle || 'Добро пожаловать в PRO!'}</h2>
+        <p className="pro-success-text">{t.proSuccessText || 'Теперь ты получаешь больше за каждую победу'}</p>
+        <button className="pro-success-btn" onClick={onClose}>
+          {t.proSuccessBtn || 'Отлично!'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Shop ── */
 export default function Shop() {
   const { lang, currency, rates, user, plans, appSettings } = useGameStore(useShallow(s => ({ lang: s.lang, currency: s.currency, rates: s.rates, user: s.user, plans: s.plans, appSettings: s.appSettings })))
@@ -372,7 +423,9 @@ export default function Shop() {
   const PLANS = plans.length > 0 ? mergePlans(plans) : STATIC_PLANS
   const [active, setActive] = useState(1)
   const [sheetPlan, setSheetPlan] = useState(null)
+  const [showSuccess, setShowSuccess] = useState(false)
   const trackRef = useRef(null)
+  const isPro = user?.is_pro && user?.pro_expires && new Date(user.pro_expires) > new Date()
 
   useEffect(() => {
     // Immediate reset — fires right after paint
@@ -444,64 +497,78 @@ export default function Shop() {
         <p className="pro-subtitle">{t.proSubtitle}</p>
       </div>
 
-      {/* Plans carousel */}
-      <div className="pro-carousel-wrap">
-        <div className="pro-track" ref={trackRef} onScroll={handleScroll}>
-          {PLANS.map((p, i) => {
-            const isActive = i === active
-            const periodLabel = p.months === 1 ? t.pro1Month : p.months === 6 ? t.pro6Month : t.pro12Month
-            return (
-              <div
-                key={p.id}
-                className={`pro-card ${isActive ? 'pro-card--active' : ''}`}
-                style={{ background: p.gradient, '--plan-glow': p.glow, '--plan-border': p.borderColor }}
-                onClick={() => handleCardClick(i)}
-              >
-                <div className="pro-card-orb" />
-                {p.badge && (
-                  <div className={`pro-badge ${p.badge === 'popular' ? 'pro-badge--purple' : 'pro-badge--orange'}`}>
-                    {p.badge === 'popular' ? t.proPopular : t.proBest}
-                  </div>
-                )}
-                <div className="pro-card-period">{periodLabel}</div>
-                <div className="pro-card-price">{formatCurrency(p.price, currency, rates)}</div>
-                <div className="pro-card-per">{formatCurrency(p.perMonth, currency, rates)} {t.proPerMonth}</div>
-                {p.savings && (
-                  <div className="pro-card-savings">
-                    {t.proSave} {formatCurrency(p.savings, currency, rates)}
-                  </div>
-                )}
-                {isActive && (
-                  <div className="pro-card-tap-hint">{t.proTapToSubscribe}</div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+      {isPro ? (
+        /* Active subscription card */
+        <ProActiveCard user={user} t={t} />
+      ) : (
+        /* Plans carousel */
+        <div className="pro-carousel-wrap">
+          <div className="pro-track" ref={trackRef} onScroll={handleScroll}>
+            {PLANS.map((p, i) => {
+              const isActive = i === active
+              const periodLabel = p.months === 1 ? t.pro1Month : p.months === 6 ? t.pro6Month : t.pro12Month
+              return (
+                <div
+                  key={p.id}
+                  className={`pro-card ${isActive ? 'pro-card--active' : ''}`}
+                  style={{ background: p.gradient, '--plan-glow': p.glow, '--plan-border': p.borderColor }}
+                  onClick={() => handleCardClick(i)}
+                >
+                  <div className="pro-card-orb" />
+                  {p.badge && (
+                    <div className={`pro-badge ${p.badge === 'popular' ? 'pro-badge--purple' : 'pro-badge--orange'}`}>
+                      {p.badge === 'popular' ? t.proPopular : t.proBest}
+                    </div>
+                  )}
+                  <div className="pro-card-period">{periodLabel}</div>
+                  <div className="pro-card-price">{formatCurrency(p.price, currency, rates)}</div>
+                  <div className="pro-card-per">{formatCurrency(p.perMonth, currency, rates)} {t.proPerMonth}</div>
+                  {p.savings && (
+                    <div className="pro-card-savings">
+                      {t.proSave} {formatCurrency(p.savings, currency, rates)}
+                    </div>
+                  )}
+                  {isActive && (
+                    <div className="pro-card-tap-hint">{t.proTapToSubscribe}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
 
-        <div className="pro-dots">
-          {PLANS.map((p, i) => (
-            <button
-              key={i}
-              className={`pro-dot ${i === active ? 'active' : ''}`}
-              style={i === active ? { background: p.glow, width: '20px' } : {}}
-              onClick={() => goTo(i)}
-            />
-          ))}
+          <div className="pro-dots">
+            {PLANS.map((p, i) => (
+              <button
+                key={i}
+                className={`pro-dot ${i === active ? 'active' : ''}`}
+                style={i === active ? { background: p.glow, width: '20px' } : {}}
+                onClick={() => goTo(i)}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Referral Section */}
       <ReferralSection t={t} currency={currency} rates={rates} user={user} />
 
       {/* Plan Sheet */}
-      <PlanSheet
-        plan={sheetPlan}
+      {!isPro && (
+        <PlanSheet
+          plan={sheetPlan}
+          t={t}
+          currency={currency}
+          rates={rates}
+          onClose={closeSheet}
+          appSettings={appSettings}
+        />
+      )}
+
+      {/* Purchase Success */}
+      <PurchaseSuccessOverlay
+        visible={showSuccess}
+        onClose={() => setShowSuccess(false)}
         t={t}
-        currency={currency}
-        rates={rates}
-        onClose={closeSheet}
-        appSettings={appSettings}
       />
     </div>
   )
