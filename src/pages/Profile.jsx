@@ -151,7 +151,7 @@ export default function Profile() {
     <div className="profile page" onClick={() => setTooltip(null)}>
       <div className="profile-header">
         <div className="profile-avatar-row">
-          <div className="profile-avatar-wrap">
+          <div className={`profile-avatar-wrap ${user?.is_pro ? 'pro-avatar-frame' : ''}`}>
             {photoUrl
               ? <img className="profile-avatar" src={photoUrl} alt="" />
               : <div className="profile-avatar">{user?.first_name?.[0] ?? '?'}</div>
@@ -167,6 +167,7 @@ export default function Profile() {
         <div className="profile-name-block">
           <div className="profile-name-row">
             <h2 className="profile-name">{user?.first_name ?? 'Игрок'}</h2>
+            {user?.is_pro && <span className="pro-user-badge">PRO</span>}
             {rank != null && (() => {
               const rd = getRankDisplay(rank)
               return (

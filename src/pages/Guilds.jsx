@@ -17,7 +17,9 @@ function getTimeLeft(endDate) {
 }
 
 const CREATE_COST = 2000
+const CREATE_COST_PRO = 500
 const EDIT_COST = 100
+const EDIT_COST_PRO = 0
 
 const GUILD_COLORS = ['#6366f1', '#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#ec4899', '#a855f7', '#14b8a6']
 
@@ -83,7 +85,8 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
 
   async function handleSaveEdit() {
     if (saving || !guild) return
-    if (balance < EDIT_COST) {
+    const cost = user?.is_pro ? EDIT_COST_PRO : EDIT_COST
+    if (balance < cost) {
       haptic('light')
       setEditError(t.guildsNotEnoughBalance)
       setTimeout(() => setEditError(''), 3000)
@@ -204,7 +207,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
                     />
                     <div className="gd-edit-cost">
                       <span className="gd-edit-cost-label">{t.guildsEditCost}</span>
-                      <span className="gd-edit-cost-amount">{formatCurrency(EDIT_COST, currency, rates)}</span>
+                      <span className="gd-edit-cost-amount">{user?.is_pro ? <span style={{ color: '#22c55e' }}>{t.free || 'Бесплатно'}</span> : formatCurrency(EDIT_COST, currency, rates)}</span>
                     </div>
                     {editError && <div className="guilds-sheet-error">{editError}</div>}
                     <button className="gd-edit-save" onClick={handleSaveEdit} disabled={saving}>
@@ -337,14 +340,14 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
                   >
                     <span className="gd-member-rank">{i + 1}</span>
                     {m.avatar_url ? (
-                      <img src={m.avatar_url} alt="" className="gd-member-avatar-img" />
+                      <img src={m.avatar_url} alt="" className={`gd-member-avatar-img ${m.is_pro ? 'pro-avatar-frame' : ''}`} />
                     ) : (
-                      <div className="gd-member-avatar" style={{ background: `${mc}22`, color: mc }}>
+                      <div className={`gd-member-avatar ${m.is_pro ? 'pro-avatar-frame' : ''}`} style={{ background: `${mc}22`, color: mc }}>
                         {(m.first_name || '?')[0]}
                       </div>
                     )}
                     <div className="gd-member-info">
-                      <span className="gd-member-name">{m.first_name}</span>
+                      <span className="gd-member-name">{m.first_name}{m.is_pro && <span className="pro-user-badge pro-user-badge--sm">PRO</span>}</span>
                       {isOwner && <span className="gd-member-username">@{m.username}</span>}
                     </div>
                     {isKickTarget && !isMe ? (
@@ -371,7 +374,7 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
 }
 
 /* ── Create Guild Sheet ── */
-function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balance }) {
+function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balance, user }) {
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
   const [avatar, setAvatar] = useState(null)
@@ -410,9 +413,11 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
     reader.readAsDataURL(file)
   }
 
+  const createCost = user?.is_pro ? CREATE_COST_PRO : CREATE_COST
+
   async function handleCreate() {
     if (!canCreate || creating) return
-    if (balance < CREATE_COST) {
+    if (balance < createCost) {
       haptic('light')
       setError(t.guildsNotEnoughBalance)
       setTimeout(() => setError(''), 3000)
@@ -492,7 +497,10 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
         <div className="guilds-sheet-footer">
           <div className="guilds-sheet-cost">
             <span className="guilds-sheet-cost-label">{t.guildsCost}</span>
-            <span className="guilds-sheet-cost-amount">{formatCurrency(CREATE_COST, currency, rates)}</span>
+            <span className="guilds-sheet-cost-amount">
+              {user?.is_pro && <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)', marginRight: 6, fontSize: '0.85em' }}>{formatCurrency(CREATE_COST, currency, rates)}</span>}
+              {formatCurrency(createCost, currency, rates)}
+            </span>
           </div>
           {error && <div className="guilds-sheet-error">{error}</div>}
           <button
@@ -723,7 +731,7 @@ export default function Guilds() {
         : result.error
       return { error: msg }
     }
-    setBalance(balance - CREATE_COST)
+    setBalance(balance - (user?.is_pro ? CREATE_COST_PRO : CREATE_COST))
     await refreshGuildData()
     setCreateOpen(false)
     return { ok: true }
@@ -762,7 +770,7 @@ export default function Guilds() {
         : result.error
       return { error: msg }
     }
-    setBalance(balance - EDIT_COST)
+    setBalance(balance - (user?.is_pro ? EDIT_COST_PRO : EDIT_COST))
     await refreshGuildData()
     return { ok: true }
   }
@@ -993,7 +1001,7 @@ export default function Guilds() {
       </div>
 
       {/* Sheets */}
-      <CreateGuildSheet open={createOpen} onClose={closeCreate} onCreated={handleGuildCreated} t={t} currency={currency} rates={rates} balance={balance} />
+      <CreateGuildSheet open={createOpen} onClose={closeCreate} onCreated={handleGuildCreated} t={t} currency={currency} rates={rates} balance={balance} user={user} />
       <FindGuildSheet open={findOpen} onClose={closeFind} onJoined={handleJoinFromFind} t={t} currency={currency} rates={rates} topGuilds={topGuilds} userGuildId={guild?.id} />
       <GuildDetailSheet
         guild={selectedGuild}

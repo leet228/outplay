@@ -277,7 +277,7 @@ export default function App() {
         } catch (e) { console.warn('Cached user parse error:', e) }
       }
       // ── Dev fallback ──
-      setUser({ id: 'dev', first_name: 'Dev', username: 'dev', wins: 3, losses: 1 })
+      setUser({ id: 'dev', first_name: 'Dev', username: 'dev', wins: 3, losses: 1, is_pro: true })
       setBalance(500)
       store.setRank(1)
       store.setTotalPnl(575)
@@ -297,11 +297,11 @@ export default function App() {
         { id: '12m', months: 12, price: 3499, per_month: 292, savings: 2489 },
       ])
       store.setLeaderboard([
-        { id: '1',  first_name: 'Александр', username: 'alex_trade', balance: 4850, wins: 24, losses: 6 },
-        { id: '2',  first_name: 'Мария',     username: 'masha_win',  balance: 2130, wins: 18, losses: 9 },
+        { id: '1',  first_name: 'Александр', username: 'alex_trade', balance: 4850, wins: 24, losses: 6, is_pro: true },
+        { id: '2',  first_name: 'Мария',     username: 'masha_win',  balance: 2130, wins: 18, losses: 9, is_pro: true },
         { id: '3',  first_name: 'Дмитрий',   username: 'dmitry_x',   balance: 1740, wins: 21, losses: 8 },
         { id: '4',  first_name: 'Кирилл',    username: 'kirill_up',  balance: 1220, wins: 15, losses: 7 },
-        { id: '5',  first_name: 'Анна',      username: 'anna_pro',   balance: 980,  wins: 12, losses: 5 },
+        { id: '5',  first_name: 'Анна',      username: 'anna_pro',   balance: 980,  wins: 12, losses: 5, is_pro: true },
         { id: '6',  first_name: 'Сергей',    username: 'serg_bet',   balance: 760,  wins: 10, losses: 6 },
         { id: '7',  first_name: 'Оля',       username: 'olya_q',     balance: 530,  wins: 9,  losses: 8 },
         { id: '8',  first_name: 'Максим',    username: 'max_mm',     balance: 390,  wins: 8,  losses: 7 },
@@ -314,8 +314,8 @@ export default function App() {
         member_count: 8, pnl: 21500, creator_name: 'Dev',
       })
       store.setGuildMembers([
-        { user_id: 'dev', first_name: 'Dev',       username: 'dev',      role: 'creator', pnl: 8200 },
-        { user_id: '2',   first_name: 'Мария',     username: 'masha_q',  role: 'member',  pnl: 5400 },
+        { user_id: 'dev', first_name: 'Dev',       username: 'dev',      role: 'creator', pnl: 8200, is_pro: true },
+        { user_id: '2',   first_name: 'Мария',     username: 'masha_q',  role: 'member',  pnl: 5400, is_pro: true },
         { user_id: '3',   first_name: 'Дмитрий',   username: 'dima_iq',  role: 'member',  pnl: 3800 },
         { user_id: '4',   first_name: 'Кирилл',    username: 'kirill99', role: 'member',  pnl: 2100 },
         { user_id: '5',   first_name: 'Анна',      username: 'anna_win', role: 'member',  pnl: 1200 },
@@ -339,9 +339,9 @@ export default function App() {
         { id: '5', first_name: 'Анна',      username: 'anna_pro',   last_seen: new Date(Date.now() - 7200000).toISOString() },
       ])
       store.setFriends([
-        { id: '1', first_name: 'Александр', username: 'alex_trade', avatar_url: null, last_seen: new Date().toISOString() },
+        { id: '1', first_name: 'Александр', username: 'alex_trade', avatar_url: null, last_seen: new Date().toISOString(), is_pro: true },
         { id: '2', first_name: 'Мария',     username: 'masha_win',  avatar_url: null, last_seen: new Date(Date.now() - 120000).toISOString() },
-        { id: '5', first_name: 'Анна',      username: 'anna_pro',   avatar_url: null, last_seen: new Date(Date.now() - 7200000).toISOString() },
+        { id: '5', first_name: 'Анна',      username: 'anna_pro',   avatar_url: null, last_seen: new Date(Date.now() - 7200000).toISOString(), is_pro: true },
       ])
       store.setFriendRequests([
         { request_id: 'req1', from_user: { id: '3', first_name: 'Дмитрий', username: 'dmitry_x', avatar_url: null }, created_at: new Date(Date.now() - 3600000).toISOString() },

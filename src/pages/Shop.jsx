@@ -37,11 +37,10 @@ const STATIC_PLANS = PLAN_META.map((m, i) => ({
 }))
 
 const PRO_FEATURES = [
-  { emoji: '📊', key: 'proFeat1' },
-  { emoji: '⚡', key: 'proFeat2' },
-  { emoji: '🏆', key: 'proFeat3' },
-  { emoji: '💰', key: 'proFeat4' },
-  { emoji: '🎨', key: 'proFeat5' },
+  { emoji: '💰', key: 'proFeat1' },
+  { emoji: '👑', key: 'proFeat2' },
+  { emoji: '📊', key: 'proFeat3' },
+  { emoji: '🏰', key: 'proFeat4' },
 ]
 
 const REFERRAL_PAGE_SIZE = 20

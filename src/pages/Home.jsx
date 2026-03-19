@@ -554,7 +554,7 @@ const ONLINE_THRESHOLD = 5 * 60 * 1000 // 5 minutes
 
 function FriendAvatar({ user, showOnline }) {
   return (
-    <div className="friends-avatar-wrap">
+    <div className={`friends-avatar-wrap ${user.is_pro ? 'pro-avatar-frame' : ''}`}>
       {user.avatar_url
         ? <img className="friends-avatar" src={user.avatar_url} alt="" style={{ objectFit: 'cover' }} />
         : <div className="friends-avatar">{user.first_name?.[0] ?? '?'}</div>}
@@ -837,7 +837,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
                 <div key={inv.id} className="friends-row friends-invite-row">
                   <FriendAvatar user={sender || { first_name: '?' }} showOnline />
                   <div className="friends-info">
-                    <span className="friends-name">{sender?.first_name || '?'}</span>
+                    <span className="friends-name">{sender?.first_name || '?'}{sender?.is_pro && <span className="pro-user-badge pro-user-badge--sm">PRO</span>}</span>
                     <span className="friends-invite-meta">{gameIcon} {gameLabel} · {formatCurrency(inv.stake, currency, rates)}</span>
                   </div>
                   {!expired ? (
@@ -871,7 +871,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
               <div key={req.request_id} className="friends-row friends-request-row">
                 <FriendAvatar user={req.from_user} />
                 <div className="friends-info">
-                  <span className="friends-name">{req.from_user.first_name}</span>
+                  <span className="friends-name">{req.from_user.first_name}{req.from_user.is_pro && <span className="pro-user-badge pro-user-badge--sm">PRO</span>}</span>
                   {req.from_user.username && <span className="friends-username">@{req.from_user.username}</span>}
                 </div>
                 <div className="friends-req-actions">
@@ -945,7 +945,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
                       <div className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => { haptic('light'); setActiveId(prev => prev === f.id ? null : f.id); setConfirmRemoveId(null) }}>
                         <FriendAvatar user={f} showOnline />
                         <div className="friends-info">
-                          <span className="friends-name">{f.first_name}</span>
+                          <span className="friends-name">{f.first_name}{f.is_pro && <span className="pro-user-badge pro-user-badge--sm">PRO</span>}</span>
                           {f.username && <span className="friends-username">@{f.username}</span>}
                         </div>
                         {activeId === f.id && (() => {
@@ -982,7 +982,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
                       <div className={`friends-row ${activeId === f.id ? 'active' : ''}`} onClick={() => { haptic('light'); setActiveId(prev => prev === f.id ? null : f.id); setConfirmRemoveId(null) }}>
                         <FriendAvatar user={f} />
                         <div className="friends-info">
-                          <span className="friends-name">{f.first_name}</span>
+                          <span className="friends-name">{f.first_name}{f.is_pro && <span className="pro-user-badge pro-user-badge--sm">PRO</span>}</span>
                           {f.username && <span className="friends-username">@{f.username}</span>}
                         </div>
                         {activeId === f.id && (
@@ -1023,7 +1023,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
                   <div key={u.id} className="friends-row">
                     <FriendAvatar user={u} />
                     <div className="friends-info">
-                      <span className="friends-name">{u.first_name}</span>
+                      <span className="friends-name">{u.first_name}{u.is_pro && <span className="pro-user-badge pro-user-badge--sm">PRO</span>}</span>
                       {u.username && <span className="friends-username">@{u.username}</span>}
                     </div>
                     <div className="friends-search-action">
