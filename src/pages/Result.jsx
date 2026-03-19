@@ -77,12 +77,12 @@ export default function Result() {
       {tiebreak && timeDiff > 0 && (
         <div className={`result-tiebreak ${isWin ? 'win' : 'lose'}`}>
           <span className="result-tiebreak-title">
-            Одинаковое количество правильных ответов!
+            {tr.resultTieTitle || 'Одинаковое количество правильных ответов!'}
           </span>
           <span className="result-tiebreak-detail">
             {isWin
-              ? `Вы были быстрее на ${timeDiff} сек ⚡`
-              : `Вам не хватило ${timeDiff} сек до победы ⏱️`
+              ? (tr.resultTieFaster || 'Вы были быстрее на {s} сек ⚡').replace('{s}', timeDiff)
+              : (tr.resultTieSlower || 'Вам не хватило {s} сек до победы ⏱️').replace('{s}', timeDiff)
             }
           </span>
         </div>
@@ -91,15 +91,15 @@ export default function Result() {
       {/* Score */}
       <div className="result-score-card">
         <div className="result-score-row">
-          <span className="result-score-label">Вы</span>
+          <span className="result-score-label">{tr.resultYou || 'Вы'}</span>
           <div className="result-score-dots" />
-          <span className="result-score-val">{isBJ ? `${myScore} очков` : isSeq ? `${myScore}/${total} раундов` : `${myScore}/${total}`}</span>
+          <span className="result-score-val">{isBJ ? `${myScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${myScore}/${total} ${tr.resultRounds || 'раундов'}` : `${myScore}/${total}`}</span>
         </div>
         {oppScore !== null && oppScore !== undefined && (
           <div className="result-score-row">
-            <span className="result-score-label">Соперник</span>
+            <span className="result-score-label">{tr.resultOpponent || 'Соперник'}</span>
             <div className="result-score-dots" />
-            <span className="result-score-val">{isBJ ? `${oppScore} очков` : isSeq ? `${oppScore}/${total} раундов` : `${oppScore}/${total}`}</span>
+            <span className="result-score-val">{isBJ ? `${oppScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${oppScore}/${total} ${tr.resultRounds || 'раундов'}` : `${oppScore}/${total}`}</span>
           </div>
         )}
       </div>

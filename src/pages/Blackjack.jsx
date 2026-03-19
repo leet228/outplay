@@ -640,6 +640,8 @@ export default function Blackjack() {
   }
 
   function handleFinishedFromServer(finalState) {
+    if (gameOverRef.current) return
+    gameOverRef.current = true
     const p1 = isPlayer1Ref.current
     const d = deckRef.current
     setPhase('finished')
@@ -707,7 +709,12 @@ export default function Blackjack() {
     setAnimatingHit(true)
     setDeckSpread(false)
 
-    const res = await submitBlackjackAction(duelId, user.id, 'hit')
+    let res = await submitBlackjackAction(duelId, user.id, 'hit')
+    // Retry once on failure (network error could mean server got it)
+    if (!res || res.error) {
+      await new Promise(r => setTimeout(r, 1000))
+      res = await submitBlackjackAction(duelId, user.id, 'hit')
+    }
     actionInFlightRef.current = false
 
     if (!res || res.error) {
@@ -970,11 +977,15 @@ export default function Blackjack() {
     setResult({ won, draw: false, pScore, oScore: botScore, payout })
     if (won) { sound.victory(); sound.coin() } else { sound.defeat() }
 
-    // Finalize on server (if not dev mode)
+    // Finalize on server (if not dev mode) — retry once on failure
     if (!isDevDuel && duelInfo) {
       const creatorScore = pScore
       const opponentFinalScore = botScore
-      finalizeBlackjack(duelId, creatorScore, opponentFinalScore)
+      finalizeBlackjack(duelId, creatorScore, opponentFinalScore).then(fRes => {
+        if (!fRes || fRes.error) {
+          setTimeout(() => finalizeBlackjack(duelId, creatorScore, opponentFinalScore), 1500)
+        }
+      })
     }
 
     // Local stats update (PnL, leaderboard, guild, etc.)

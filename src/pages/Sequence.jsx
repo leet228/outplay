@@ -412,8 +412,12 @@ export default function Sequence() {
       oppScore = botResult.score
       const botTime = botResult.time
 
-      // Submit player result
-      await submitSequenceResult(duelId, user.id, myScore, myTime)
+      // Submit player result (retry once on failure)
+      let submitOk = await submitSequenceResult(duelId, user.id, myScore, myTime)
+      if (!submitOk) {
+        await new Promise(r => setTimeout(r, 1000))
+        submitOk = await submitSequenceResult(duelId, user.id, myScore, myTime)
+      }
 
       // Show waiting while bot "finishes"
       setWaitingOpponent(true)
@@ -421,7 +425,11 @@ export default function Sequence() {
       // Submit bot result (with realistic delay)
       const botDelay = Math.max(0.5, Math.min(4, botTime - myTime))
       await new Promise(r => setTimeout(r, Math.max(500, botDelay * 1000)))
-      await submitSequenceResult(duelId, BOT_USER_ID, oppScore, botTime)
+      let botSubmitOk = await submitSequenceResult(duelId, BOT_USER_ID, oppScore, botTime)
+      if (!botSubmitOk) {
+        await new Promise(r => setTimeout(r, 1000))
+        await submitSequenceResult(duelId, BOT_USER_ID, oppScore, botTime)
+      }
 
       // Fetch final duel state
       await new Promise(r => setTimeout(r, 500))
@@ -449,9 +457,13 @@ export default function Sequence() {
       payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
 
     } else {
-      // PvP — submit own result, wait for opponent
+      // PvP — submit own result, wait for opponent (retry once on failure)
       setWaitingOpponent(true)
-      await submitSequenceResult(duelId, user.id, myScore, myTime)
+      let pvpSubmitOk = await submitSequenceResult(duelId, user.id, myScore, myTime)
+      if (!pvpSubmitOk) {
+        await new Promise(r => setTimeout(r, 1000))
+        await submitSequenceResult(duelId, user.id, myScore, myTime)
+      }
 
       // Poll for finished state
       let finalDuel = null
