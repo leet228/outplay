@@ -90,8 +90,8 @@ export default function Profile() {
   const [withdrawError, setWithdrawError] = useState(false)
   const withdrawTimer = useRef(null)
 
-  const MIN_WITHDRAW = 1000
-  const canWithdraw = balance >= MIN_WITHDRAW
+  const MIN_WITHDRAW_RUB = 2000
+  const canWithdraw = balance >= MIN_WITHDRAW_RUB
 
   function handleWithdraw() {
     haptic('light')
@@ -202,7 +202,7 @@ export default function Profile() {
           </button>
         </div>
         <div className={`withdraw-error ${withdrawError ? 'visible' : ''}`}>
-          {t.withdrawMin.replace('{amount}', formatCurrency(MIN_WITHDRAW, currency, rates))}
+          {t.withdrawMin.replace('{amount}', formatCurrency(MIN_WITHDRAW_RUB, currency, rates))}
         </div>
       </div>
 
