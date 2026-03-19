@@ -5,6 +5,12 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// PRO commission helper: PRO users pay 2.5% rake, regular 5%
+export function calcPayout(stake, isPro) {
+  const mult = isPro ? 0.975 : 0.95
+  return Math.floor(stake * 2 * mult)
+}
+
 // Users
 export async function getOrCreateUser(telegramUser, referrerId = null) {
   const { data: existing } = await supabase

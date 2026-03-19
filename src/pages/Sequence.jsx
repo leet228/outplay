@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
-import { supabase, getSequenceDuel, submitSequenceResult } from '../lib/supabase'
+import { supabase, getSequenceDuel, submitSequenceResult, calcPayout } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
 import sound from '../lib/sounds'
 import './Sequence.css'
@@ -393,7 +393,7 @@ export default function Sequence() {
         timeDiff = Math.round(Math.abs(myTime - botTime) * 10) / 10
         won = myTime <= botTime
       }
-      payout = won ? Math.floor(duel.stake * 2 * 0.95) : 0
+      payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
       tiebreak = tiebreak || false
       timeDiff = timeDiff || 0
 
@@ -437,7 +437,7 @@ export default function Sequence() {
         tiebreak = false
         timeDiff = 0
       }
-      payout = won ? Math.floor(duel.stake * 2 * 0.95) : 0
+      payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
 
     } else {
       // PvP — submit own result, wait for opponent
@@ -468,7 +468,7 @@ export default function Sequence() {
         tiebreak = false
         timeDiff = 0
       }
-      payout = won ? Math.floor(duel.stake * 2 * 0.95) : 0
+      payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
     }
 
     // Local state updates

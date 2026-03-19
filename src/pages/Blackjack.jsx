@@ -10,6 +10,7 @@ import {
   finalizeBlackjack,
   BOT_USER_ID,
   supabase,
+  calcPayout,
 } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
 import sound from '../lib/sounds'
@@ -928,7 +929,7 @@ export default function Blackjack() {
     // bot_should_win=true means BOT wins → user loses, so won = !shouldWin
     const won = !shouldWin
 
-    const payout = won ? Math.floor(stake * 2 * 0.95) : 0
+    const payout = won ? calcPayout(stake, user?.is_pro) : 0
     setResult({ won, draw: false, pScore, oScore: botScore, payout })
     if (won) { sound.victory(); sound.coin() } else { sound.defeat() }
 
@@ -986,7 +987,7 @@ export default function Blackjack() {
 
     // Use ref for stake — avoids stale closure in realtime handlers
     const currentStake = stakeRef.current || stake
-    const payout = won ? Math.floor(currentStake * 2 * 0.95) : 0
+    const payout = won ? calcPayout(currentStake, user?.is_pro) : 0
     setResult({ won, draw: false, pScore, oScore, payout })
     if (won) { sound.victory(); sound.coin() } else { sound.defeat() }
 

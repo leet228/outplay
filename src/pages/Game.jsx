@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
-import { supabase, submitAnswer, BOT_USER_ID } from '../lib/supabase'
+import { supabase, submitAnswer, BOT_USER_ID, calcPayout } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { updateLocalStats } from '../lib/gameUtils'
@@ -437,7 +437,7 @@ export default function Game() {
         timeDiff = Math.round(Math.abs(myTime - botTime) * 10) / 10
         won = myTime <= botTime
       }
-      payout = won ? Math.floor(duel.stake * 2 * 0.95) : 0
+      payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
     } else {
       // Production — fetch from DB, wait for finalization
       await new Promise(r => setTimeout(r, 500))
@@ -473,7 +473,7 @@ export default function Game() {
 
         if (finalDuel.winner_id === user.id) {
           won = true
-          payout = Math.floor(duel.stake * 2 * 0.95)
+          payout = calcPayout(duel.stake, user?.is_pro)
         } else {
           won = false
           payout = 0

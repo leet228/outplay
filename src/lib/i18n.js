@@ -297,7 +297,10 @@ export const translations = {
     proSuccessTitle: 'Добро пожаловать в PRO!',
     proSuccessText: 'Теперь ты получаешь больше за каждую победу',
     proSuccessBtn: 'Отлично!',
-    proStatsTitle: 'Статистика по категориям',
+    proStatsTitle: 'Статистика по играм',
+    gameQuiz: 'Викторина',
+    gameBlackjack: 'Блэкджек',
+    gameSequence: 'Последовательность',
 
     // Referral
     refTitle: 'Реферальная программа',
@@ -613,7 +616,10 @@ export const translations = {
     proSuccessTitle: 'Welcome to PRO!',
     proSuccessText: 'You now earn more for every win',
     proSuccessBtn: 'Awesome!',
-    proStatsTitle: 'Stats by category',
+    proStatsTitle: 'Stats by game',
+    gameQuiz: 'Quiz',
+    gameBlackjack: 'Blackjack',
+    gameSequence: 'Sequence',
 
     // Referral
     refTitle: 'Referral Program',
