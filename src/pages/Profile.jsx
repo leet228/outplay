@@ -17,8 +17,12 @@ function getRankDisplay(rank) {
   if (rank <= 50) return { label: '25+', color: '#8B5CF6', bg: '#8B5CF618' }
   if (rank <= 100) return { label: '50+', color: '#6B7280', bg: '#6B728018' }
   if (rank <= 250) return { label: '100+', color: '#6B7280', bg: '#6B728018' }
-  if (rank <= 500) return { label: '250+', color: '#4B5563', bg: '#4B556318' }
-  return { label: '500+', color: '#4B5563', bg: '#4B556318' }
+  if (rank <= 500)   return { label: '250+', color: '#4B5563', bg: '#4B556318' }
+  if (rank <= 1000)  return { label: '500+', color: '#4B5563', bg: '#4B556318' }
+  if (rank <= 2000)  return { label: '1000+', color: '#4B5563', bg: '#4B556318' }
+  if (rank <= 5000)  return { label: '2000+', color: '#4B5563', bg: '#4B556318' }
+  if (rank <= 10000) return { label: '5000+', color: '#4B5563', bg: '#4B556318' }
+  return { label: '10000+', color: '#4B5563', bg: '#4B556318' }
 }
 
 // Local YYYY-MM-DD (NOT UTC — avoids timezone shift)
