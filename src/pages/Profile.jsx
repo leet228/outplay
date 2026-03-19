@@ -76,9 +76,11 @@ export default function Profile() {
         setTotalPnl(profile.total_pnl ?? 0)
         setDailyStats(profile.daily_stats ?? [])
         setRefEarnings(profile.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
+        if (profile.game_stats) setGameStats(profile.game_stats)
       }
     })
   }, [user?.id])
+  const [gameStats, setGameStats] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
   const [withdrawError, setWithdrawError] = useState(false)
@@ -317,10 +319,10 @@ export default function Profile() {
             </span>
           </div>
           <div className="pro-stats-bars">
-            {(user.game_stats || [
-              { game: 'quiz', wins: 8, total: 12 },
-              { game: 'blackjack', wins: 5, total: 9 },
-              { game: 'sequence', wins: 3, total: 6 },
+            {(gameStats || [
+              { game: 'quiz', wins: 0, total: 0 },
+              { game: 'blackjack', wins: 0, total: 0 },
+              { game: 'sequence', wins: 0, total: 0 },
             ]).map(g => {
               const wr = g.total > 0 ? Math.round((g.wins / g.total) * 100) : 0
               const labels = {
