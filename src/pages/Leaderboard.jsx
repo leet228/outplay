@@ -5,11 +5,13 @@ import { formatCurrency } from '../lib/currency'
 import './Leaderboard.css'
 
 function approxRank(rank) {
-  if (rank > 1000) return '1000+'
-  if (rank > 500)  return '500+'
-  if (rank > 100)  return '100+'
-  if (rank > 50)   return '50+'
-  return `#${rank}`
+  if (rank <= 10)  return `#${rank}`
+  if (rank <= 25)  return '10+'
+  if (rank <= 50)  return '25+'
+  if (rank <= 100) return '50+'
+  if (rank <= 250) return '100+'
+  if (rank <= 500) return '250+'
+  return '500+'
 }
 
 const RANK_COLORS = ['#f59e0b', '#94a3b8', '#b07040']
