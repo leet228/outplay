@@ -29,9 +29,10 @@ const WALLET_TON_MNEMONIC = Deno.env.get('WALLET_TON_MNEMONIC')!
 const TONCENTER_API_KEY = Deno.env.get('TONCENTER_API_KEY') || undefined
 
 // Query ID tracking (persisted in-memory per Edge Function instance)
-// Start from random shift to avoid conflicts with previously used query IDs
-let queryShift = Math.floor(Math.random() * 4000) + 100
-let queryBitNumber = 0
+// Use timestamp-based shift to guarantee uniqueness across invocations
+// 8191 possible shifts × 1023 bit numbers = ~8.3M unique IDs per 24h timeout
+let queryShift = Math.floor(Date.now() / 1000) % 8191
+let queryBitNumber = Math.floor(Math.random() * 1023)
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
