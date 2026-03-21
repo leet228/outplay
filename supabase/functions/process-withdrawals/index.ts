@@ -166,10 +166,9 @@ async function sendSingleTransfer(
 
   if (memo) {
     const textBytes = new TextEncoder().encode(memo)
-    const bodyCell = beginCell()
-      .storeUint(0, 32) // text comment prefix
-      .storeBuffer(new Uint8Array(textBytes) as any)
-      .endCell()
+    const bodyBuilder = beginCell().storeUint(0, 32) // text comment prefix
+    for (const b of textBytes) bodyBuilder.storeUint(b, 8)
+    const bodyCell = bodyBuilder.endCell()
     msgBuilder.storeUint(0, 1 + 4 + 4 + 64 + 32) // no state init fields
     msgBuilder.storeBit(false) // no state init
     msgBuilder.storeBit(true)  // body as ref
