@@ -5,7 +5,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 // TON wallet address (same as in src/lib/addresses.js)
-const TON_ADDRESS = 'UQBMTQ2VRSwRbvthtGTIB7Tip37yqueFw8SnVvWB7y18F47t'
+const TON_ADDRESS = 'UQDsqlvskoZupLe-DFTwffYIqMIXxq6ghYSqh_PjIfOHz_bC'
 
 // Minimum deposit in RUB (1 star = 1 RUB)
 const MIN_RUB = 200
