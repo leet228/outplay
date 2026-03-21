@@ -11,10 +11,9 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
-  TonClient, internal,
-  Address, toNano, Cell, beginCell, Dictionary,
-  Contract, ContractProvider, Sender, SendMode,
-  contractAddress, StateInit,
+  TonClient,
+  Address, toNano, Cell, beginCell,
+  SendMode, contractAddress, StateInit,
 } from 'npm:@ton/ton@15'
 import { mnemonicToPrivateKey, sign } from 'npm:@ton/crypto@3'
 
@@ -174,17 +173,13 @@ async function sendBatch(
   const contractState = await client.getContractState(walletAddress)
   const isDeployed = contractState.state === 'active'
 
-  // Build internal messages
+  // Build internal messages manually (no `internal()` — avoid serialization issues in Deno)
   const outMsgs = messages.map(msg => {
-    const internalMsg = internal({
-      to: msg.to,
-      value: msg.value,
-      body: msg.body || undefined,
-      bounce: false,
-    })
-    // Serialize the internal message to a Cell
     const msgCell = beginCell()
-      .store(internalMsg as any) // storeMessageRelaxed
+      .storeUint(0x10, 6)        // internal message, no bounce
+      .storeAddress(msg.to)       // dest
+      .storeCoins(msg.value)      // value
+      .storeUint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1) // no extra, no state init, no body
       .endCell()
     return { mode: SendMode.PAY_GAS_SEPARATELY, outMsg: msgCell }
   })
