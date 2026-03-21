@@ -1,30 +1,28 @@
 /**
  * process-withdrawals — Supabase Edge Function
- * Loops through ALL pending withdrawals, processing one at a time.
+ * Uses Highload Wallet V3 to batch-send ALL pending withdrawals in one tx.
  * Called by pg_cron every minute + frontend ping after each request.
  *
- * TON wallets use seqno (sequential nonce) — only one tx at a time.
- * The SQL function pick_pending_withdrawal() guards against concurrent
- * execution: if any withdrawal is 'processing', it returns nothing.
- * Stuck withdrawals (>5 min) are auto-failed and refunded.
+ * Highload V3 can send up to 254 messages in a single transaction,
+ * eliminating the sequential seqno bottleneck of WalletContractV4.
  *
  * Wall-clock limit: 50s (Edge Function timeout = 60s, leave 10s margin).
- * Each TON send takes ~10-30s, so we process 2-4 withdrawals per call.
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-
-// @ton/* — use npm: specifiers (Deno supports npm packages)
-// Import Address and toNano from @ton/ton (re-exports from @ton/core)
-// to avoid version mismatch between separate @ton/core import
-import { TonClient, WalletContractV4, internal, Address, toNano } from 'npm:@ton/ton@15'
+import { TonClient } from 'npm:@ton/ton@15'
+import { Address, toNano, internal, SendMode } from 'npm:@ton/core@latest'
 import { mnemonicToPrivateKey } from 'npm:@ton/crypto@3'
+import { HighloadWalletV3 } from 'npm:@tonkite/highload-wallet-v3@latest'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const WALLET_TON_MNEMONIC = Deno.env.get('WALLET_TON_MNEMONIC')!
 const TONCENTER_API_KEY = Deno.env.get('TONCENTER_API_KEY') || undefined
+// Persist query ID sequence across invocations (in-memory for Edge Function)
+const QUERY_ID_KEY = 'HIGHLOAD_QUERY_ID'
+let queryIdValue: bigint | null = null
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,9 +30,7 @@ const corsHeaders = {
 }
 
 const TONCENTER_ENDPOINT = 'https://toncenter.com/api/v2/jsonRPC'
-const CONFIRMATION_TIMEOUT_MS = 45_000 // 45s per tx (leave room for loop overhead)
-const POLL_INTERVAL_MS = 2_000
-const WALL_CLOCK_LIMIT_MS = 50_000 // stop picking new work after 50s
+const MAX_BATCH_SIZE = 200 // Highload V3 supports 254, keep margin
 
 let supabase: ReturnType<typeof createClient>
 function getSupabase() {
@@ -72,7 +68,7 @@ async function fetchWithRetry(url: string, retries = 3, delayMs = 500): Promise<
   throw new Error(`Failed to fetch ${url} after ${retries} retries`)
 }
 
-// ── Price helpers (fetched once per invocation, reused in loop) ──
+// ── Price helpers ──
 
 async function getUsdRubRate(): Promise<number> {
   try {
@@ -99,7 +95,7 @@ async function getTonPriceRub(): Promise<number> {
   }
 }
 
-// ── TON wallet ──
+// ── TON Highload V3 wallet ──
 
 function getTonClient() {
   return new TonClient({
@@ -108,134 +104,80 @@ function getTonClient() {
   })
 }
 
+async function getKeyPair() {
+  return await mnemonicToPrivateKey(WALLET_TON_MNEMONIC.split(' '))
+}
+
 async function getWalletBalance(): Promise<number> {
   if (!WALLET_TON_MNEMONIC) return 0
-  const keyPair = await mnemonicToPrivateKey(WALLET_TON_MNEMONIC.split(' '))
-  const wallet = WalletContractV4.create({ workchain: 0, publicKey: keyPair.publicKey })
+  const keyPair = await getKeyPair()
   const client = getTonClient()
+  const queryIdSequence = HighloadWalletV3.newSequence()
+  const wallet = client.open(new HighloadWalletV3(queryIdSequence, keyPair.publicKey))
   const balance = await client.getBalance(wallet.address)
   return Number(balance) / 1e9
 }
 
-async function sendTon(toAddress: string, amountTon: number, memo = ''): Promise<{ success: true; seqno: number }> {
+interface WithdrawalRow {
+  id: string
+  user_id: string
+  net_rub: number
+  ton_amount: number | null
+  ton_address: string
+  memo: string
+}
+
+interface BatchResult {
+  completed: string[]
+  failed: string[]
+  totalTon: number
+}
+
+async function sendBatchTon(
+  withdrawals: { address: string; amountTon: number; memo: string; id: string }[]
+): Promise<{ success: true }> {
   if (!WALLET_TON_MNEMONIC) throw new Error('WALLET_TON_MNEMONIC not configured')
+  if (withdrawals.length === 0) throw new Error('Empty batch')
 
-  const keyPair = await mnemonicToPrivateKey(WALLET_TON_MNEMONIC.split(' '))
-  const wallet = WalletContractV4.create({ workchain: 0, publicKey: keyPair.publicKey })
+  const keyPair = await getKeyPair()
   const client = getTonClient()
-  const contract = client.open(wallet)
 
-  // Parse and re-stringify address to normalize format
-  const dest = Address.parse(toAddress)
-  const destStr = dest.toString({ bounceable: true })
-  console.log(`[ton] Destination: ${destStr}`)
-
-  const seqno = await contract.getSeqno()
-
-  await contract.sendTransfer({
-    seqno,
-    secretKey: keyPair.secretKey,
-    messages: [
-      internal({
-        to: destStr,
-        value: toNano(amountTon.toFixed(9)),
-        body: memo || undefined,
-      }),
-    ],
-  })
-
-  console.log(`[ton] Transfer sent: ${amountTon} TON → ${toAddress} (seqno ${seqno})`)
-
-  // Wait for seqno increment (confirmation)
-  const deadline = Date.now() + CONFIRMATION_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS))
-    try {
-      const newSeqno = await contract.getSeqno()
-      if (newSeqno > seqno) {
-        console.log(`[ton] Confirmed: seqno ${seqno} → ${newSeqno}`)
-        return { success: true, seqno: newSeqno }
-      }
-    } catch (e) {
-      console.warn('[ton] Poll error:', (e as Error).message)
-    }
-  }
-  throw new Error(`Transaction not confirmed after ${CONFIRMATION_TIMEOUT_MS / 1000}s`)
-}
-
-// ── Process single withdrawal ──
-
-interface ProcessResult {
-  completed?: boolean
-  failed?: boolean
-  skipped?: boolean
-  withdrawal_id?: string
-  ton_amount?: number
-  reason?: string
-  error?: string
-}
-
-async function processOne(sb: ReturnType<typeof createClient>, tonPriceRub: number): Promise<ProcessResult> {
-  // Pick next pending (SQL guards against concurrent execution)
-  const { data: rows, error: pickErr } = await sb.rpc('pick_pending_withdrawal')
-
-  if (pickErr) {
-    console.error('Pick error:', pickErr.message)
-    return { error: pickErr.message }
-  }
-
-  const wd = Array.isArray(rows) ? rows[0] : rows
-  if (!wd) return { skipped: true, reason: 'empty_queue' }
-
-  console.log(`Processing #${wd.id}: ${wd.net_rub} RUB → ${wd.ton_address}`)
-
-  // If ton_amount is already set (admin withdrawal), use it directly
-  // Otherwise convert net_rub → TON using current price
-  let tonRounded: number
-  if (wd.ton_amount && Number(wd.ton_amount) > 0) {
-    tonRounded = Math.floor(Number(wd.ton_amount) * 1e9) / 1e9
-    console.log(`Admin withdrawal: using pre-set ${tonRounded} TON`)
+  // Restore or create query ID sequence
+  let queryIdSequence: ReturnType<typeof HighloadWalletV3.newSequence>
+  if (queryIdValue !== null) {
+    queryIdSequence = HighloadWalletV3.restoreSequence(queryIdValue)
   } else {
-    const tonAmount = wd.net_rub / tonPriceRub
-    tonRounded = Math.floor(tonAmount * 1e9) / 1e9
+    queryIdSequence = HighloadWalletV3.newSequence()
   }
 
-  if (tonRounded <= 0.001) {
-    await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: `TON amount too small: ${tonRounded}` })
-    return { failed: true, withdrawal_id: wd.id, reason: 'ton_amount_too_small' }
-  }
+  const wallet = client.open(new HighloadWalletV3(queryIdSequence, keyPair.publicKey))
 
-  // Check hot wallet balance
-  const walletBalance = await getWalletBalance()
-  if (walletBalance < tonRounded + 0.05) {
-    await sb.rpc('fail_withdrawal', {
-      p_withdrawal_id: wd.id,
-      p_error: `Hot wallet balance too low: ${walletBalance.toFixed(4)} TON`,
-    })
-    await logToAdmin('error', 'Wallet balance low', { wallet_balance: walletBalance, needed: tonRounded + 0.05 })
-    return { failed: true, withdrawal_id: wd.id, reason: 'wallet_low_balance' }
-  }
-
-  // Send TON
-  console.log(`Sending ${tonRounded} TON (${wd.net_rub} RUB @ ${tonPriceRub.toFixed(2)} RUB/TON)`)
-  const result = await sendTon(wd.ton_address, tonRounded, wd.memo || '')
-
-  // Mark completed
-  const txRef = `seqno:${result.seqno}`
-  await sb.rpc('complete_withdrawal', {
-    p_withdrawal_id: wd.id,
-    p_tx_hash: txRef,
-    p_ton_amount: tonRounded,
+  const messages = withdrawals.map(wd => {
+    const dest = Address.parse(wd.address)
+    return {
+      mode: SendMode.PAY_GAS_SEPARATELY as number,
+      message: internal({
+        to: dest,
+        value: toNano(wd.amountTon.toFixed(9)),
+        body: wd.memo || undefined,
+      }),
+    }
   })
 
-  console.log(`Completed #${wd.id}: ${tonRounded} TON`)
-  return { completed: true, withdrawal_id: wd.id, ton_amount: tonRounded }
+  console.log(`[highload-v3] Sending batch of ${messages.length} transfers`)
+
+  await wallet.sendBatch(keyPair.secretKey, { messages })
+
+  // Save query ID for next invocation
+  queryIdValue = queryIdSequence.current()
+
+  console.log(`[highload-v3] Batch sent successfully`)
+  return { success: true }
 }
 
-// ── Main: loop until queue empty or wall-clock limit ──
+// ── Main: pick all pending, batch-send ──
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -249,70 +191,161 @@ serve(async (req) => {
 
     const sb = getSupabase()
 
-    // Fetch TON price once (reuse for all withdrawals in this batch)
+    // Auto-fail stuck 'processing' withdrawals (> 5 min)
+    await sb.rpc('cleanup_stuck_withdrawals')
+
+    // Fetch TON price once
     const tonPriceRub = await getTonPriceRub()
     if (!tonPriceRub || tonPriceRub <= 0) {
       await logToAdmin('error', 'Cannot fetch TON price, skipping run')
       return jsonResponse({ error: 'price_unavailable' })
     }
 
-    const results: ProcessResult[] = []
-    let completed = 0
-    let failed = 0
+    // Pick ALL pending withdrawals (batch)
+    const { data: pending, error: pickErr } = await sb
+      .from('withdrawals')
+      .select('id, user_id, net_rub, ton_amount, ton_address, memo')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+      .limit(MAX_BATCH_SIZE)
 
-    // Loop: process withdrawals one by one until queue empty or time limit
-    while (Date.now() - startTime < WALL_CLOCK_LIMIT_MS) {
-      try {
-        const result = await processOne(sb, tonPriceRub)
+    if (pickErr) {
+      console.error('Pick error:', pickErr.message)
+      return jsonResponse({ error: pickErr.message })
+    }
 
-        if (result.skipped) break // queue empty
-        if (result.error) { failed++; break } // DB error, stop
+    if (!pending || pending.length === 0) {
+      return jsonResponse({ completed: 0, failed: 0, reason: 'empty_queue', ton_price_rub: tonPriceRub })
+    }
 
-        results.push(result)
-        if (result.completed) completed++
-        if (result.failed) failed++
+    // Check if any withdrawal is already processing (another worker active)
+    const { count: processingCount } = await sb
+      .from('withdrawals')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'processing')
 
-        // Small pause between sends to let seqno settle
-        await new Promise(r => setTimeout(r, 500))
+    if (processingCount && processingCount > 0) {
+      return jsonResponse({ completed: 0, failed: 0, reason: 'worker_active', ton_price_rub: tonPriceRub })
+    }
 
-      } catch (err) {
-        console.error('Process error in loop:', err)
+    // Mark all as 'processing' atomically
+    const ids = pending.map((w: WithdrawalRow) => w.id)
+    await sb
+      .from('withdrawals')
+      .update({ status: 'processing' })
+      .in('id', ids)
 
-        // Try to fail the current 'processing' withdrawal
-        try {
-          const { data: stuck } = await sb
-            .from('withdrawals')
-            .select('id')
-            .eq('status', 'processing')
-            .limit(1)
-            .single()
+    console.log(`Processing batch of ${pending.length} withdrawals`)
 
-          if (stuck) {
-            await sb.rpc('fail_withdrawal', {
-              p_withdrawal_id: stuck.id,
-              p_error: (err as Error).message,
-            })
-            failed++
-            console.log(`Refunded stuck withdrawal ${stuck.id}`)
-          }
-        } catch (refundErr) {
-          console.error('Refund error:', refundErr)
-        }
+    // Calculate TON amounts and validate
+    const validWithdrawals: { address: string; amountTon: number; memo: string; id: string }[] = []
+    const failedIds: string[] = []
 
-        // Don't continue loop after a send error — seqno might be in bad state
-        break
+    for (const wd of pending as WithdrawalRow[]) {
+      let tonRounded: number
+
+      if (wd.ton_amount && Number(wd.ton_amount) > 0) {
+        tonRounded = Math.floor(Number(wd.ton_amount) * 1e9) / 1e9
+      } else {
+        const tonAmount = wd.net_rub / tonPriceRub
+        tonRounded = Math.floor(tonAmount * 1e9) / 1e9
       }
+
+      if (tonRounded <= 0.001) {
+        await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: `TON amount too small: ${tonRounded}` })
+        failedIds.push(wd.id)
+        continue
+      }
+
+      validWithdrawals.push({
+        address: wd.ton_address,
+        amountTon: tonRounded,
+        memo: wd.memo || '',
+        id: wd.id,
+      })
     }
 
-    const elapsed = Date.now() - startTime
-    const summary = { completed, failed, total: results.length, ton_price_rub: tonPriceRub, elapsed_ms: elapsed }
-    console.log('Batch summary:', JSON.stringify(summary))
-
-    if (completed > 0 || failed > 0) {
-      await logToAdmin('info', `Withdrawal batch: ${completed} ok, ${failed} failed`, summary)
+    if (validWithdrawals.length === 0) {
+      return jsonResponse({ completed: 0, failed: failedIds.length, ton_price_rub: tonPriceRub })
     }
 
-    return jsonResponse(summary)
+    // Check wallet balance covers total
+    const totalTon = validWithdrawals.reduce((sum, w) => sum + w.amountTon, 0)
+    const walletBalance = await getWalletBalance()
+    const gasReserve = 0.1 + validWithdrawals.length * 0.01 // ~0.01 TON per message + 0.1 reserve
+
+    if (walletBalance < totalTon + gasReserve) {
+      // Fail all and refund
+      for (const wd of validWithdrawals) {
+        await sb.rpc('fail_withdrawal', {
+          p_withdrawal_id: wd.id,
+          p_error: `Hot wallet balance too low: ${walletBalance.toFixed(4)} TON, needed: ${(totalTon + gasReserve).toFixed(4)}`,
+        })
+        failedIds.push(wd.id)
+      }
+      await logToAdmin('error', 'Wallet balance too low for batch', {
+        wallet_balance: walletBalance,
+        needed: totalTon + gasReserve,
+        batch_size: validWithdrawals.length,
+      })
+      return jsonResponse({ completed: 0, failed: failedIds.length, reason: 'wallet_low_balance', ton_price_rub: tonPriceRub })
+    }
+
+    // Send batch via Highload V3
+    try {
+      await sendBatchTon(validWithdrawals)
+
+      // Mark all as completed
+      for (const wd of validWithdrawals) {
+        await sb.rpc('complete_withdrawal', {
+          p_withdrawal_id: wd.id,
+          p_tx_hash: `highload-batch-${Date.now()}`,
+          p_ton_amount: wd.amountTon,
+        })
+      }
+
+      const elapsed = Date.now() - startTime
+      const summary = {
+        completed: validWithdrawals.length,
+        failed: failedIds.length,
+        total_ton: totalTon,
+        ton_price_rub: tonPriceRub,
+        elapsed_ms: elapsed,
+        batch_mode: 'highload-v3',
+      }
+      console.log('Batch summary:', JSON.stringify(summary))
+      await logToAdmin('info', `Withdrawal batch: ${validWithdrawals.length} ok, ${failedIds.length} failed`, summary)
+
+      return jsonResponse(summary)
+
+    } catch (sendErr) {
+      console.error('Batch send error:', sendErr)
+
+      // Fail all withdrawals in the batch and refund
+      for (const wd of validWithdrawals) {
+        try {
+          await sb.rpc('fail_withdrawal', {
+            p_withdrawal_id: wd.id,
+            p_error: (sendErr as Error).message,
+          })
+          failedIds.push(wd.id)
+        } catch (refundErr) {
+          console.error(`Refund error for ${wd.id}:`, refundErr)
+        }
+      }
+
+      await logToAdmin('error', 'Highload batch send failed', {
+        error: (sendErr as Error).message,
+        batch_size: validWithdrawals.length,
+      })
+
+      return jsonResponse({
+        completed: 0,
+        failed: failedIds.length,
+        error: (sendErr as Error).message,
+        ton_price_rub: tonPriceRub,
+      })
+    }
 
   } catch (err) {
     console.error('Fatal error:', err)
