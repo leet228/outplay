@@ -154,16 +154,31 @@ async function sendSingleTransfer(
   publicKey: Uint8Array,
   to: Address,
   value: bigint,
+  memo?: string,
 ): Promise<void> {
   const walletAddress = getWalletAddress(publicKey)
 
-  // Build internal message
-  const internalMsg = beginCell()
+  // Build internal message with optional memo (comment)
+  const msgBuilder = beginCell()
     .storeUint(0x10, 6)        // int_msg_info, no bounce
     .storeAddress(to)
     .storeCoins(value)
-    .storeUint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
-    .endCell()
+
+  if (memo) {
+    const textBytes = new TextEncoder().encode(memo)
+    const bodyCell = beginCell()
+      .storeUint(0, 32) // text comment prefix
+      .storeBuffer(new Uint8Array(textBytes) as any)
+      .endCell()
+    msgBuilder.storeUint(0, 1 + 4 + 4 + 64 + 32) // no state init fields
+    msgBuilder.storeBit(false) // no state init
+    msgBuilder.storeBit(true)  // body as ref
+    msgBuilder.storeRef(bodyCell)
+  } else {
+    msgBuilder.storeUint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1) // no state init, no body
+  }
+
+  const internalMsg = msgBuilder.endCell()
 
   const qid = nextQueryId()
   const queryId = qid.shift * 1024 + qid.bitNumber
@@ -207,10 +222,10 @@ async function sendBatch(
   client: TonClient,
   secretKey: Uint8Array,
   publicKey: Uint8Array,
-  messages: { to: Address; value: bigint }[]
+  messages: { to: Address; value: bigint; memo?: string }[]
 ): Promise<void> {
   for (const msg of messages) {
-    await sendSingleTransfer(client, secretKey, publicKey, msg.to, msg.value)
+    await sendSingleTransfer(client, secretKey, publicKey, msg.to, msg.value, msg.memo)
     // Small delay between sends to avoid rate limiting
     if (messages.length > 1) {
       await new Promise(r => setTimeout(r, 300))
@@ -329,6 +344,7 @@ serve(async (req) => {
       const messages = validWithdrawals.map(wd => ({
         to: Address.parse(wd.address),
         value: toNano(wd.amountTon.toFixed(9)),
+        memo: wd.memo || undefined,
       }))
 
       await sendBatch(client, keyPair.secretKey, keyPair.publicKey, messages)
