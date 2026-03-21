@@ -87,6 +87,10 @@ BEGIN
 
   IF NEW.details IS NOT NULL AND NEW.details::text != '{}' AND NEW.details::text != 'null' THEN
     v_details := LEFT(NEW.details::text, 500);
+    -- Escape HTML entities to prevent Telegram parse errors
+    v_details := REPLACE(v_details, '&', '&amp;');
+    v_details := REPLACE(v_details, '<', '&lt;');
+    v_details := REPLACE(v_details, '>', '&gt;');
     v_msg := v_msg || chr(10) || '<pre>' || v_details || '</pre>';
   END IF;
 

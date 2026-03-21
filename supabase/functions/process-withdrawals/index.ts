@@ -10,8 +10,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// Use esm.sh to resolve peer dependency conflicts between @tonkite and @ton/ton
-import { TonClient } from 'npm:@ton/ton@15'
+// All @ton packages pinned to compatible versions (core@0.56.3)
+import { TonClient } from 'npm:@ton/ton@13'
 import { Address, toNano, internal, SendMode } from 'npm:@ton/core@0.56.3'
 import { mnemonicToPrivateKey } from 'npm:@ton/crypto@3'
 import { HighloadWalletV3 } from 'npm:@tonkite/highload-wallet-v3@3'
