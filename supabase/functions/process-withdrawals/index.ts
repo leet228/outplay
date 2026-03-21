@@ -29,7 +29,8 @@ const WALLET_TON_MNEMONIC = Deno.env.get('WALLET_TON_MNEMONIC')!
 const TONCENTER_API_KEY = Deno.env.get('TONCENTER_API_KEY') || undefined
 
 // Query ID tracking (persisted in-memory per Edge Function instance)
-let queryShift = 0
+// Start from random shift to avoid conflicts with previously used query IDs
+let queryShift = Math.floor(Math.random() * 4000) + 100
 let queryBitNumber = 0
 
 const corsHeaders = {
@@ -187,7 +188,7 @@ async function sendBatch(
   const actionList = packActions(outMsgs)
   const qid = nextQueryId()
   const queryId = BigInt(qid.shift) * 1024n + BigInt(qid.bitNumber)
-  const createdAt = Math.floor(Date.now() / 1000) - 30 // small offset to ensure validity
+  const createdAt = Math.floor(Date.now() / 1000) - 10 // small offset to ensure validity
 
   // Build signing message
   const signingMessage = beginCell()
