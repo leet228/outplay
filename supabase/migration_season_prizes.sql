@@ -116,8 +116,8 @@ BEGIN
     ELSE
       -- No positive-PnL members → creator gets the members pool too
       UPDATE users SET balance = balance + v_members_pool WHERE id = v_guild.creator_id;
-      UPDATE transactions SET amount = amount + v_members_pool
-      WHERE user_id = v_guild.creator_id AND type = 'guild_prize' AND ref_id = p_season_id;
+      INSERT INTO transactions (user_id, type, amount, ref_id)
+      VALUES (v_guild.creator_id, 'guild_prize', v_members_pool, p_season_id);
       v_distributed := v_distributed + v_members_pool;
     END IF;
 
