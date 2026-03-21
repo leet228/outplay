@@ -146,56 +146,36 @@ function nextQueryId(): { shift: number; bitNumber: number } {
   return result
 }
 
-function packActions(messages: { mode: number; outMsg: Cell }[]): Cell {
-  // Pack messages into action list (right to left)
-  let actionList = beginCell().endCell()
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i]
-    actionList = beginCell()
-      .storeRef(actionList)
-      .storeUint(0x0ec3c86d, 32) // action_send_msg
-      .storeUint(msg.mode, 8)
-      .storeRef(msg.outMsg)
-      .endCell()
-  }
-  return actionList
-}
-
-async function sendBatch(
+// Send a single transfer via Highload V3
+// Each withdrawal = one external message with direct ref to internal message
+async function sendSingleTransfer(
   client: TonClient,
   secretKey: Uint8Array,
   publicKey: Uint8Array,
-  messages: { to: Address; value: bigint; body?: string }[]
+  to: Address,
+  value: bigint,
 ): Promise<void> {
   const walletAddress = getWalletAddress(publicKey)
-  const stateInit = getWalletStateInit(publicKey)
 
-  // Check if contract is deployed
-  const contractState = await client.getContractState(walletAddress)
-  const isDeployed = contractState.state === 'active'
+  // Build internal message
+  const internalMsg = beginCell()
+    .storeUint(0x10, 6)        // int_msg_info, no bounce
+    .storeAddress(to)
+    .storeCoins(value)
+    .storeUint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+    .endCell()
 
-  // Build internal messages manually (no `internal()` — avoid serialization issues in Deno)
-  const outMsgs = messages.map(msg => {
-    const msgCell = beginCell()
-      .storeUint(0x10, 6)        // internal message, no bounce
-      .storeAddress(msg.to)       // dest
-      .storeCoins(msg.value)      // value
-      .storeUint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1) // no extra, no state init, no body
-      .endCell()
-    return { mode: SendMode.PAY_GAS_SEPARATELY, outMsg: msgCell }
-  })
-
-  const actionList = packActions(outMsgs)
   const qid = nextQueryId()
-  const queryId = BigInt(qid.shift) * 1024n + BigInt(qid.bitNumber)
-  const createdAt = Math.floor(Date.now() / 1000) - 10 // small offset to ensure validity
+  const queryId = qid.shift * 1024 + qid.bitNumber
+  const createdAt = Math.floor(Date.now() / 1000) - 10
+  const mode = SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS
 
-  // Build signing message
+  // Signing message: subwalletId → ref(message) → mode → queryId → createdAt → timeout
   const signingMessage = beginCell()
     .storeUint(SUBWALLET_ID, 32)
-    .storeRef(actionList)
-    .storeUint(SendMode.PAY_GAS_SEPARATELY, 8)
-    .storeUint(queryId, 23) // shift(13) + bitNumber(10)
+    .storeRef(internalMsg)
+    .storeUint(mode, 8)
+    .storeUint(queryId, 23)
     .storeUint(createdAt, 64)
     .storeUint(TIMEOUT, 22)
     .endCell()
@@ -207,38 +187,36 @@ async function sendBatch(
     .storeRef(signingMessage)
     .endCell()
 
-  // Build external message
-  const ext = beginCell()
-    .storeUint(0b10, 2) // ext_in_msg_info
-    .storeUint(0, 2)    // src: addr_none
-    .storeAddress(walletAddress) // dest
-    .storeCoins(0)       // import_fee
-    .storeBit(isDeployed ? false : true) // state_init present?
+  const extMsg = beginCell()
+    .storeUint(0b10, 2)
+    .storeUint(0, 2)
+    .storeAddress(walletAddress)
+    .storeCoins(0)
+    .storeBit(false)  // no state init (already deployed)
+    .storeBit(true)   // body as ref
+    .storeRef(body)
+    .endCell()
 
-  if (!isDeployed) {
-    // Include state init for deployment
-    ext.storeBit(true) // state init as ref
-    ext.storeRef(
-      beginCell()
-        .storeBit(false) // split_depth
-        .storeBit(false) // special
-        .storeBit(true)  // code present
-        .storeRef(stateInit.code!)
-        .storeBit(true)  // data present
-        .storeRef(stateInit.data!)
-        .storeBit(false) // library
-        .endCell()
-    )
-  }
-
-  ext.storeBit(true) // body as ref
-  ext.storeRef(body)
-
-  const extMsg = ext.endCell()
-
-  // Send via TonCenter
   await client.sendFile(extMsg.toBoc())
-  console.log(`[highload-v3] External message sent, deployed=${isDeployed}, queryId=${queryId}`)
+  console.log(`[highload-v3] Sent transfer, queryId=${queryId}`)
+}
+
+// Send multiple transfers — each as separate external message
+// Highload V3 processes them without seqno blocking (parallel-safe)
+async function sendBatch(
+  client: TonClient,
+  secretKey: Uint8Array,
+  publicKey: Uint8Array,
+  messages: { to: Address; value: bigint }[]
+): Promise<void> {
+  for (const msg of messages) {
+    await sendSingleTransfer(client, secretKey, publicKey, msg.to, msg.value)
+    // Small delay between sends to avoid rate limiting
+    if (messages.length > 1) {
+      await new Promise(r => setTimeout(r, 300))
+    }
+  }
+  console.log(`[highload-v3] Batch of ${messages.length} transfers sent`)
 }
 
 // ── Main ──
@@ -351,10 +329,9 @@ serve(async (req) => {
       const messages = validWithdrawals.map(wd => ({
         to: Address.parse(wd.address),
         value: toNano(wd.amountTon.toFixed(9)),
-        body: wd.memo || undefined,
       }))
 
-      await sendBatch(client, keyPair.secretKey, keyPair.publicKey, messages as any)
+      await sendBatch(client, keyPair.secretKey, keyPair.publicKey, messages)
 
       // Mark all completed
       const txRef = `highload-${Date.now()}`
