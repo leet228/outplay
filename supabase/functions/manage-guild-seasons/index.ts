@@ -78,6 +78,21 @@ serve(async (_req) => {
       } else {
         console.log(`✅ Closed expired season ${activeSeason.id}, prize_pool=${activeSeason.prize_pool}`)
         actions.push(`closed_season: ${activeSeason.id}, prize_pool=${activeSeason.prize_pool}`)
+
+        // Distribute prizes to top guilds and their members
+        if (activeSeason.prize_pool > 0) {
+          const { data: prizeResult, error: prizeErr } = await sb.rpc('distribute_season_prizes', {
+            p_season_id: activeSeason.id,
+          })
+          if (prizeErr) {
+            console.error('Prize distribution error:', prizeErr)
+            await logToAdmin('error', 'Failed to distribute season prizes', { season_id: activeSeason.id, error: prizeErr.message })
+          } else {
+            console.log(`✅ Prizes distributed:`, prizeResult)
+            actions.push(`prizes_distributed: ${JSON.stringify(prizeResult)}`)
+          }
+        }
+
         await logToAdmin('info', 'Closed expired guild season', {
           season_id: activeSeason.id,
           prize_pool: activeSeason.prize_pool,
