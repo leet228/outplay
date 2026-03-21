@@ -115,7 +115,7 @@ BEGIN
   v_amount := ABS(NEW.amount)::TEXT;
 
   v_msg := '💸 Вывод ' || v_amount || ' ₽ оформлен' || chr(10) ||
-           'Ожидайте зачисления в течение 24ч';
+           'Ожидайте зачисления в течение 2 минут';
 
   PERFORM notify_user(v_tg_id, v_msg);
   RETURN NEW;

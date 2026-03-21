@@ -5,23 +5,24 @@
  *
  * Highload V3 can send up to 254 messages in a single transaction,
  * eliminating the sequential seqno bottleneck of WalletContractV4.
- *
- * Wall-clock limit: 50s (Edge Function timeout = 60s, leave 10s margin).
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+// Use esm.sh to resolve peer dependency conflicts between @tonkite and @ton/ton
 import { TonClient } from 'npm:@ton/ton@15'
-import { Address, toNano, internal, SendMode } from 'npm:@ton/core@latest'
+import { Address, toNano, internal, SendMode } from 'npm:@ton/core@0.56.3'
 import { mnemonicToPrivateKey } from 'npm:@ton/crypto@3'
-import { HighloadWalletV3 } from 'npm:@tonkite/highload-wallet-v3@latest'
+import { HighloadWalletV3 } from 'npm:@tonkite/highload-wallet-v3@3'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const WALLET_TON_MNEMONIC = Deno.env.get('WALLET_TON_MNEMONIC')!
 const TONCENTER_API_KEY = Deno.env.get('TONCENTER_API_KEY') || undefined
-// Persist query ID sequence across invocations (in-memory for Edge Function)
-const QUERY_ID_KEY = 'HIGHLOAD_QUERY_ID'
+const WALLET_ADDRESS = 'UQDsqlvskoZupLe-DFTwffYIqMIXxq6ghYSqh_PjIfOHz_bC'
+
+// Persist query ID sequence value across invocations (in-memory)
 let queryIdValue: bigint | null = null
 
 const corsHeaders = {
@@ -30,7 +31,8 @@ const corsHeaders = {
 }
 
 const TONCENTER_ENDPOINT = 'https://toncenter.com/api/v2/jsonRPC'
-const MAX_BATCH_SIZE = 200 // Highload V3 supports 254, keep margin
+const MAX_BATCH_SIZE = 200
+const WALL_CLOCK_LIMIT_MS = 50_000
 
 let supabase: ReturnType<typeof createClient>
 function getSupabase() {
@@ -109,33 +111,19 @@ async function getKeyPair() {
 }
 
 async function getWalletBalance(): Promise<number> {
-  if (!WALLET_TON_MNEMONIC) return 0
-  const keyPair = await getKeyPair()
   const client = getTonClient()
-  const queryIdSequence = HighloadWalletV3.newSequence()
-  const wallet = client.open(new HighloadWalletV3(queryIdSequence, keyPair.publicKey))
-  const balance = await client.getBalance(wallet.address)
+  const balance = await client.getBalance(Address.parse(WALLET_ADDRESS))
   return Number(balance) / 1e9
 }
 
-interface WithdrawalRow {
-  id: string
-  user_id: string
-  net_rub: number
-  ton_amount: number | null
-  ton_address: string
+interface WithdrawalItem {
+  address: string
+  amountTon: number
   memo: string
+  id: string
 }
 
-interface BatchResult {
-  completed: string[]
-  failed: string[]
-  totalTon: number
-}
-
-async function sendBatchTon(
-  withdrawals: { address: string; amountTon: number; memo: string; id: string }[]
-): Promise<{ success: true }> {
+async function sendBatchTon(withdrawals: WithdrawalItem[]): Promise<{ success: true }> {
   if (!WALLET_TON_MNEMONIC) throw new Error('WALLET_TON_MNEMONIC not configured')
   if (withdrawals.length === 0) throw new Error('Empty batch')
 
@@ -143,39 +131,31 @@ async function sendBatchTon(
   const client = getTonClient()
 
   // Restore or create query ID sequence
-  let queryIdSequence: ReturnType<typeof HighloadWalletV3.newSequence>
-  if (queryIdValue !== null) {
-    queryIdSequence = HighloadWalletV3.restoreSequence(queryIdValue)
-  } else {
-    queryIdSequence = HighloadWalletV3.newSequence()
-  }
+  const queryIdSequence = queryIdValue !== null
+    ? HighloadWalletV3.restoreSequence(queryIdValue)
+    : HighloadWalletV3.newSequence()
 
   const wallet = client.open(new HighloadWalletV3(queryIdSequence, keyPair.publicKey))
 
-  const messages = withdrawals.map(wd => {
-    const dest = Address.parse(wd.address)
-    return {
-      mode: SendMode.PAY_GAS_SEPARATELY as number,
-      message: internal({
-        to: dest,
-        value: toNano(wd.amountTon.toFixed(9)),
-        body: wd.memo || undefined,
-      }),
-    }
-  })
+  const messages = withdrawals.map(wd => ({
+    mode: SendMode.PAY_GAS_SEPARATELY as number,
+    message: internal({
+      to: Address.parse(wd.address),
+      value: toNano(wd.amountTon.toFixed(9)),
+      body: wd.memo || undefined,
+    }),
+  }))
 
   console.log(`[highload-v3] Sending batch of ${messages.length} transfers`)
-
   await wallet.sendBatch(keyPair.secretKey, { messages })
 
   // Save query ID for next invocation
   queryIdValue = queryIdSequence.current()
-
   console.log(`[highload-v3] Batch sent successfully`)
   return { success: true }
 }
 
-// ── Main: pick all pending, batch-send ──
+// ── Main ──
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -201,7 +181,17 @@ serve(async (req) => {
       return jsonResponse({ error: 'price_unavailable' })
     }
 
-    // Pick ALL pending withdrawals (batch)
+    // Check if any withdrawal is already processing
+    const { count: processingCount } = await sb
+      .from('withdrawals')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'processing')
+
+    if (processingCount && processingCount > 0) {
+      return jsonResponse({ completed: 0, failed: 0, reason: 'worker_active', ton_price_rub: tonPriceRub })
+    }
+
+    // Pick ALL pending withdrawals
     const { data: pending, error: pickErr } = await sb
       .from('withdrawals')
       .select('id, user_id, net_rub, ton_amount, ton_address, memo')
@@ -218,37 +208,23 @@ serve(async (req) => {
       return jsonResponse({ completed: 0, failed: 0, reason: 'empty_queue', ton_price_rub: tonPriceRub })
     }
 
-    // Check if any withdrawal is already processing (another worker active)
-    const { count: processingCount } = await sb
-      .from('withdrawals')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'processing')
-
-    if (processingCount && processingCount > 0) {
-      return jsonResponse({ completed: 0, failed: 0, reason: 'worker_active', ton_price_rub: tonPriceRub })
-    }
-
-    // Mark all as 'processing' atomically
-    const ids = pending.map((w: WithdrawalRow) => w.id)
-    await sb
-      .from('withdrawals')
-      .update({ status: 'processing' })
-      .in('id', ids)
+    // Mark all as 'processing'
+    const ids = pending.map((w: { id: string }) => w.id)
+    await sb.from('withdrawals').update({ status: 'processing' }).in('id', ids)
 
     console.log(`Processing batch of ${pending.length} withdrawals`)
 
     // Calculate TON amounts and validate
-    const validWithdrawals: { address: string; amountTon: number; memo: string; id: string }[] = []
+    const validWithdrawals: WithdrawalItem[] = []
     const failedIds: string[] = []
 
-    for (const wd of pending as WithdrawalRow[]) {
+    for (const wd of pending) {
       let tonRounded: number
 
       if (wd.ton_amount && Number(wd.ton_amount) > 0) {
         tonRounded = Math.floor(Number(wd.ton_amount) * 1e9) / 1e9
       } else {
-        const tonAmount = wd.net_rub / tonPriceRub
-        tonRounded = Math.floor(tonAmount * 1e9) / 1e9
+        tonRounded = Math.floor((wd.net_rub / tonPriceRub) * 1e9) / 1e9
       }
 
       if (tonRounded <= 0.001) {
@@ -257,37 +233,27 @@ serve(async (req) => {
         continue
       }
 
-      validWithdrawals.push({
-        address: wd.ton_address,
-        amountTon: tonRounded,
-        memo: wd.memo || '',
-        id: wd.id,
-      })
+      validWithdrawals.push({ address: wd.ton_address, amountTon: tonRounded, memo: wd.memo || '', id: wd.id })
     }
 
     if (validWithdrawals.length === 0) {
       return jsonResponse({ completed: 0, failed: failedIds.length, ton_price_rub: tonPriceRub })
     }
 
-    // Check wallet balance covers total
+    // Check wallet balance
     const totalTon = validWithdrawals.reduce((sum, w) => sum + w.amountTon, 0)
     const walletBalance = await getWalletBalance()
-    const gasReserve = 0.1 + validWithdrawals.length * 0.01 // ~0.01 TON per message + 0.1 reserve
+    const gasReserve = 0.1 + validWithdrawals.length * 0.01
 
     if (walletBalance < totalTon + gasReserve) {
-      // Fail all and refund
       for (const wd of validWithdrawals) {
         await sb.rpc('fail_withdrawal', {
           p_withdrawal_id: wd.id,
-          p_error: `Hot wallet balance too low: ${walletBalance.toFixed(4)} TON, needed: ${(totalTon + gasReserve).toFixed(4)}`,
+          p_error: `Wallet balance too low: ${walletBalance.toFixed(4)} TON`,
         })
         failedIds.push(wd.id)
       }
-      await logToAdmin('error', 'Wallet balance too low for batch', {
-        wallet_balance: walletBalance,
-        needed: totalTon + gasReserve,
-        batch_size: validWithdrawals.length,
-      })
+      await logToAdmin('error', 'Wallet balance too low for batch', { wallet_balance: walletBalance, needed: totalTon + gasReserve })
       return jsonResponse({ completed: 0, failed: failedIds.length, reason: 'wallet_low_balance', ton_price_rub: tonPriceRub })
     }
 
@@ -295,63 +261,35 @@ serve(async (req) => {
     try {
       await sendBatchTon(validWithdrawals)
 
-      // Mark all as completed
+      // Mark all completed
+      const txRef = `highload-${Date.now()}`
       for (const wd of validWithdrawals) {
-        await sb.rpc('complete_withdrawal', {
-          p_withdrawal_id: wd.id,
-          p_tx_hash: `highload-batch-${Date.now()}`,
-          p_ton_amount: wd.amountTon,
-        })
+        await sb.rpc('complete_withdrawal', { p_withdrawal_id: wd.id, p_tx_hash: txRef, p_ton_amount: wd.amountTon })
       }
 
       const elapsed = Date.now() - startTime
-      const summary = {
-        completed: validWithdrawals.length,
-        failed: failedIds.length,
-        total_ton: totalTon,
-        ton_price_rub: tonPriceRub,
-        elapsed_ms: elapsed,
-        batch_mode: 'highload-v3',
-      }
+      const summary = { completed: validWithdrawals.length, failed: failedIds.length, total_ton: totalTon, ton_price_rub: tonPriceRub, elapsed_ms: elapsed, batch_mode: 'highload-v3' }
       console.log('Batch summary:', JSON.stringify(summary))
       await logToAdmin('info', `Withdrawal batch: ${validWithdrawals.length} ok, ${failedIds.length} failed`, summary)
-
       return jsonResponse(summary)
 
     } catch (sendErr) {
       console.error('Batch send error:', sendErr)
-
-      // Fail all withdrawals in the batch and refund
       for (const wd of validWithdrawals) {
         try {
-          await sb.rpc('fail_withdrawal', {
-            p_withdrawal_id: wd.id,
-            p_error: (sendErr as Error).message,
-          })
+          await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: (sendErr as Error).message })
           failedIds.push(wd.id)
-        } catch (refundErr) {
-          console.error(`Refund error for ${wd.id}:`, refundErr)
+        } catch (e) {
+          console.error(`Refund error for ${wd.id}:`, e)
         }
       }
-
-      await logToAdmin('error', 'Highload batch send failed', {
-        error: (sendErr as Error).message,
-        batch_size: validWithdrawals.length,
-      })
-
-      return jsonResponse({
-        completed: 0,
-        failed: failedIds.length,
-        error: (sendErr as Error).message,
-        ton_price_rub: tonPriceRub,
-      })
+      await logToAdmin('error', 'Highload batch send failed', { error: (sendErr as Error).message, batch_size: validWithdrawals.length })
+      return jsonResponse({ completed: 0, failed: failedIds.length, error: (sendErr as Error).message, ton_price_rub: tonPriceRub })
     }
 
   } catch (err) {
     console.error('Fatal error:', err)
-    await logToAdmin('error', 'process-withdrawals fatal: ' + (err as Error).message, {
-      stack: (err as Error).stack,
-    })
+    await logToAdmin('error', 'process-withdrawals fatal: ' + (err as Error).message, { stack: (err as Error).stack })
     return jsonResponse({ error: (err as Error).message }, 500)
   }
 })
