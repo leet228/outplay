@@ -98,13 +98,23 @@ async function getTonPriceRub(): Promise<number> {
   } catch { return 0 }
 }
 
+// ── Helpers ──
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16)
+  }
+  return bytes
+}
+
 // ── Highload Wallet V3 implementation ──
 
 function getHighloadCode(): Cell {
-  return Cell.fromBoc(Buffer.from(HIGHLOAD_V3_CODE_HEX, 'hex'))[0]
+  return Cell.fromBoc(hexToBytes(HIGHLOAD_V3_CODE_HEX))[0]
 }
 
-function buildInitData(publicKey: Buffer): Cell {
+function buildInitData(publicKey: Uint8Array): Cell {
   return beginCell()
     .storeBuffer(publicKey, 32)
     .storeUint(SUBWALLET_ID, 32)
@@ -115,13 +125,13 @@ function buildInitData(publicKey: Buffer): Cell {
     .endCell()
 }
 
-function getWalletAddress(publicKey: Buffer): Address {
+function getWalletAddress(publicKey: Uint8Array): Address {
   const code = getHighloadCode()
   const data = buildInitData(publicKey)
   return contractAddress(0, { code, data })
 }
 
-function getWalletStateInit(publicKey: Buffer): StateInit {
+function getWalletStateInit(publicKey: Uint8Array): StateInit {
   return { code: getHighloadCode(), data: buildInitData(publicKey) }
 }
 
@@ -153,8 +163,8 @@ function packActions(messages: { mode: number; outMsg: Cell }[]): Cell {
 
 async function sendBatch(
   client: TonClient,
-  secretKey: Buffer,
-  publicKey: Buffer,
+  secretKey: Uint8Array,
+  publicKey: Uint8Array,
   messages: { to: Address; value: bigint; body?: string }[]
 ): Promise<void> {
   const walletAddress = getWalletAddress(publicKey)
