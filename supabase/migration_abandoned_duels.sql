@@ -2,28 +2,16 @@
 -- ║  Migration: Автоматический таймаут заброшенных PvP-дуэлей ║
 -- ╚═══════════════════════════════════════════════════════════╝
 
--- 1. Добавляем тип транзакции duel_refund
-ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check;
-ALTER TABLE transactions ADD CONSTRAINT transactions_type_check
-  CHECK (type IN (
-    'deposit','withdrawal','withdrawal_refund',
-    'duel_win','duel_loss','duel_draw','duel_refund',
-    'referral_bonus',
-    'guild_create','guild_edit',
-    'guild_prize',
-    'subscription'
-  ));
-
--- 2. Индекс для быстрого поиска зависших активных дуэлей
+-- 1. Индекс для быстрого поиска зависших активных дуэлей
 CREATE INDEX IF NOT EXISTS idx_duels_active_created
   ON duels(created_at) WHERE status = 'active';
 
--- 3. Функция автоматической очистки заброшенных дуэлей
+-- 2. Функция автоматической очистки заброшенных дуэлей
 --    Логика:
 --      • Один играл, другой вышел → победа тому, кто играл (payout с рейком)
---      • Оба вышли → возврат ставок обоим (cancelled)
+--      • Оба вышли → ставки сгорают (cancelled, без возврата)
 --      • Бот-игры пропускаются
---    Таймауты: quiz/sequence 3 мин, blackjack 10 мин
+--    Таймаут: 3 минуты для всех типов игр
 
 DROP FUNCTION IF EXISTS cleanup_abandoned_duels();
 
@@ -44,23 +32,19 @@ DECLARE
   v_season_id      UUID;
   v_actual_score   INTEGER;
   v_count_win      INTEGER := 0;
-  v_count_refund   INTEGER := 0;
+  v_count_burn     INTEGER := 0;
   v_count_skip     INTEGER := 0;
   v_answer_count   INTEGER;
 BEGIN
   -- Активный сезон гильдий (для guild_fee)
   SELECT id INTO v_season_id FROM guild_seasons WHERE is_active = true LIMIT 1;
 
-  -- Перебираем все зависшие активные PvP-дуэли
+  -- Перебираем все зависшие активные PvP-дуэли (3 мин для всех типов)
   FOR v_duel IN
     SELECT * FROM duels
     WHERE status = 'active'
       AND is_bot_game = false
-      AND (
-        (game_type IN ('quiz', 'sequence') AND created_at < NOW() - INTERVAL '3 minutes')
-        OR
-        (game_type = 'blackjack' AND created_at < NOW() - INTERVAL '10 minutes')
-      )
+      AND created_at < NOW() - INTERVAL '3 minutes'
     FOR UPDATE SKIP LOCKED
   LOOP
     v_creator_played := false;
@@ -117,12 +101,11 @@ BEGIN
         UPDATE guild_seasons SET prize_pool = prize_pool + v_guild_fee WHERE id = v_season_id;
       END IF;
 
-      -- Считаем реальный счёт для quiz, для остальных используем имеющийся
+      -- Реальный счёт для quiz, имеющийся для остальных
       IF v_duel.game_type = 'quiz' THEN
         SELECT COUNT(*) INTO v_actual_score
         FROM duel_answers WHERE duel_id = v_duel.id AND user_id = v_winner AND is_correct = true;
       ELSE
-        -- Sequence/Blackjack — берём score который уже записан
         IF v_winner = v_duel.creator_id THEN
           v_actual_score := COALESCE(v_duel.creator_score, 1);
         ELSE
@@ -130,22 +113,14 @@ BEGIN
         END IF;
       END IF;
 
-      -- Записываем scores и финализируем дуэль
+      -- Финализируем дуэль
       IF v_winner = v_duel.creator_id THEN
-        UPDATE duels SET
-          creator_score = v_actual_score,
-          opponent_score = 0,
-          status = 'finished',
-          winner_id = v_winner,
-          finished_at = NOW()
+        UPDATE duels SET creator_score = v_actual_score, opponent_score = 0,
+          status = 'finished', winner_id = v_winner, finished_at = NOW()
         WHERE id = v_duel.id;
       ELSE
-        UPDATE duels SET
-          creator_score = 0,
-          opponent_score = v_actual_score,
-          status = 'finished',
-          winner_id = v_winner,
-          finished_at = NOW()
+        UPDATE duels SET creator_score = 0, opponent_score = v_actual_score,
+          status = 'finished', winner_id = v_winner, finished_at = NOW()
         WHERE id = v_duel.id;
       END IF;
 
@@ -157,85 +132,59 @@ BEGIN
       INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
       VALUES (v_winner, CURRENT_DATE, v_payout - v_duel.stake, 1, 1)
       ON CONFLICT (user_id, date)
-      DO UPDATE SET
-        pnl = user_daily_stats.pnl + (v_payout - v_duel.stake),
-        games = user_daily_stats.games + 1,
-        wins = user_daily_stats.wins + 1;
-
+      DO UPDATE SET pnl = user_daily_stats.pnl + (v_payout - v_duel.stake),
+        games = user_daily_stats.games + 1, wins = user_daily_stats.wins + 1;
       PERFORM update_guild_pnl_after_duel(v_winner, v_payout - v_duel.stake);
 
       -- Статистика проигравшего (баланс уже списан при матчинге)
       UPDATE users SET losses = losses + 1 WHERE id = v_loser;
-
       INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
       VALUES (v_loser, CURRENT_DATE, -v_duel.stake, 1, 0)
       ON CONFLICT (user_id, date)
-      DO UPDATE SET
-        pnl = user_daily_stats.pnl - v_duel.stake,
-        games = user_daily_stats.games + 1;
-
+      DO UPDATE SET pnl = user_daily_stats.pnl - v_duel.stake, games = user_daily_stats.games + 1;
       PERFORM update_guild_pnl_after_duel(v_loser, -v_duel.stake);
 
-      PERFORM admin_log('info', 'cleanup:abandoned_duels',
-        'Abandoned duel resolved: winner awarded',
-        jsonb_build_object(
-          'duel_id', v_duel.id,
-          'winner', v_winner,
-          'loser', v_loser,
-          'game_type', v_duel.game_type,
-          'stake', v_duel.stake,
-          'payout', v_payout
-        ));
-
+      PERFORM admin_log('info', 'cleanup:abandoned_duels', 'Winner awarded',
+        jsonb_build_object('duel_id', v_duel.id, 'winner', v_winner, 'loser', v_loser,
+          'game_type', v_duel.game_type, 'stake', v_duel.stake, 'payout', v_payout));
       v_count_win := v_count_win + 1;
 
     ELSE
-      -- ── КЕЙС 2: оба вышли → возврат ставок ──
+      -- ── КЕЙС 2: оба вышли → ставки сгорают ──
       UPDATE duels SET status = 'cancelled', finished_at = NOW() WHERE id = v_duel.id;
 
-      UPDATE users SET balance = balance + v_duel.stake WHERE id = v_duel.creator_id;
-      UPDATE users SET balance = balance + v_duel.stake WHERE id = v_duel.opponent_id;
+      -- Статистика проигрыша для обоих
+      UPDATE users SET losses = losses + 1 WHERE id = v_duel.creator_id;
+      UPDATE users SET losses = losses + 1 WHERE id = v_duel.opponent_id;
 
-      INSERT INTO transactions (user_id, type, amount, ref_id) VALUES
-        (v_duel.creator_id, 'duel_refund', v_duel.stake, v_duel.id),
-        (v_duel.opponent_id, 'duel_refund', v_duel.stake, v_duel.id);
+      INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
+      VALUES (v_duel.creator_id, CURRENT_DATE, -v_duel.stake, 1, 0)
+      ON CONFLICT (user_id, date)
+      DO UPDATE SET pnl = user_daily_stats.pnl - v_duel.stake, games = user_daily_stats.games + 1;
 
-      PERFORM admin_log('info', 'cleanup:abandoned_duels',
-        'Abandoned duel: both players refunded',
-        jsonb_build_object(
-          'duel_id', v_duel.id,
-          'creator_id', v_duel.creator_id,
-          'opponent_id', v_duel.opponent_id,
-          'game_type', v_duel.game_type,
-          'stake', v_duel.stake
-        ));
+      INSERT INTO user_daily_stats (user_id, date, pnl, games, wins)
+      VALUES (v_duel.opponent_id, CURRENT_DATE, -v_duel.stake, 1, 0)
+      ON CONFLICT (user_id, date)
+      DO UPDATE SET pnl = user_daily_stats.pnl - v_duel.stake, games = user_daily_stats.games + 1;
 
-      v_count_refund := v_count_refund + 1;
+      PERFORM admin_log('info', 'cleanup:abandoned_duels', 'Both abandoned — stakes burned',
+        jsonb_build_object('duel_id', v_duel.id, 'creator_id', v_duel.creator_id,
+          'opponent_id', v_duel.opponent_id, 'game_type', v_duel.game_type, 'stake', v_duel.stake));
+      v_count_burn := v_count_burn + 1;
     END IF;
   END LOOP;
 
-  -- Итоговый лог (только если что-то нашли)
-  IF v_count_win > 0 OR v_count_refund > 0 THEN
-    PERFORM admin_log('info', 'cleanup:abandoned_duels',
-      'Cleanup completed',
-      jsonb_build_object(
-        'wins_awarded', v_count_win,
-        'refunds', v_count_refund,
-        'skipped', v_count_skip
-      ));
+  IF v_count_win > 0 OR v_count_burn > 0 THEN
+    PERFORM admin_log('info', 'cleanup:abandoned_duels', 'Cleanup completed',
+      jsonb_build_object('wins_awarded', v_count_win, 'stakes_burned', v_count_burn, 'skipped', v_count_skip));
   END IF;
 
-  RETURN jsonb_build_object(
-    'wins_awarded', v_count_win,
-    'refunds', v_count_refund,
-    'skipped', v_count_skip
-  );
-
+  RETURN jsonb_build_object('wins_awarded', v_count_win, 'stakes_burned', v_count_burn, 'skipped', v_count_skip);
 EXCEPTION WHEN OTHERS THEN
   PERFORM admin_log('error', 'cleanup:abandoned_duels', SQLERRM, '{}'::jsonb);
   RETURN jsonb_build_object('error', SQLERRM);
 END;
 $$;
 
--- 4. Расписание pg_cron (выполнить вручную в Supabase SQL Editor):
+-- 3. Расписание pg_cron (выполнить вручную в Supabase SQL Editor):
 -- SELECT cron.schedule('cleanup-abandoned-duels', '*/2 * * * *', 'SELECT cleanup_abandoned_duels()');
