@@ -70,6 +70,7 @@ export default function Profile() {
   const t = translations[lang]
   const photoUrl = window.Telegram?.WebApp?.initDataUnsafe?.user?.photo_url
   const [tooltip, setTooltip] = useState(null)
+  const [gameStats, setGameStats] = useState(null)
 
   // Refresh profile data + balance + user stats from server on mount
   useEffect(() => {
@@ -84,7 +85,6 @@ export default function Profile() {
       }
     })
   }, [user?.id])
-  const [gameStats, setGameStats] = useState(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
   const [withdrawError, setWithdrawError] = useState(false)
