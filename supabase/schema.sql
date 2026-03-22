@@ -701,13 +701,13 @@ BEGIN
     RETURN jsonb_build_object('status', 'error', 'error', 'bot_disabled');
   END IF;
 
-  -- 2. Проверяем что юзер ещё в очереди (не нашёл человека)
-  IF NOT EXISTS (SELECT 1 FROM matchmaking_queue WHERE user_id = p_user_id) THEN
+  -- 2+3. Атомарно удаляем юзера из очереди (защита от race condition с find_match)
+  DELETE FROM matchmaking_queue WHERE user_id = p_user_id;
+  GET DIAGNOSTICS v_affected = ROW_COUNT;
+  IF v_affected = 0 THEN
+    -- Юзер уже не в очереди — find_match забрал его раньше
     RETURN jsonb_build_object('status', 'error', 'error', 'not_in_queue');
   END IF;
-
-  -- 3. Удаляем из очереди
-  DELETE FROM matchmaking_queue WHERE user_id = p_user_id;
 
   -- 4. Баланс
   SELECT balance INTO v_my_balance FROM users WHERE id = p_user_id;
