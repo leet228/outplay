@@ -43,7 +43,7 @@ export const translations = {
     sheetBjRule3: 'Перебор = проигрыш, но если у обоих перебор — ближе к 21 выигрывает',
     sheetStakeLabel: 'Ставка',
     sheetStakeHint: 'Можно выбрать несколько — матч начнётся по той ставке, где первым найдётся соперник',
-    sheetPlay: 'В бой!',
+    sheetPlay: 'Играть!',
     sheetSearching: 'Ищем соперника...',
     sheetMatchFound: 'Соперник найден! Готовим вопросы...',
     sheetCancel: 'Отменить',
