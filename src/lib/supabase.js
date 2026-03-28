@@ -589,6 +589,11 @@ export async function cancelMatchmaking(userId) {
   if (error) console.error('cancelMatchmaking error:', error)
 }
 
+export function pingMatchmaking(userId) {
+  supabase.rpc('ping_matchmaking', { p_user_id: userId })
+    .then(({ error }) => { if (error) console.error('pingMatchmaking error:', error) })
+}
+
 export async function submitAnswer(duelId, userId, questionIndex, answerIndex, isCorrect, timeSpent) {
   const { data, error } = await supabase.rpc('submit_answer', {
     p_duel_id: duelId,
