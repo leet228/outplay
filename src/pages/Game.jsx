@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
-import { supabase, submitAnswer, BOT_USER_ID, calcPayout } from '../lib/supabase'
+import { supabase, submitAnswer, BOT_USER_ID, calcPayout, heartbeatDuel, forfeitDuel, claimForfeit } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { updateLocalStats } from '../lib/gameUtils'
@@ -43,6 +43,8 @@ export default function Game() {
   const botAnswersRef = useRef([])       // трекинг ответов бота
   const botShouldWinRef = useRef(false)
   const isBotGameRef = useRef(false)
+  const heartbeatRef = useRef(null)
+  const forfeitedRef = useRef(false)
 
   const isDevDuel = duelId?.startsWith('dev-')
 
@@ -54,6 +56,31 @@ export default function Game() {
     }
     return () => cleanupAll()
   }, [duelId])
+
+  // ── Heartbeat: send every 10s while in game ──
+  useEffect(() => {
+    if (isDevDuel || !duelId || !user?.id || user.id === 'dev' || finished) return
+    // Send first heartbeat immediately
+    heartbeatDuel(duelId, user.id)
+    heartbeatRef.current = setInterval(() => {
+      heartbeatDuel(duelId, user.id)
+    }, 10000)
+    return () => { if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null } }
+  }, [duelId, user?.id, finished, isDevDuel])
+
+  // ── Forfeit on app close / background ──
+  useEffect(() => {
+    if (isDevDuel || !duelId || !user?.id || user.id === 'dev') return
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden' && !finished && !forfeitedRef.current) {
+        forfeitedRef.current = true
+        if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
+        forfeitDuel(duelId, user.id)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [duelId, user?.id, finished, isDevDuel])
 
   // Timer countdown — keeps running even after confirm (both players see same timer)
   useEffect(() => {
@@ -348,8 +375,23 @@ export default function Game() {
     channelRef.current = channel
 
     // Periodic polling fallback every 2s — covers realtime failures
-    pollIntervalRef.current = setInterval(() => {
-      checkBothAnswered(qi)
+    // Also checks opponent heartbeat every 10s for forfeit detection
+    let pollCount = 0
+    pollIntervalRef.current = setInterval(async () => {
+      pollCount++
+      const done = await checkBothAnswered(qi)
+      // Every 5th poll (~10s), check opponent heartbeat
+      if (!done && pollCount % 5 === 0 && !isDevDuel && !forfeitedRef.current) {
+        const res = await claimForfeit(duelId, user.id)
+        if (res?.status === 'forfeited') {
+          cleanupAll()
+          setFinished(true)
+          const payout = calcPayout(duel?.stake || 0, user?.is_pro)
+          if (duel?.stake) updateLocalStats({ won: true, stake: duel.stake, userId: user.id })
+          setLastResult({ won: true, myScore: myAnswers.filter(a => a.isCorrect).length, oppScore: 0, total: questions.length, payout, stake: duel?.stake || 0, duelId, tiebreak: false, timeDiff: 0 })
+          navigate('/result')
+        }
+      }
     }, 2000)
   }
 

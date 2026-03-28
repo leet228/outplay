@@ -11,6 +11,9 @@ import {
   BOT_USER_ID,
   supabase,
   calcPayout,
+  heartbeatDuel,
+  forfeitDuel,
+  claimForfeit,
 } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
 import sound from '../lib/sounds'
@@ -311,6 +314,33 @@ export default function Blackjack() {
   const botPlannedHitsRef = useRef(0)      // how many cards bot plans to take
   const botHitsDoneRef = useRef(0)         // how many cards bot has taken
   const allVisibleIdsRef = useRef(new Set()) // IDs of all cards player has seen
+  const heartbeatRef = useRef(null)
+  const forfeitedRef = useRef(false)
+
+  // ── Heartbeat: send every 10s while in game ──
+  useEffect(() => {
+    if (isDevDuel || !duelId || !user?.id || user.id === 'dev') return
+    if (gameOverRef.current) return
+    heartbeatDuel(duelId, user.id)
+    heartbeatRef.current = setInterval(() => {
+      if (!gameOverRef.current) heartbeatDuel(duelId, user.id)
+    }, 10000)
+    return () => { if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null } }
+  }, [duelId, user?.id, isDevDuel])
+
+  // ── Forfeit on app close / background ──
+  useEffect(() => {
+    if (isDevDuel || !duelId || !user?.id || user.id === 'dev') return
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden' && !gameOverRef.current && !forfeitedRef.current) {
+        forfeitedRef.current = true
+        if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
+        forfeitDuel(duelId, user.id)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [duelId, user?.id, isDevDuel])
 
   // ── Cleanup ──
   function cleanupChannel() {
@@ -375,7 +405,9 @@ export default function Blackjack() {
   useEffect(() => {
     if (!isPvP || phase !== 'opponent_turn') { cleanupPvpPoll(); return }
 
+    let pvpPollCount = 0
     pvpPollRef.current = setInterval(async () => {
+      pvpPollCount++
       try {
         const data = await getBlackjackState(duelId)
         if (!data) return
@@ -405,6 +437,22 @@ export default function Blackjack() {
           if (bjState[oppStandKey]) setOpponentStand(true)
           setIsMyTurn(true)
           setPhase('player_turn')
+          return
+        }
+
+        // Every ~10s, check opponent heartbeat for forfeit
+        if (pvpPollCount % 3 === 0 && !forfeitedRef.current) {
+          const res = await claimForfeit(duelId, user?.id)
+          if (res?.status === 'forfeited') {
+            cleanupPvpPoll()
+            cleanupChannel()
+            if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
+            gameOverRef.current = true
+            const payout = calcPayout(stakeRef.current, user?.is_pro)
+            updateLocalStats({ won: true, stake: stakeRef.current, userId: user.id })
+            setLastResult({ won: true, myScore: 1, oppScore: 0, total: 1, payout, stake: stakeRef.current, duelId, tiebreak: false, timeDiff: 0, gameType: 'blackjack' })
+            navigate('/result')
+          }
         }
       } catch (e) {
         console.error('PvP poll error:', e)

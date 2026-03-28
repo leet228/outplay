@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
-import { supabase, getSequenceDuel, submitSequenceResult, calcPayout } from '../lib/supabase'
+import { supabase, getSequenceDuel, submitSequenceResult, calcPayout, heartbeatDuel, forfeitDuel, claimForfeit } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
 import sound from '../lib/sounds'
 import './Sequence.css'
@@ -104,14 +104,41 @@ export default function Sequence() {
 
   const roundStartTime = useRef(0)
   const inputLocked = useRef(false)
+  const heartbeatRef = useRef(null)
+  const forfeitedRef = useRef(false)
 
   // ── Cleanup on unmount ──
   useEffect(() => {
     return () => {
       finishedRef.current = false
       sound.timerStop()
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
     }
   }, [])
+
+  // ── Heartbeat: send every 10s while in game ──
+  useEffect(() => {
+    if (isDevDuel || !duelId || !user?.id || user.id === 'dev' || finished) return
+    heartbeatDuel(duelId, user.id)
+    heartbeatRef.current = setInterval(() => {
+      heartbeatDuel(duelId, user.id)
+    }, 10000)
+    return () => { if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null } }
+  }, [duelId, user?.id, finished, isDevDuel])
+
+  // ── Forfeit on app close / background ──
+  useEffect(() => {
+    if (isDevDuel || !duelId || !user?.id || user.id === 'dev') return
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden' && !finishedRef.current && !forfeitedRef.current) {
+        forfeitedRef.current = true
+        if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
+        forfeitDuel(duelId, user.id)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [duelId, user?.id, isDevDuel])
 
   // ── Load duel ──
   useEffect(() => {
@@ -471,12 +498,20 @@ export default function Sequence() {
         await submitSequenceResult(duelId, user.id, myScore, myTime)
       }
 
-      // Poll for finished state
+      // Poll for finished state + check opponent heartbeat
       let finalDuel = null
       for (let attempt = 0; attempt < 30; attempt++) {
         const { data } = await supabase
           .from('duels').select('*').eq('id', duelId).single()
         if (data?.status === 'finished') { finalDuel = data; break }
+        // Every ~10s check opponent heartbeat
+        if (attempt > 0 && attempt % 5 === 0 && !forfeitedRef.current) {
+          const res = await claimForfeit(duelId, user.id)
+          if (res?.status === 'forfeited') {
+            finalDuel = { status: 'finished', winner_id: user.id, creator_id: duel.creator_id, opponent_id: duel.opponent_id, creator_score: myScore, opponent_score: 0 }
+            break
+          }
+        }
         await new Promise(r => setTimeout(r, 2000))
       }
 

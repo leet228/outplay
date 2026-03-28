@@ -608,6 +608,26 @@ export async function finalizeDuel(duelId) {
   return data
 }
 
+// ── Heartbeat & Forfeit ──
+
+export function heartbeatDuel(duelId, userId) {
+  // Fire-and-forget — не ждём ответа, не ретраим
+  supabase.rpc('heartbeat_duel', { p_duel_id: duelId, p_user_id: userId })
+    .then(({ error }) => { if (error) console.error('heartbeat error:', error) })
+}
+
+export async function forfeitDuel(duelId, userId) {
+  const { data, error } = await supabase.rpc('forfeit_duel', { p_duel_id: duelId, p_user_id: userId })
+  if (error) { console.error('forfeitDuel error:', error); return null }
+  return data
+}
+
+export async function claimForfeit(duelId, userId) {
+  const { data, error } = await supabase.rpc('claim_forfeit', { p_duel_id: duelId, p_user_id: userId })
+  if (error) { console.error('claimForfeit error:', error); return null }
+  return data
+}
+
 // ── Sequence ────────────────────────────────────
 export async function getSequenceDuel(duelId) {
   const { data, error } = await supabase

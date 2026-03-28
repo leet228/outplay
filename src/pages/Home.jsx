@@ -261,6 +261,27 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   // Cleanup on unmount
   useEffect(() => { return () => cleanupSearch() }, [])
 
+  // Cancel matchmaking when user leaves the app (visibilitychange / beforeunload)
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden' && searching && user?.id && user.id !== 'dev') {
+        cleanupSearch()
+        cancelMatchmaking(user.id)
+      }
+    }
+    function handleBeforeUnload() {
+      if (searching && user?.id && user.id !== 'dev') {
+        cancelMatchmaking(user.id)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [searching, user?.id])
+
   function cleanupSearch() {
     searchCancelledRef.current = true
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
