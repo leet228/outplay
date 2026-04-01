@@ -250,7 +250,7 @@ DECLARE
   v_msg    TEXT;
   v_markup JSONB;
 BEGIN
-  v_msg := '⚡ Давно не заходил — друзья ждут!';
+  v_msg := '💥 Давно не играл — зайди и покажи класс!';
 
   v_markup := jsonb_build_object(
     'inline_keyboard', jsonb_build_array(
