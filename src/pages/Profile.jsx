@@ -327,12 +327,14 @@ export default function Profile() {
               { game: 'quiz', wins: 0, total: 0 },
               { game: 'blackjack', wins: 0, total: 0 },
               { game: 'sequence', wins: 0, total: 0 },
+              { game: 'reaction', wins: 0, total: 0 },
             ]).map(g => {
               const wr = g.total > 0 ? Math.round((g.wins / g.total) * 100) : 0
               const labels = {
                 quiz: '❓ ' + (t.gameQuiz || 'Викторина'),
                 blackjack: '🃏 ' + (t.gameBlackjack || 'Блэкджек'),
                 sequence: '🔢 ' + (t.gameSequence || 'Последовательность'),
+                reaction: '⚡ ' + (t.gameReactionTitle || 'Реакция'),
               }
               return (
                 <div key={g.game} className="pro-stats-row">
