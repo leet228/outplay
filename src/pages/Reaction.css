@@ -1,0 +1,301 @@
+.react-page {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px);
+  background: var(--bg);
+  color: var(--text);
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.25s ease;
+}
+
+/* ── Phase backgrounds ── */
+.react-phase-waiting {
+  background: #1a0a0a;
+  cursor: default;
+}
+.react-phase-ready {
+  background: #0a2a12;
+  cursor: pointer;
+}
+.react-phase-result {
+  background: var(--bg);
+}
+
+/* ── Progress dots ── */
+.react-progress {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  z-index: 2;
+}
+.react-progress-dot {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  transition: background 0.3s;
+}
+.react-progress-dot.active {
+  background: #10B981;
+}
+.react-progress-dot.done {
+  background: #10B981;
+  opacity: 0.5;
+}
+
+/* ── Round label ── */
+.react-round-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  z-index: 2;
+}
+
+/* ── Countdown ── */
+.react-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.react-countdown-num {
+  font-size: 72px;
+  font-weight: 800;
+  color: #10B981;
+  animation: react-pop 0.5s ease-out;
+}
+@keyframes react-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ── Center zone ── */
+.react-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 32px 0;
+  z-index: 2;
+}
+
+.react-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: react-pop 0.35s ease-out;
+}
+
+.react-zone-icon {
+  font-size: 80px;
+  line-height: 1;
+}
+
+.react-zone-text {
+  font-size: 28px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* ── Wait zone ── */
+.react-zone-wait .react-zone-text {
+  color: #EF4444;
+}
+
+/* Pulsing glow for wait */
+.react-phase-waiting::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, transparent 70%);
+  animation: react-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── Go zone ── */
+.react-zone-go .react-zone-text {
+  color: #10B981;
+  animation: react-flash 0.15s ease-out;
+}
+
+.react-phase-ready::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
+  animation: react-glow-green 0.5s ease-out;
+  pointer-events: none;
+}
+
+/* ── Result zone ── */
+.react-result-time {
+  font-size: 64px;
+  font-weight: 900;
+  color: #10B981;
+  line-height: 1;
+}
+.react-result-ms {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: -4px;
+}
+.react-result-text {
+  font-size: 22px;
+  font-weight: 700;
+}
+.react-result-penalty {
+  color: #EF4444;
+}
+
+/* ── Average bar ── */
+.react-avg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-top: 8px;
+  z-index: 2;
+}
+.react-avg-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.react-avg-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #10B981;
+}
+
+/* ── Done summary ── */
+.react-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 320px;
+}
+.react-done-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+}
+.react-done-rounds {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.react-done-round {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+}
+.react-done-round.ok span:last-child { color: #10B981; }
+.react-done-round.penalty span:last-child { color: #EF4444; }
+.react-done-round.timeout span:last-child { color: #EF4444; }
+.react-done-avg {
+  font-size: 16px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.react-done-avg strong {
+  color: #10B981;
+  font-size: 18px;
+}
+
+/* ── Loading ── */
+.react-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+/* ── Waiting for opponent ── */
+.react-waiting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-muted);
+  font-size: 16px;
+}
+.react-waiting-dots {
+  display: flex;
+  gap: 6px;
+}
+.react-waiting-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10B981;
+  animation: react-bounce 1.2s infinite;
+}
+.react-waiting-dots span:nth-child(2) { animation-delay: 0.2s; }
+.react-waiting-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Animations ── */
+@keyframes react-pulse {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
+
+@keyframes react-flash {
+  0% { transform: scale(0.8); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes react-glow-green {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes react-bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+}
+
+@keyframes react-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
+.react-shake {
+  animation: react-shake 0.4s ease-out;
+}

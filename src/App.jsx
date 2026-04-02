@@ -24,6 +24,7 @@ import Profile from './pages/Profile'
 import Admin from './pages/Admin'
 import Blackjack from './pages/Blackjack'
 import Sequence from './pages/Sequence'
+import Reaction from './pages/Reaction'
 
 // Disable browser scroll restoration globally — SPA handles it manually
 if ('scrollRestoration' in history) {
@@ -53,7 +54,7 @@ function ScrollToTop() {
   return null
 }
 
-const NO_NAV = ['/game', '/blackjack', '/sequence', '/result', '/admin']
+const NO_NAV = ['/game', '/blackjack', '/sequence', '/reaction', '/result', '/admin']
 
 function Layout() {
   const { pathname } = useLocation()
@@ -68,6 +69,7 @@ function Layout() {
         <Route path="/game/:duelId" element={<Game />} />
         <Route path="/blackjack/:duelId" element={<Blackjack />} />
         <Route path="/sequence/:duelId" element={<Sequence />} />
+        <Route path="/reaction/:duelId" element={<Reaction />} />
         <Route path="/result" element={<Result />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/guilds" element={<Guilds />} />

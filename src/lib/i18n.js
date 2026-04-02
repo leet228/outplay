@@ -82,6 +82,26 @@ export const translations = {
     gameSequenceSub: 'Запомни и повтори',
     gameBlackjackTitle: 'Блэкджек',
     gameBlackjackSub: 'Карточная дуэль 1 на 1',
+    gameReactionTitle: 'Реакция',
+    gameReactionSub: 'Кто быстрее нажмёт',
+
+    // Reaction sheet
+    sheetReactRounds: 'раундов',
+    sheetReactTime: '~сек / раунд',
+    sheetReactRule1: 'Экран станет зелёным — нажми как можно быстрее',
+    sheetReactRule2: 'Не нажимай раньше времени — получишь штраф +500 мс',
+    sheetReactRule3: 'Побеждает тот, у кого меньше среднее время реакции',
+
+    // Reaction in-game
+    reactWait: 'Ждите...',
+    reactTap: 'Жми!',
+    reactTooEarly: 'Рано! +500 мс',
+    reactRound: 'Раунд',
+    reactAvg: 'Среднее',
+    reactMs: 'мс',
+    reactGetReady: 'Приготовьтесь...',
+    reactYourTime: 'Ваше время',
+    reactResult: 'Результат',
 
     // Blackjack in-game
     bjOpponent: 'Соперник',
@@ -413,6 +433,26 @@ export const translations = {
     gameSequenceSub: 'Remember & repeat',
     gameBlackjackTitle: '21 Points',
     gameBlackjackSub: 'Card duel 1v1',
+    gameReactionTitle: 'Reaction',
+    gameReactionSub: 'Fastest tap wins',
+
+    // Reaction sheet
+    sheetReactRounds: 'rounds',
+    sheetReactTime: '~sec / round',
+    sheetReactRule1: 'Screen turns green — tap as fast as you can',
+    sheetReactRule2: 'Don\'t tap too early — +500 ms penalty',
+    sheetReactRule3: 'Lowest average reaction time wins',
+
+    // Reaction in-game
+    reactWait: 'Wait...',
+    reactTap: 'Tap!',
+    reactTooEarly: 'Too early! +500 ms',
+    reactRound: 'Round',
+    reactAvg: 'Average',
+    reactMs: 'ms',
+    reactGetReady: 'Get ready...',
+    reactYourTime: 'Your time',
+    reactResult: 'Result',
 
     bjOpponent: 'Opponent',
     bjYou: 'You',

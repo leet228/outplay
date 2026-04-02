@@ -2450,7 +2450,7 @@ BEGIN
       FROM duel_answers WHERE duel_id = v_duel.id AND user_id = v_duel.opponent_id;
       v_opponent_played := v_answer_count > 0;
 
-    ELSIF v_duel.game_type = 'sequence' THEN
+    ELSIF v_duel.game_type IN ('sequence', 'reaction') THEN
       v_creator_played := v_duel.creator_score IS NOT NULL;
       v_opponent_played := v_duel.opponent_score IS NOT NULL;
 

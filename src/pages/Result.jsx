@@ -27,6 +27,7 @@ export default function Result() {
   const { won, myScore, oppScore, total, payout, stake, tiebreak, timeDiff, gameType } = lastResult
   const isBJ = gameType === 'blackjack'
   const isSeq = gameType === 'sequence'
+  const isReact = gameType === 'reaction'
 
   const isWin = won === true
 
@@ -93,13 +94,13 @@ export default function Result() {
         <div className="result-score-row">
           <span className="result-score-label">{tr.resultYou || 'Вы'}</span>
           <div className="result-score-dots" />
-          <span className="result-score-val">{isBJ ? `${myScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${myScore}/${total} ${tr.resultRounds || 'раундов'}` : `${myScore}/${total}`}</span>
+          <span className="result-score-val">{isReact ? `${myScore} ${tr.reactMs || 'мс'}` : isBJ ? `${myScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${myScore}/${total} ${tr.resultRounds || 'раундов'}` : `${myScore}/${total}`}</span>
         </div>
         {oppScore !== null && oppScore !== undefined && (
           <div className="result-score-row">
             <span className="result-score-label">{tr.resultOpponent || 'Соперник'}</span>
             <div className="result-score-dots" />
-            <span className="result-score-val">{isBJ ? `${oppScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${oppScore}/${total} ${tr.resultRounds || 'раундов'}` : `${oppScore}/${total}`}</span>
+            <span className="result-score-val">{isReact ? `${oppScore} ${tr.reactMs || 'мс'}` : isBJ ? `${oppScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${oppScore}/${total} ${tr.resultRounds || 'раундов'}` : `${oppScore}/${total}`}</span>
           </div>
         )}
       </div>

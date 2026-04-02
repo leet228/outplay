@@ -347,6 +347,12 @@
   min-height: 120px;
 }
 
+.game-card-placeholder {
+  flex: 1;
+  min-height: 120px;
+  padding: 18px 14px 16px;
+}
+
 .game-card--soon {
   opacity: 0.55;
   cursor: default;

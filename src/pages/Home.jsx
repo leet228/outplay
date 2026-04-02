@@ -306,7 +306,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       setSearching(false)
       setMatched(false)
       findingRef.current = false
-      const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : '/game'
+      const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : game?.id === 'reaction' ? '/reaction' : '/game'
       navigate(`${route}/${duelId}`)
     }, 1500)
   }
@@ -346,7 +346,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       setTimeout(() => {
         setSearching(false)
         sound.gameStart()
-        const devRoute = game.id === 'blackjack' ? '/blackjack' : game.id === 'sequence' ? '/sequence' : '/game'
+        const devRoute = game.id === 'blackjack' ? '/blackjack' : game.id === 'sequence' ? '/sequence' : game.id === 'reaction' ? '/reaction' : '/game'
         navigate(`${devRoute}/dev-${game.id}-${selectedStakes[0]}`)
       }, 1500)
       return
@@ -356,7 +356,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     cancelAllPendingInvites(user.id).catch(() => {})
 
     // Send all selected stakes — backend tries each one
-    const gameType = game.id === 'blackjack' ? 'blackjack' : game.id === 'sequence' ? 'sequence' : 'quiz'
+    const gameType = game.id === 'blackjack' ? 'blackjack' : game.id === 'sequence' ? 'sequence' : game.id === 'reaction' ? 'reaction' : 'quiz'
     const result = await findMatch(user.id, game.id, selectedStakes, gameType)
 
     if (!result || result.status === 'error') {
@@ -1179,12 +1179,22 @@ const GAME_SHEETS = {
     ],
     ruleKeys: ['sheetBjRule1', 'sheetBjRule2', 'sheetBjRule3'],
   },
+  reaction: {
+    icon: '⚡',
+    stats: [
+      { val: '5', lblKey: 'sheetReactRounds' },
+      { val: '~3', lblKey: 'sheetReactTime' },
+      { val: '1v1', lblKey: 'sheetStatMode' },
+    ],
+    ruleKeys: ['sheetReactRule1', 'sheetReactRule2', 'sheetReactRule3'],
+  },
 }
 
 const GAMES = [
   { id: 'quiz', titleKey: 'gameQuizTitle', subKey: 'gameQuizSub', available: true, accent: '#3B82F6', shadow: '#1d3461' },
   { id: 'sequence', titleKey: 'gameSequenceTitle', subKey: 'gameSequenceSub', available: true, accent: '#8B5CF6', shadow: '#2d1b69' },
   { id: 'blackjack', titleKey: 'gameBlackjackTitle', subKey: 'gameBlackjackSub', available: true, accent: '#F59E0B', shadow: '#78350f' },
+  { id: 'reaction', titleKey: 'gameReactionTitle', subKey: 'gameReactionSub', available: true, accent: '#10B981', shadow: '#064e3b' },
 ]
 
 /* ── Home ── */
@@ -1226,7 +1236,7 @@ export default function Home() {
       const { duelId, gameType } = pendingGameNav
       setPendingGameNav(null)
       sound.gameStart()
-      const route = gameType === 'blackjack' ? '/blackjack' : gameType === 'sequence' ? '/sequence' : '/game'
+      const route = gameType === 'blackjack' ? '/blackjack' : gameType === 'sequence' ? '/sequence' : gameType === 'reaction' ? '/reaction' : '/game'
       navigate(`${route}/${duelId}`)
     }
   }, [pendingGameNav])
@@ -1298,25 +1308,32 @@ export default function Home() {
             <span className="game-card-title">{t.gameQuizTitle}</span>
           </button>
 
-          <div className="games-row">
-            {GAMES.slice(1).map(g => (
-              <button
-                key={g.id}
-                className={`game-card game-card--small ${!g.available ? 'game-card--soon' : ''}`}
-                style={{ '--card-accent': g.accent, '--card-shadow': g.shadow }}
-                onClick={() => handleGameTap(g)}
-                disabled={!g.available}
-              >
-                <div className="game-card-glow" />
-                <span className="game-card-emoji">{GAME_SHEETS[g.id]?.icon}</span>
-                <div className="game-card-info">
-                  <span className="game-card-title">{t[g.titleKey]}</span>
-                  <span className="game-card-sub">{t[g.subKey]}</span>
-                </div>
-                {!g.available && <div className="game-card-badge">{t.soon}</div>}
-              </button>
-            ))}
-          </div>
+          {/* Render secondary games in rows of 2 */}
+          {Array.from({ length: Math.ceil((GAMES.length - 1) / 2) }, (_, rowIdx) => {
+            const rowGames = GAMES.slice(1 + rowIdx * 2, 1 + rowIdx * 2 + 2)
+            return (
+              <div className="games-row" key={rowIdx}>
+                {rowGames.map(g => (
+                  <button
+                    key={g.id}
+                    className={`game-card game-card--small ${!g.available ? 'game-card--soon' : ''}`}
+                    style={{ '--card-accent': g.accent, '--card-shadow': g.shadow }}
+                    onClick={() => handleGameTap(g)}
+                    disabled={!g.available}
+                  >
+                    <div className="game-card-glow" />
+                    <span className="game-card-emoji">{GAME_SHEETS[g.id]?.icon}</span>
+                    <div className="game-card-info">
+                      <span className="game-card-title">{t[g.titleKey]}</span>
+                      <span className="game-card-sub">{t[g.subKey]}</span>
+                    </div>
+                    {!g.available && <div className="game-card-badge">{t.soon}</div>}
+                  </button>
+                ))}
+                {rowGames.length === 1 && <div className="game-card-placeholder" />}
+              </div>
+            )
+          })}
 
           <div className="games-more-soon">
             <span>{t.moreGamesSoon}</span>
