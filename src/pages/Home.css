@@ -8,6 +8,7 @@
 
 .home.page {
   padding-top: calc(var(--safe-top) + 24px);
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 48px);
 }
 
 .home-topbar {

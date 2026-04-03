@@ -78,7 +78,7 @@ button {
 */
 .page {
   padding-top: var(--safe-top);
-  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 12px);
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 48px);
   min-height: 100svh;
 }
 
