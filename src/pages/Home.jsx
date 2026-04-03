@@ -874,8 +874,10 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
             {gameInvites.map(inv => {
               const sender = friends.find(f => f.id === inv.from_id)
               const expired = new Date(inv.expires_at) < new Date()
-              const gameIcon = inv.game_type === 'blackjack' ? '🃏' : inv.game_type === 'sequence' ? '🧠' : '❓'
-              const gameLabel = inv.game_type === 'blackjack' ? 'Блэкджек' : inv.game_type === 'sequence' ? 'Последовательность' : 'Викторина'
+              const gameData = GAMES.find(g => g.id === inv.game_type) || GAMES[0]
+              const gameCfg = GAME_SHEETS[inv.game_type] || GAME_SHEETS.quiz
+              const gameIcon = gameCfg.svgIcon ? gameCfg.svgIcon(gameData.accent) : gameCfg.icon
+              const gameLabel = t[gameData.titleKey] || inv.game_type
               return (
                 <div key={inv.id} className="friends-row friends-invite-row">
                   <FriendAvatar user={sender || { first_name: '?' }} showOnline />

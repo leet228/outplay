@@ -13,6 +13,11 @@ ALTER TABLE matchmaking_queue DROP CONSTRAINT IF EXISTS matchmaking_queue_catego
 ALTER TABLE matchmaking_queue ADD CONSTRAINT matchmaking_queue_category_check
   CHECK (category IN ('general','history','science','sport','movies','music','quiz','blackjack','sequence','reaction','hearing'));
 
+-- Also update game_invites CHECK to support new game types
+ALTER TABLE game_invites DROP CONSTRAINT IF EXISTS game_invites_game_type_check;
+ALTER TABLE game_invites ADD CONSTRAINT game_invites_game_type_check
+  CHECK (game_type IN ('quiz', 'blackjack', 'sequence', 'reaction', 'hearing'));
+
 
 -- ╔═══════════════════════════════════════════════════╗
 -- ║  1. submit_hearing_result                        ║
