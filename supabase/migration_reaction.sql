@@ -6,6 +6,15 @@
 
 
 -- ╔═══════════════════════════════════════════════════╗
+-- ║  0. Extend category CHECK to include 'reaction'  ║
+-- ╚═══════════════════════════════════════════════════╝
+
+ALTER TABLE matchmaking_queue DROP CONSTRAINT IF EXISTS matchmaking_queue_category_check;
+ALTER TABLE matchmaking_queue ADD CONSTRAINT matchmaking_queue_category_check
+  CHECK (category IN ('general','history','science','sport','movies','music','quiz','blackjack','sequence','reaction'));
+
+
+-- ╔═══════════════════════════════════════════════════╗
 -- ║  1. submit_reaction_result                       ║
 -- ╚═══════════════════════════════════════════════════╝
 
