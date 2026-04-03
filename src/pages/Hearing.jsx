@@ -284,14 +284,14 @@ export default function Hearing() {
 
   // ── Countdown 3-2-1 ──
   useEffect(() => {
-    if (phase !== 'countdown') return
+    if (loading || phase !== 'countdown') return
     if (countdown <= 0) {
       startRound()
       return
     }
     const timer = setTimeout(() => setCountdown(c => c - 1), 1000)
     return () => clearTimeout(timer)
-  }, [phase, countdown])
+  }, [loading, phase, countdown])
 
   // ── Start round ──
   function startRound() {
@@ -540,6 +540,11 @@ export default function Hearing() {
   // ── Render ──
 
   // Countdown
+  // Loading
+  if (loading && !isDevDuel) {
+    return <div className="hear-page"><span style={{ color: 'rgba(255,255,255,0.5)' }}>{t.gameLoading || 'Loading...'}</span></div>
+  }
+
   if (phase === 'countdown') {
     return (
       <div className="hear-page">
