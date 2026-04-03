@@ -306,7 +306,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       setSearching(false)
       setMatched(false)
       findingRef.current = false
-      const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : game?.id === 'reaction' ? '/reaction' : '/game'
+      const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : game?.id === 'reaction' ? '/reaction' : game?.id === 'hearing' ? '/hearing' : '/game'
       navigate(`${route}/${duelId}`)
     }, 1500)
   }
@@ -827,7 +827,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
       setGameInvites(gameInvites.filter(i => i.id !== inv.id))
       onClose()
       sound.gameStart()
-      const route = inv.game_type === 'blackjack' ? '/blackjack' : inv.game_type === 'sequence' ? '/sequence' : '/game'
+      const route = inv.game_type === 'blackjack' ? '/blackjack' : inv.game_type === 'sequence' ? '/sequence' : inv.game_type === 'reaction' ? '/reaction' : inv.game_type === 'hearing' ? '/hearing' : '/game'
       navigate(`${route}/${result.duel_id}`)
     } else if (result?.error === 'insufficient_balance' || result?.error === 'sender_insufficient_balance') {
       haptic('error')
