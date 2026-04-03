@@ -323,12 +323,11 @@ export default function Profile() {
             </span>
           </div>
           <div className="pro-stats-bars">
-            {(gameStats || [
-              { game: 'quiz', wins: 0, total: 0 },
-              { game: 'blackjack', wins: 0, total: 0 },
-              { game: 'sequence', wins: 0, total: 0 },
-              { game: 'reaction', wins: 0, total: 0 },
-            ]).map(g => {
+            {(() => {
+              const allGames = ['quiz', 'blackjack', 'sequence', 'reaction']
+              const stats = gameStats || []
+              return allGames.map(id => stats.find(s => s.game === id) || { game: id, wins: 0, total: 0 })
+            })().map(g => {
               const wr = g.total > 0 ? Math.round((g.wins / g.total) * 100) : 0
               const labels = {
                 quiz: '❓ ' + (t.gameQuiz || 'Викторина'),
