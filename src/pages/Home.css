@@ -680,6 +680,10 @@
   font-size: 42px;
   line-height: 1;
 }
+.sheet-icon-svg svg {
+  width: 42px;
+  height: 42px;
+}
 
 .sheet-title {
   font-size: 30px;

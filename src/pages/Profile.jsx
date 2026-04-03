@@ -324,20 +324,29 @@ export default function Profile() {
           </div>
           <div className="pro-stats-bars">
             {(() => {
-              const allGames = ['quiz', 'blackjack', 'sequence', 'reaction']
+              const allGames = ['quiz', 'blackjack', 'sequence', 'reaction', 'hearing']
               const stats = gameStats || []
               return allGames.map(id => stats.find(s => s.game === id) || { game: id, wins: 0, total: 0 })
             })().map(g => {
               const wr = g.total > 0 ? Math.round((g.wins / g.total) * 100) : 0
-              const labels = {
-                quiz: '❓ ' + (t.gameQuiz || 'Викторина'),
-                blackjack: '🃏 ' + (t.gameBlackjack || 'Блэкджек'),
-                sequence: '🔢 ' + (t.gameSequence || 'Последовательность'),
-                reaction: '⚡ ' + (t.gameReactionTitle || 'Реакция'),
+              const gameIcons = {
+                quiz: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke={c} strokeWidth="2"/><path d="M9 9a3 3 0 1 1 3 3v2" stroke={c} strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="18" r="1" fill={c}/></svg>,
+                sequence: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 21h6M12 17v4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                blackjack: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="3" y="2" width="18" height="20" rx="3" stroke={c} strokeWidth="2"/><path d="M12 9l-2 3h4l-2 3" stroke={c} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                reaction: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h7l-2 8 9-12h-7l2-8z" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                hearing: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={c} strokeWidth="2"/><circle cx="18" cy="16" r="3" stroke={c} strokeWidth="2"/></svg>,
+              }
+              const colors = { quiz: '#3B82F6', blackjack: '#F59E0B', sequence: '#8B5CF6', reaction: '#10B981', hearing: '#EC4899' }
+              const names = {
+                quiz: t.gameQuiz || 'Викторина',
+                blackjack: t.gameBlackjack || 'Блэкджек',
+                sequence: t.gameSequence || 'Последовательность',
+                reaction: t.gameReactionTitle || 'Реакция',
+                hearing: t.gameHearingTitle || 'Слух',
               }
               return (
                 <div key={g.game} className="pro-stats-row">
-                  <span className="pro-stats-label">{labels[g.game] || g.game}</span>
+                  <span className="pro-stats-label">{gameIcons[g.game]?.(colors[g.game])} {names[g.game]}</span>
                   <div className="pro-stats-bar-track">
                     <div className="pro-stats-bar-fill" style={{ width: `${wr}%`, background: wr >= 60 ? '#22c55e' : wr >= 40 ? '#f59e0b' : '#ef4444' }} />
                   </div>

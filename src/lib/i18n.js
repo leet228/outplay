@@ -84,6 +84,26 @@ export const translations = {
     gameBlackjackSub: 'Карточная дуэль 1 на 1',
     gameReactionTitle: 'Реакция',
     gameReactionSub: 'Кто быстрее нажмёт',
+    gameHearingTitle: 'Слух',
+    gameHearingSub: 'Угадай частоту звука',
+
+    // Hearing sheet
+    sheetHearRounds: 'раундов',
+    sheetHearTime: 'сек прослушивание',
+    sheetHearRule1: 'Послушай звук 3 секунды — запомни частоту',
+    sheetHearRule2: 'Проведи пальцем вверх/вниз чтобы настроить герцовку',
+    sheetHearRule3: 'Побеждает тот, кто точнее повторил все 5 звуков',
+
+    // Hearing in-game
+    hearListen: 'Слушай...',
+    hearGuess: 'Повтори!',
+    hearTarget: 'Цель',
+    hearYour: 'Твой ответ',
+    hearDiff: 'Разница',
+    hearSecondsLeft: 'Секунд на запоминание',
+    hearRound: 'Раунд',
+    hearResult: 'Результат',
+    hearTotalDiff: 'Общая разница',
 
     // Reaction sheet
     sheetReactRounds: 'раундов',
@@ -435,6 +455,26 @@ export const translations = {
     gameBlackjackSub: 'Card duel 1v1',
     gameReactionTitle: 'Reaction',
     gameReactionSub: 'Fastest tap wins',
+    gameHearingTitle: 'Hearing',
+    gameHearingSub: 'Match the frequency',
+
+    // Hearing sheet
+    sheetHearRounds: 'rounds',
+    sheetHearTime: 'sec listening',
+    sheetHearRule1: 'Listen to the sound for 3 seconds — memorize the frequency',
+    sheetHearRule2: 'Swipe up/down to adjust the frequency',
+    sheetHearRule3: 'Most accurate match across 5 rounds wins',
+
+    // Hearing in-game
+    hearListen: 'Listen...',
+    hearGuess: 'Match it!',
+    hearTarget: 'Target',
+    hearYour: 'Your answer',
+    hearDiff: 'Difference',
+    hearSecondsLeft: 'Seconds to remember',
+    hearRound: 'Round',
+    hearResult: 'Result',
+    hearTotalDiff: 'Total difference',
 
     // Reaction sheet
     sheetReactRounds: 'rounds',

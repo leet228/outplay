@@ -346,7 +346,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       setTimeout(() => {
         setSearching(false)
         sound.gameStart()
-        const devRoute = game.id === 'blackjack' ? '/blackjack' : game.id === 'sequence' ? '/sequence' : game.id === 'reaction' ? '/reaction' : '/game'
+        const devRoute = game.id === 'blackjack' ? '/blackjack' : game.id === 'sequence' ? '/sequence' : game.id === 'reaction' ? '/reaction' : game.id === 'hearing' ? '/hearing' : '/game'
         navigate(`${devRoute}/dev-${game.id}-${selectedStakes[0]}`)
       }, 1500)
       return
@@ -356,7 +356,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     cancelAllPendingInvites(user.id).catch(() => {})
 
     // Send all selected stakes — backend tries each one
-    const gameType = game.id === 'blackjack' ? 'blackjack' : game.id === 'sequence' ? 'sequence' : game.id === 'reaction' ? 'reaction' : 'quiz'
+    const gameType = game.id === 'blackjack' ? 'blackjack' : game.id === 'sequence' ? 'sequence' : game.id === 'reaction' ? 'reaction' : game.id === 'hearing' ? 'hearing' : 'quiz'
     const result = await findMatch(user.id, game.id, selectedStakes, gameType)
 
     if (!result || result.status === 'error') {
@@ -478,7 +478,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
         <div className="sheet-header">
           <div className="sheet-icon-wrap" style={{ '--sa': accent }}>
             {sheetCfg ? (
-              game.id === 'quiz' ? <QuizIcon /> : <span className="sheet-icon-emoji">{sheetCfg.icon}</span>
+              game.id === 'quiz' ? <QuizIcon /> : sheetCfg.svgIcon ? <span className="sheet-icon-svg">{sheetCfg.svgIcon(accent)}</span> : <span className="sheet-icon-emoji">{sheetCfg.icon}</span>
             ) : <QuizIcon />}
           </div>
           <h2 className="sheet-title" style={{ color: accent }}>
@@ -1101,20 +1101,19 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
 
             <span className="invite-sheet-label">{t.inviteSelectGame}</span>
             <div className="invite-game-cards">
-              {[
-                { id: 'quiz', icon: '❓', label: 'Викторина' },
-                { id: 'sequence', icon: '🧠', label: 'Последовательность' },
-                { id: 'blackjack', icon: '🃏', label: 'Блэкджек' },
-              ].map(g => (
-                <button
-                  key={g.id}
-                  className={`invite-game-card ${inviteGame === g.id ? 'active' : ''}`}
-                  onClick={() => { haptic('light'); setInviteGame(g.id) }}
-                >
-                  <span className="invite-game-icon">{g.icon}</span>
-                  <span className="invite-game-label">{g.label}</span>
-                </button>
-              ))}
+              {GAMES.filter(g => g.available).map(g => {
+                const cfg = GAME_SHEETS[g.id]
+                return (
+                  <button
+                    key={g.id}
+                    className={`invite-game-card ${inviteGame === g.id ? 'active' : ''}`}
+                    onClick={() => { haptic('light'); setInviteGame(g.id) }}
+                  >
+                    <span className="invite-game-icon">{cfg?.svgIcon ? cfg.svgIcon(g.accent) : cfg?.icon}</span>
+                    <span className="invite-game-label">{t[g.titleKey]}</span>
+                  </button>
+                )
+              })}
             </div>
 
             <span className="invite-sheet-label">{t.inviteStake}</span>
@@ -1163,6 +1162,7 @@ const GAME_SHEETS = {
   },
   sequence: {
     icon: '🧠',
+    svgIcon: (color) => <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M9 21h6M12 17v4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 12h4M12 10v4" stroke={color} strokeWidth="1.5" strokeLinecap="round"/></svg>,
     stats: [
       { val: '3', lblKey: 'sheetSeqRounds' },
       { val: '10', lblKey: 'sheetSeqTime' },
@@ -1172,6 +1172,7 @@ const GAME_SHEETS = {
   },
   blackjack: {
     icon: '🃏',
+    svgIcon: (color) => <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="3" y="2" width="18" height="20" rx="3" stroke={color} strokeWidth="2"/><path d="M8 6h2M14 18h2" stroke={color} strokeWidth="2" strokeLinecap="round"/><path d="M12 9l-2 3h4l-2 3" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
     stats: [
       { val: '16', lblKey: 'sheetBjCards' },
       { val: '21', lblKey: 'sheetBjTarget' },
@@ -1181,12 +1182,23 @@ const GAME_SHEETS = {
   },
   reaction: {
     icon: '⚡',
+    svgIcon: (color) => <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M13 2L4 14h7l-2 8 9-12h-7l2-8z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>,
     stats: [
       { val: '5', lblKey: 'sheetReactRounds' },
       { val: '~3', lblKey: 'sheetReactTime' },
       { val: '1v1', lblKey: 'sheetStatMode' },
     ],
     ruleKeys: ['sheetReactRule1', 'sheetReactRule2', 'sheetReactRule3'],
+  },
+  hearing: {
+    icon: '🎶',
+    svgIcon: (color) => <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={color} strokeWidth="2"/><circle cx="18" cy="16" r="3" stroke={color} strokeWidth="2"/></svg>,
+    stats: [
+      { val: '5', lblKey: 'sheetHearRounds' },
+      { val: '3', lblKey: 'sheetHearTime' },
+      { val: '1v1', lblKey: 'sheetStatMode' },
+    ],
+    ruleKeys: ['sheetHearRule1', 'sheetHearRule2', 'sheetHearRule3'],
   },
 }
 
@@ -1195,6 +1207,7 @@ const GAMES = [
   { id: 'sequence', titleKey: 'gameSequenceTitle', subKey: 'gameSequenceSub', available: true, accent: '#8B5CF6', shadow: '#2d1b69' },
   { id: 'blackjack', titleKey: 'gameBlackjackTitle', subKey: 'gameBlackjackSub', available: true, accent: '#F59E0B', shadow: '#78350f' },
   { id: 'reaction', titleKey: 'gameReactionTitle', subKey: 'gameReactionSub', available: true, accent: '#10B981', shadow: '#064e3b' },
+  { id: 'hearing', titleKey: 'gameHearingTitle', subKey: 'gameHearingSub', available: true, accent: '#EC4899', shadow: '#831843' },
 ]
 
 /* ── Home ── */
@@ -1236,7 +1249,7 @@ export default function Home() {
       const { duelId, gameType } = pendingGameNav
       setPendingGameNav(null)
       sound.gameStart()
-      const route = gameType === 'blackjack' ? '/blackjack' : gameType === 'sequence' ? '/sequence' : gameType === 'reaction' ? '/reaction' : '/game'
+      const route = gameType === 'blackjack' ? '/blackjack' : gameType === 'sequence' ? '/sequence' : gameType === 'reaction' ? '/reaction' : gameType === 'hearing' ? '/hearing' : '/game'
       navigate(`${route}/${duelId}`)
     }
   }, [pendingGameNav])
@@ -1322,7 +1335,7 @@ export default function Home() {
                     disabled={!g.available}
                   >
                     <div className="game-card-glow" />
-                    <span className="game-card-emoji">{GAME_SHEETS[g.id]?.icon}</span>
+                    <span className="game-card-emoji">{GAME_SHEETS[g.id]?.svgIcon ? GAME_SHEETS[g.id].svgIcon(g.accent) : GAME_SHEETS[g.id]?.icon}</span>
                     <div className="game-card-info">
                       <span className="game-card-title">{t[g.titleKey]}</span>
                       <span className="game-card-sub">{t[g.subKey]}</span>
