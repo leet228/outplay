@@ -3,29 +3,30 @@ import { useNavigate, useParams } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
-import { calcPayout } from '../lib/supabase'
+import { supabase, getRaceDuel, submitRaceResult, calcPayout, heartbeatDuel, forfeitDuel, claimForfeit } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
 import sound from '../lib/sounds'
 import './Race.css'
 
 const BOT_USER_ID = '00000000-0000-0000-0000-000000000001'
-const TRACK_SEGMENTS = 300
+const TRACK_SEGMENTS = 900
 const SEGMENT_HEIGHT = 4
 const BALL_RADIUS = 10
-const BASE_SPEED = 1.8
-const MAX_SPEED = 3.5
+const BASE_SPEED = 1.6
+const MAX_SPEED = 3.0
+const SPEED_RAMP = 1.8 // speed multiplier at end of track
 const WALL_STOP_TIME = 500 // ms
-const TRACK_START_WIDTH = 0.55 // fraction of canvas width
-const TRACK_END_WIDTH = 0.30
+const TRACK_START_WIDTH = 0.65 // fraction of canvas width
+const TRACK_END_WIDTH = 0.35
 
 // Generate track from seed
 function generateTrack(width, segments) {
   const track = []
   let cx = width / 2
   const curves = [
-    { freq: 0.02, amp: 0.25 },
-    { freq: 0.007, amp: 0.15 },
-    { freq: 0.04, amp: 0.1 },
+    { freq: 0.012, amp: 0.3 },
+    { freq: 0.005, amp: 0.2 },
+    { freq: 0.025, amp: 0.08 },
   ]
   for (let i = 0; i < segments; i++) {
     const t = i / segments
@@ -50,6 +51,7 @@ export default function Race() {
   const isDevDuel = duelId?.startsWith('dev-')
 
   const [duel, setDuel] = useState(null)
+  const [loading, setLoading] = useState(!duelId?.startsWith('dev-'))
   const isBotGameRef = useRef(false)
   const botShouldWinRef = useRef(false)
 
@@ -59,10 +61,13 @@ export default function Race() {
   const [finishTime, setFinishTime] = useState(0)
   const [wallHit, setWallHit] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [waitingOpponent, setWaitingOpponent] = useState(false)
 
   const canvasRef = useRef(null)
   const phaseRef = useRef('countdown')
   const finishedRef = useRef(false)
+  const heartbeatRef = useRef(null)
+  const forfeitedRef = useRef(false)
   const animRef = useRef(null)
   const trackRef = useRef([])
   const scrollPosRef = useRef(0)
@@ -92,25 +97,68 @@ export default function Race() {
       setActiveDuel(mockDuel)
       isBotGameRef.current = true
       botShouldWinRef.current = mockDuel.bot_should_win
+    } else {
+      loadDuel()
     }
   }, [duelId])
+
+  async function loadDuel() {
+    let duelData = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      duelData = await getRaceDuel(duelId)
+      if (duelData) break
+      await new Promise(r => setTimeout(r, 1000))
+    }
+    if (!duelData) { navigate('/'); return }
+    setDuel(duelData)
+    setActiveDuel(duelData)
+    if (duelData.is_bot_game) {
+      isBotGameRef.current = true
+      botShouldWinRef.current = !!duelData.bot_should_win
+    }
+    setLoading(false)
+  }
 
   // ── Cleanup ──
   useEffect(() => {
     return () => {
+      finishedRef.current = false
       if (animRef.current) cancelAnimationFrame(animRef.current)
       if (gyroTimeoutRef.current) clearTimeout(gyroTimeoutRef.current)
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       window.removeEventListener('deviceorientation', handleGyro)
     }
   }, [])
 
+  // ── Heartbeat ──
+  useEffect(() => {
+    if (isDevDuel || !duelId || !user?.id || user.id === 'dev' || finished) return
+    heartbeatDuel(duelId, user.id)
+    heartbeatRef.current = setInterval(() => heartbeatDuel(duelId, user.id), 10000)
+    return () => { if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null } }
+  }, [duelId, user?.id, finished, isDevDuel])
+
+  // ── Forfeit on background ──
+  useEffect(() => {
+    if (isDevDuel || !duelId || !user?.id || user.id === 'dev') return
+    function handleVis() {
+      if (document.visibilityState === 'hidden' && !finishedRef.current && !forfeitedRef.current) {
+        forfeitedRef.current = true
+        if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
+        forfeitDuel(duelId, user.id)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVis)
+    return () => document.removeEventListener('visibilitychange', handleVis)
+  }, [duelId, user?.id, isDevDuel])
+
   // ── Countdown ──
   useEffect(() => {
-    if (phase !== 'countdown') return
+    if (loading || phase !== 'countdown') return
     if (countdown <= 0) { startRace(); return }
     const timer = setTimeout(() => setCountdown(c => c - 1), 1000)
     return () => clearTimeout(timer)
-  }, [phase, countdown])
+  }, [loading, phase, countdown])
 
   // ── Gyro handler ──
   const handleGyro = useCallback((e) => {
@@ -218,7 +266,12 @@ export default function Race() {
           // ── Speed based on distance from center ──
           const distFromCenter = Math.abs(bx - seg.cx) / seg.halfW // 0=center, 1=wall
           const speedMult = 1 - distFromCenter * 0.7 // center=1, wall=0.3
-          speedRef.current = BASE_SPEED + (MAX_SPEED - BASE_SPEED) * speedMult
+          const baseSpd = BASE_SPEED + (MAX_SPEED - BASE_SPEED) * speedMult
+
+          // ── Speed ramp: increases toward end of track ──
+          const progress = scrollPosRef.current / (TRACK_SEGMENTS * SEGMENT_HEIGHT)
+          const ramp = 1 + (SPEED_RAMP - 1) * progress // 1.0 at start, SPEED_RAMP at end
+          speedRef.current = baseSpd * ramp
 
           // ── Advance scroll ──
           scrollPosRef.current += speedRef.current
@@ -347,28 +400,83 @@ export default function Race() {
 
   // ── Finish game ──
   async function finishGame(elapsed) {
-    const myTime = Math.round(elapsed) // ms
+    const myScore = Math.round(elapsed) // ms
+    const myTimeSec = myScore / 1000
 
-    let won = null, oppScore = null, payout = 0
+    let won = null, oppScore = null, payout = 0, tiebreak = false, timeDiff = 0
 
     if (isDevDuel) {
-      const botResult = generateBotResult(myTime)
+      // ═══ DEV ═══
+      const botResult = generateBotResult(myScore)
       oppScore = botResult.time
-      won = myTime <= botResult.time
+      won = myScore <= botResult.time
+      payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
+      timeDiff = Math.abs(myScore - botResult.time)
+
+    } else if (isBotGameRef.current) {
+      // ═══ BOT ═══
+      const botResult = generateBotResult(myScore)
+      oppScore = botResult.time
+
+      let submitOk = await submitRaceResult(duelId, user.id, myScore, myTimeSec)
+      if (!submitOk) { await new Promise(r => setTimeout(r, 1000)); submitOk = await submitRaceResult(duelId, user.id, myScore, myTimeSec) }
+
+      setWaitingOpponent(true)
+      const botDelay = 1 + Math.random() * 3
+      await new Promise(r => setTimeout(r, botDelay * 1000))
+      let botOk = await submitRaceResult(duelId, BOT_USER_ID, botResult.time, botResult.time / 1000)
+      if (!botOk) { await new Promise(r => setTimeout(r, 1000)); await submitRaceResult(duelId, BOT_USER_ID, botResult.time, botResult.time / 1000) }
+
+      await new Promise(r => setTimeout(r, 500))
+      let finalDuel = null
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const { data } = await supabase.from('duels').select('*').eq('id', duelId).single()
+        if (data?.status === 'finished') { finalDuel = data; break }
+        await new Promise(r => setTimeout(r, 1500))
+      }
+      setWaitingOpponent(false)
+
+      if (finalDuel?.status === 'finished') {
+        won = finalDuel.winner_id === user.id
+        const isCreator = duel.creator_id === user.id
+        oppScore = isCreator ? finalDuel.opponent_score : finalDuel.creator_score
+        timeDiff = Math.abs(myScore - (oppScore || 0))
+      } else {
+        won = !botShouldWinRef.current
+        timeDiff = Math.abs(myScore - botResult.time)
+      }
+      payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
+
+    } else {
+      // ═══ PvP ═══
+      setWaitingOpponent(true)
+      let pvpOk = await submitRaceResult(duelId, user.id, myScore, myTimeSec)
+      if (!pvpOk) { await new Promise(r => setTimeout(r, 1000)); await submitRaceResult(duelId, user.id, myScore, myTimeSec) }
+
+      let finalDuel = null
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const { data } = await supabase.from('duels').select('*').eq('id', duelId).single()
+        if (data?.status === 'finished') { finalDuel = data; break }
+        if (attempt > 0 && attempt % 5 === 0 && !forfeitedRef.current) {
+          const res = await claimForfeit(duelId, user.id)
+          if (res?.status === 'forfeited') { finalDuel = { status: 'finished', winner_id: user.id, creator_id: duel.creator_id, opponent_id: duel.opponent_id, creator_score: myScore, opponent_score: null }; break }
+        }
+        await new Promise(r => setTimeout(r, 2000))
+      }
+      setWaitingOpponent(false)
+
+      const isCreator = duel.creator_id === user.id
+      if (finalDuel?.status === 'finished') {
+        oppScore = isCreator ? finalDuel.opponent_score : finalDuel.creator_score
+        won = finalDuel.winner_id === user.id
+        timeDiff = oppScore != null ? Math.abs(myScore - oppScore) : 0
+      } else { won = null; oppScore = null }
       payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
     }
 
-    if (!isDevDuel && won !== null) {
-      updateLocalStats({ won, stake: duel.stake, userId: user.id })
-    }
+    if (!isDevDuel && won !== null) { updateLocalStats({ won, stake: duel.stake, userId: user.id }) }
 
-    setLastResult({
-      won, myScore: myTime, oppScore: oppScore ?? 0,
-      total: 1, payout: payout || 0, stake: duel?.stake || 0,
-      duelId, tiebreak: false,
-      timeDiff: Math.abs(myTime - (oppScore || 0)),
-      gameType: 'race',
-    })
+    setLastResult({ won, myScore, oppScore: oppScore ?? 0, total: 1, payout: payout || 0, stake: duel?.stake || 0, duelId, tiebreak, timeDiff, gameType: 'race' })
     navigate('/result')
   }
 
@@ -384,6 +492,22 @@ export default function Race() {
   }
 
   // ── Render ──
+  if (loading && !isDevDuel) {
+    return <div className="race-page"><span style={{ color: 'rgba(255,255,255,0.5)' }}>{t.gameLoading || 'Loading...'}</span></div>
+  }
+
+  if (waitingOpponent) {
+    return (
+      <div className="race-page">
+        <div className="race-finish-overlay">
+          <span className="race-finish-time">{(finishTime / 1000).toFixed(2)}s</span>
+          <div className="race-waiting-dots"><span /><span /><span /></div>
+          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>{t.gameWaiting || 'Waiting for opponent...'}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className={`race-page ${wallHit ? 'race-wall-flash' : ''}`}
@@ -403,16 +527,16 @@ export default function Race() {
         </div>
       )}
 
-      {/* Racing UI */}
+      {/* Racing HUD */}
       {phase === 'racing' && (
-        <>
-          <div className="race-progress-bar">
-            <div className="race-progress-fill" style={{ width: `${progress * 100}%` }} />
-          </div>
+        <div className="race-hud">
           <div className="race-timer">
             {(Math.round((performance.now() - startTimeRef.current) / 10) / 100).toFixed(2)}s
           </div>
-        </>
+          <div className="race-progress-bar">
+            <div className="race-progress-fill" style={{ width: `${progress * 100}%` }} />
+          </div>
+        </div>
       )}
 
       {/* Finish overlay */}
