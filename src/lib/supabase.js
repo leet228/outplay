@@ -607,6 +607,17 @@ export async function submitAnswer(duelId, userId, questionIndex, answerIndex, i
   return data
 }
 
+export async function submitQuizResult(duelId, userId, score, time) {
+  const { data, error } = await supabase.rpc('submit_quiz_result', {
+    p_duel_id: duelId,
+    p_user_id: userId,
+    p_score: score,
+    p_time: time,
+  })
+  if (error) { console.error('submitQuizResult error:', error); return null }
+  return data
+}
+
 export async function finalizeDuel(duelId) {
   const { data, error } = await supabase.rpc('finalize_duel', { p_duel_id: duelId })
   if (error) { console.error('finalizeDuel error:', error); return null }
