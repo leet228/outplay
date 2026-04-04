@@ -115,7 +115,7 @@
   left: 0;
   right: 0;
   border-radius: 16px;
-  transition: height 0.05s;
+  will-change: height;
 }
 .grad-slider-thumb {
   position: absolute;
@@ -127,7 +127,7 @@
   background: #fff;
   border: 3px solid;
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-  transition: bottom 0.05s;
+  will-change: bottom;
   z-index: 2;
 }
 .grad-slider-val {

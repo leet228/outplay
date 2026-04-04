@@ -440,19 +440,53 @@ export default function Gradient() {
 // ── Vertical slider component ──
 function SliderChannel({ label, value, onChange, channelColor }) {
   const trackRef = useRef(null)
+  const fillRef = useRef(null)
+  const thumbRef = useRef(null)
+  const valRef = useRef(null)
   const dragging = useRef(false)
+  const rafRef = useRef(null)
+  const pendingVal = useRef(value)
 
-  const updateValue = useCallback((clientY) => {
+  // Sync from props when not dragging
+  useEffect(() => {
+    if (!dragging.current) {
+      const pct = (value / 255) * 100 + '%'
+      if (fillRef.current) fillRef.current.style.height = pct
+      if (thumbRef.current) thumbRef.current.style.bottom = pct
+      if (valRef.current) valRef.current.textContent = value
+    }
+  }, [value])
+
+  const updateVisual = useCallback((clientY) => {
     const track = trackRef.current
     if (!track) return
     const rect = track.getBoundingClientRect()
     const pct = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
-    onChange(Math.round(pct * 255))
+    const v = Math.round(pct * 255)
+    pendingVal.current = v
+
+    // Direct DOM update — instant, no React re-render
+    const pctStr = (v / 255) * 100 + '%'
+    if (fillRef.current) fillRef.current.style.height = pctStr
+    if (thumbRef.current) thumbRef.current.style.bottom = pctStr
+    if (valRef.current) valRef.current.textContent = v
+
+    // Batch React state update via rAF
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null
+        onChange(pendingVal.current)
+      })
+    }
   }, [onChange])
 
-  const onStart = useCallback((clientY) => { dragging.current = true; updateValue(clientY) }, [updateValue])
-  const onMove = useCallback((clientY) => { if (dragging.current) updateValue(clientY) }, [updateValue])
-  const onEnd = useCallback(() => { dragging.current = false }, [])
+  const onStart = useCallback((clientY) => { dragging.current = true; updateVisual(clientY) }, [updateVisual])
+  const onMove = useCallback((clientY) => { if (dragging.current) updateVisual(clientY) }, [updateVisual])
+  const onEnd = useCallback(() => {
+    dragging.current = false
+    onChange(pendingVal.current)
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+  }, [onChange])
 
   return (
     <div className="grad-slider">
@@ -468,17 +502,17 @@ function SliderChannel({ label, value, onChange, channelColor }) {
         onMouseUp={onEnd}
         onMouseLeave={onEnd}
       >
-        <div className="grad-slider-fill" style={{
+        <div ref={fillRef} className="grad-slider-fill" style={{
           height: `${(value / 255) * 100}%`,
           background: channelColor,
           boxShadow: `0 0 12px ${channelColor}`,
         }} />
-        <div className="grad-slider-thumb" style={{
+        <div ref={thumbRef} className="grad-slider-thumb" style={{
           bottom: `${(value / 255) * 100}%`,
           borderColor: channelColor,
         }} />
       </div>
-      <span className="grad-slider-val">{value}</span>
+      <span ref={valRef} className="grad-slider-val">{value}</span>
     </div>
   )
 }
