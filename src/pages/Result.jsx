@@ -30,6 +30,7 @@ export default function Result() {
   const isReact = gameType === 'reaction'
   const isHear = gameType === 'hearing'
   const isGrad = gameType === 'gradient'
+  const isRace = gameType === 'race'
 
   const isWin = won === true
 
@@ -96,13 +97,13 @@ export default function Result() {
         <div className="result-score-row">
           <span className="result-score-label">{tr.resultYou || 'Вы'}</span>
           <div className="result-score-dots" />
-          <span className="result-score-val">{isGrad ? `${myScore} pts` : isHear ? `${myScore} Hz` : isReact ? `${myScore} ${tr.reactMs || 'мс'}` : isBJ ? `${myScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${myScore}/${total} ${tr.resultRounds || 'раундов'}` : `${myScore}/${total}`}</span>
+          <span className="result-score-val">{isRace ? `${(myScore / 1000).toFixed(2)} s` : isGrad ? `${myScore} pts` : isHear ? `${myScore} Hz` : isReact ? `${myScore} ${tr.reactMs || 'мс'}` : isBJ ? `${myScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${myScore}/${total} ${tr.resultRounds || 'раундов'}` : `${myScore}/${total}`}</span>
         </div>
         {oppScore !== null && oppScore !== undefined && (
           <div className="result-score-row">
             <span className="result-score-label">{tr.resultOpponent || 'Соперник'}</span>
             <div className="result-score-dots" />
-            <span className="result-score-val">{isGrad ? `${oppScore} pts` : isHear ? `${oppScore} Hz` : isReact ? `${oppScore} ${tr.reactMs || 'мс'}` : isBJ ? `${oppScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${oppScore}/${total} ${tr.resultRounds || 'раундов'}` : `${oppScore}/${total}`}</span>
+            <span className="result-score-val">{isRace ? `${(oppScore / 1000).toFixed(2)} s` : isGrad ? `${oppScore} pts` : isHear ? `${oppScore} Hz` : isReact ? `${oppScore} ${tr.reactMs || 'мс'}` : isBJ ? `${oppScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${oppScore}/${total} ${tr.resultRounds || 'раундов'}` : `${oppScore}/${total}`}</span>
           </div>
         )}
       </div>

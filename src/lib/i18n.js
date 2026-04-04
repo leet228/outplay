@@ -88,6 +88,20 @@ export const translations = {
     gameHearingSub: 'Угадай частоту звука',
     gameGradientTitle: 'Градиент',
     gameGradientSub: 'Повтори цвет по памяти',
+    gameRaceTitle: 'Гонка',
+    gameRaceSub: 'Проведи шарик по трассе',
+
+    // Race sheet
+    sheetRaceRounds: 'заезд',
+    sheetRaceTime: '~сек',
+    sheetRaceRule1: 'Наклоняй телефон чтобы вести шарик по трассе',
+    sheetRaceRule2: 'Ближе к центру = быстрее, касание стенки = остановка',
+    sheetRaceRule3: 'Побеждает тот, кто финиширует быстрее',
+
+    // Race in-game
+    raceFinish: 'Финиш!',
+    raceTime: 'Время',
+    raceWall: 'Стенка!',
 
     // Gradient sheet
     sheetGradRounds: 'раундов',
@@ -478,6 +492,20 @@ export const translations = {
     gameHearingSub: 'Match the frequency',
     gameGradientTitle: 'Gradient',
     gameGradientSub: 'Match the color',
+    gameRaceTitle: 'Race',
+    gameRaceSub: 'Steer the ball through',
+
+    // Race sheet
+    sheetRaceRounds: 'race',
+    sheetRaceTime: '~sec',
+    sheetRaceRule1: 'Tilt your phone to steer the ball along the track',
+    sheetRaceRule2: 'Closer to center = faster, wall hit = full stop',
+    sheetRaceRule3: 'Fastest finish time wins',
+
+    // Race in-game
+    raceFinish: 'Finish!',
+    raceTime: 'Time',
+    raceWall: 'Wall!',
 
     // Gradient sheet
     sheetGradRounds: 'rounds',
