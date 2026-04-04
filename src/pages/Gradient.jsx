@@ -141,7 +141,7 @@ export default function Gradient() {
     if (countdown <= 0) { startRound(); return }
     const timer = setTimeout(() => setCountdown(c => c - 1), 1000)
     return () => clearTimeout(timer)
-  }, [phase, countdown])
+  }, [loading, phase, countdown])
 
   // ── Start round ──
   function startRound() {
