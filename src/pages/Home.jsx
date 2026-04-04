@@ -829,8 +829,12 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
       sound.gameStart()
       const route = inv.game_type === 'blackjack' ? '/blackjack' : inv.game_type === 'sequence' ? '/sequence' : inv.game_type === 'reaction' ? '/reaction' : inv.game_type === 'hearing' ? '/hearing' : inv.game_type === 'gradient' ? '/gradient' : '/game'
       navigate(`${route}/${result.duel_id}`)
-    } else if (result?.error === 'insufficient_balance' || result?.error === 'sender_insufficient_balance') {
+    } else if (result?.error) {
       haptic('error')
+      // Remove invite from list if it's no longer valid
+      if (['invite_expired', 'sender_offline', 'sender_in_game', 'invite_not_pending'].includes(result.error)) {
+        setGameInvites(gameInvites.filter(i => i.id !== inv.id))
+      }
       setAcceptError(inv.id)
       setTimeout(() => setAcceptError(null), 2500)
     }
@@ -888,7 +892,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
                   {!expired ? (
                     <div className="friends-req-actions">
                       {acceptError === inv.id ? (
-                        <span className="friends-invite-error">{t.inviteInsufficientBalance}</span>
+                        <span className="friends-invite-error">{t.inviteError || 'Ошибка'}</span>
                       ) : (
                         <>
                           <button className="friends-action-btn accept" disabled={actionLoading === inv.id} onClick={e => { e.stopPropagation(); handleAcceptInvite(inv) }}>{t.invitePlay}</button>
