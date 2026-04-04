@@ -1229,7 +1229,6 @@ const GAMES = [
   { id: 'reaction', titleKey: 'gameReactionTitle', subKey: 'gameReactionSub', available: true, accent: '#10B981', shadow: '#064e3b' },
   { id: 'hearing', titleKey: 'gameHearingTitle', subKey: 'gameHearingSub', available: true, accent: '#EC4899', shadow: '#831843' },
   { id: 'gradient', titleKey: 'gameGradientTitle', subKey: 'gameGradientSub', available: true, accent: '#F43F5E', shadow: '#881337' },
-  { id: 'race', titleKey: 'gameRaceTitle', subKey: 'gameRaceSub', available: true, accent: '#06B6D4', shadow: '#164e63' },
 ]
 
 /* ── Home ── */
