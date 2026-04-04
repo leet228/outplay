@@ -1205,12 +1205,6 @@ const GAME_SHEETS = {
       { val: '1v1', lblKey: 'sheetStatMode' },
     ],
     ruleKeys: ['sheetGradRule1', 'sheetGradRule2', 'sheetGradRule3'],
-    stats: [
-      { val: '5', lblKey: 'sheetHearRounds' },
-      { val: '3', lblKey: 'sheetHearTime' },
-      { val: '1v1', lblKey: 'sheetStatMode' },
-    ],
-    ruleKeys: ['sheetHearRule1', 'sheetHearRule2', 'sheetHearRule3'],
   },
 }
 
