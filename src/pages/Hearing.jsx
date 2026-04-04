@@ -618,7 +618,7 @@ export default function Hearing() {
             {guessCountdown}s
           </div>
           <div className="hear-guess-label">
-            <div className="hear-drag-hint">↕</div>
+            <div className="hear-drag-hint"><svg width="20" height="28" viewBox="0 0 20 28" fill="none"><path d="M10 2L4 8h12L10 2z" fill="rgba(255,255,255,0.4)"/><path d="M10 26l6-6H4l6 6z" fill="rgba(255,255,255,0.4)"/></svg></div>
           </div>
         </>
       )}
