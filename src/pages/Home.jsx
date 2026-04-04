@@ -306,7 +306,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       setSearching(false)
       setMatched(false)
       findingRef.current = false
-      const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : game?.id === 'reaction' ? '/reaction' : game?.id === 'hearing' ? '/hearing' : '/game'
+      const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : game?.id === 'reaction' ? '/reaction' : game?.id === 'hearing' ? '/hearing' : game?.id === 'gradient' ? '/gradient' : '/game'
       navigate(`${route}/${duelId}`)
     }, 1500)
   }
@@ -346,7 +346,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       setTimeout(() => {
         setSearching(false)
         sound.gameStart()
-        const devRoute = game.id === 'blackjack' ? '/blackjack' : game.id === 'sequence' ? '/sequence' : game.id === 'reaction' ? '/reaction' : game.id === 'hearing' ? '/hearing' : '/game'
+        const devRoute = game.id === 'blackjack' ? '/blackjack' : game.id === 'sequence' ? '/sequence' : game.id === 'reaction' ? '/reaction' : game.id === 'hearing' ? '/hearing' : game.id === 'gradient' ? '/gradient' : '/game'
         navigate(`${devRoute}/dev-${game.id}-${selectedStakes[0]}`)
       }, 1500)
       return
@@ -356,7 +356,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     cancelAllPendingInvites(user.id).catch(() => {})
 
     // Send all selected stakes — backend tries each one
-    const gameType = game.id === 'blackjack' ? 'blackjack' : game.id === 'sequence' ? 'sequence' : game.id === 'reaction' ? 'reaction' : game.id === 'hearing' ? 'hearing' : 'quiz'
+    const gameType = game.id === 'blackjack' ? 'blackjack' : game.id === 'sequence' ? 'sequence' : game.id === 'reaction' ? 'reaction' : game.id === 'hearing' ? 'hearing' : game.id === 'gradient' ? 'gradient' : 'quiz'
     const result = await findMatch(user.id, game.id, selectedStakes, gameType)
 
     if (!result || result.status === 'error') {
@@ -827,7 +827,7 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
       setGameInvites(gameInvites.filter(i => i.id !== inv.id))
       onClose()
       sound.gameStart()
-      const route = inv.game_type === 'blackjack' ? '/blackjack' : inv.game_type === 'sequence' ? '/sequence' : inv.game_type === 'reaction' ? '/reaction' : inv.game_type === 'hearing' ? '/hearing' : '/game'
+      const route = inv.game_type === 'blackjack' ? '/blackjack' : inv.game_type === 'sequence' ? '/sequence' : inv.game_type === 'reaction' ? '/reaction' : inv.game_type === 'hearing' ? '/hearing' : inv.game_type === 'gradient' ? '/gradient' : '/game'
       navigate(`${route}/${result.duel_id}`)
     } else if (result?.error === 'insufficient_balance' || result?.error === 'sender_insufficient_balance') {
       haptic('error')
@@ -1195,6 +1195,16 @@ const GAME_SHEETS = {
   hearing: {
     icon: '🎶',
     svgIcon: (color) => <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={color} strokeWidth="2"/><circle cx="18" cy="16" r="3" stroke={color} strokeWidth="2"/></svg>,
+  },
+  gradient: {
+    icon: '🌈',
+    svgIcon: (color) => <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2"/><circle cx="9" cy="10" r="3" stroke={color} strokeWidth="1.5" opacity="0.6"/><circle cx="15" cy="10" r="3" stroke={color} strokeWidth="1.5" opacity="0.6"/><circle cx="12" cy="15" r="3" stroke={color} strokeWidth="1.5" opacity="0.6"/></svg>,
+    stats: [
+      { val: '5', lblKey: 'sheetGradRounds' },
+      { val: '2', lblKey: 'sheetGradTime' },
+      { val: '1v1', lblKey: 'sheetStatMode' },
+    ],
+    ruleKeys: ['sheetGradRule1', 'sheetGradRule2', 'sheetGradRule3'],
     stats: [
       { val: '5', lblKey: 'sheetHearRounds' },
       { val: '3', lblKey: 'sheetHearTime' },
@@ -1210,6 +1220,7 @@ const GAMES = [
   { id: 'blackjack', titleKey: 'gameBlackjackTitle', subKey: 'gameBlackjackSub', available: true, accent: '#F59E0B', shadow: '#78350f' },
   { id: 'reaction', titleKey: 'gameReactionTitle', subKey: 'gameReactionSub', available: true, accent: '#10B981', shadow: '#064e3b' },
   { id: 'hearing', titleKey: 'gameHearingTitle', subKey: 'gameHearingSub', available: true, accent: '#EC4899', shadow: '#831843' },
+  { id: 'gradient', titleKey: 'gameGradientTitle', subKey: 'gameGradientSub', available: true, accent: '#F43F5E', shadow: '#881337' },
 ]
 
 /* ── Home ── */
@@ -1251,7 +1262,7 @@ export default function Home() {
       const { duelId, gameType } = pendingGameNav
       setPendingGameNav(null)
       sound.gameStart()
-      const route = gameType === 'blackjack' ? '/blackjack' : gameType === 'sequence' ? '/sequence' : gameType === 'reaction' ? '/reaction' : gameType === 'hearing' ? '/hearing' : '/game'
+      const route = gameType === 'blackjack' ? '/blackjack' : gameType === 'sequence' ? '/sequence' : gameType === 'reaction' ? '/reaction' : gameType === 'hearing' ? '/hearing' : gameType === 'gradient' ? '/gradient' : '/game'
       navigate(`${route}/${duelId}`)
     }
   }, [pendingGameNav])

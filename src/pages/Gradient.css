@@ -1,0 +1,310 @@
+.grad-page {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px);
+  background: #0a0a0a;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: background 0.3s ease;
+}
+
+/* ── Countdown ── */
+.grad-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.grad-countdown-num {
+  font-size: 72px;
+  font-weight: 800;
+  color: #F43F5E;
+  animation: grad-pop 0.5s ease-out;
+}
+@keyframes grad-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ── Round label ── */
+.grad-round-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.5);
+  z-index: 10;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  margin-bottom: 4px;
+}
+
+/* ── Show phase ── */
+.grad-show-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+}
+.grad-show-countdown {
+  font-size: 64px;
+  font-weight: 900;
+  color: rgba(255,255,255,0.9);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  animation: grad-pop 0.5s ease-out;
+}
+.grad-show-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* ── Guess phase ── */
+.grad-guess-timer {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.4);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  z-index: 10;
+  margin-bottom: 12px;
+}
+.grad-guess-timer.urgent { color: #ef4444; }
+
+/* ── Sliders ── */
+.grad-sliders {
+  display: flex;
+  gap: 32px;
+  z-index: 10;
+  margin-bottom: 20px;
+}
+
+.grad-slider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.grad-slider-label {
+  font-size: 14px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.7);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.grad-slider-track {
+  width: 32px;
+  height: 200px;
+  border-radius: 16px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.15);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.grad-slider-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 16px;
+  transition: height 0.05s;
+}
+.grad-slider-thumb {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  transition: bottom 0.05s;
+  z-index: 2;
+}
+.grad-slider-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.6);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── RGB display ── */
+.grad-rgb-display {
+  display: flex;
+  gap: 16px;
+  font-size: 20px;
+  font-weight: 900;
+  z-index: 10;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+  margin-bottom: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Confirm button ── */
+.grad-confirm-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  transition: transform 0.1s;
+}
+.grad-confirm-btn:active { transform: scale(0.9); }
+.grad-confirm-btn span {
+  font-size: 24px;
+  font-weight: 900;
+  color: #0a0a0a;
+}
+
+/* ── Result phase — split ── */
+.grad-phase-result {
+  padding: 0;
+  gap: 0;
+}
+.grad-result-split {
+  flex: 1;
+  display: flex;
+  width: 100%;
+}
+.grad-result-half {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 80px;
+}
+.grad-result-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.grad-result-diff {
+  position: absolute;
+  bottom: max(calc(env(safe-area-inset-bottom, 16px) + 24px), 40px);
+  font-size: 36px;
+  font-weight: 900;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  z-index: 10;
+  animation: grad-pop 0.35s ease-out;
+}
+.grad-result-diff.great { color: #22c55e; }
+.grad-result-diff.ok { color: #f59e0b; }
+.grad-result-diff.bad { color: #ef4444; }
+
+/* ── Done summary ── */
+.grad-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 340px;
+  z-index: 10;
+}
+.grad-done-title {
+  font-size: 20px;
+  font-weight: 800;
+}
+.grad-done-rounds {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.grad-done-round {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+}
+.grad-done-round span:first-child {
+  color: rgba(255,255,255,0.5);
+  white-space: nowrap;
+}
+.grad-done-colors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
+}
+.grad-done-colors span {
+  color: rgba(255,255,255,0.3);
+  font-size: 11px;
+}
+.grad-done-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.2);
+}
+.grad-done-diff {
+  font-weight: 800;
+  min-width: 40px;
+  text-align: right;
+}
+.grad-done-round.great .grad-done-diff { color: #22c55e; }
+.grad-done-round.ok .grad-done-diff { color: #f59e0b; }
+.grad-done-round.bad .grad-done-diff { color: #ef4444; }
+
+.grad-done-total {
+  font-size: 16px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 4px;
+}
+.grad-done-total strong {
+  color: #F43F5E;
+  font-size: 18px;
+}
+
+.grad-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255,255,255,0.5);
+  font-size: 14px;
+  margin-top: 16px;
+}
+.grad-waiting-dots {
+  display: flex;
+  gap: 6px;
+}
+.grad-waiting-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #F43F5E;
+  animation: grad-bounce 1.2s infinite;
+}
+.grad-waiting-dots span:nth-child(2) { animation-delay: 0.2s; }
+.grad-waiting-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes grad-bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-10px); }
+}

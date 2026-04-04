@@ -29,6 +29,7 @@ export default function Result() {
   const isSeq = gameType === 'sequence'
   const isReact = gameType === 'reaction'
   const isHear = gameType === 'hearing'
+  const isGrad = gameType === 'gradient'
 
   const isWin = won === true
 
@@ -95,13 +96,13 @@ export default function Result() {
         <div className="result-score-row">
           <span className="result-score-label">{tr.resultYou || 'Вы'}</span>
           <div className="result-score-dots" />
-          <span className="result-score-val">{isHear ? `${myScore} Hz` : isReact ? `${myScore} ${tr.reactMs || 'мс'}` : isBJ ? `${myScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${myScore}/${total} ${tr.resultRounds || 'раундов'}` : `${myScore}/${total}`}</span>
+          <span className="result-score-val">{isGrad ? `${myScore} pts` : isHear ? `${myScore} Hz` : isReact ? `${myScore} ${tr.reactMs || 'мс'}` : isBJ ? `${myScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${myScore}/${total} ${tr.resultRounds || 'раундов'}` : `${myScore}/${total}`}</span>
         </div>
         {oppScore !== null && oppScore !== undefined && (
           <div className="result-score-row">
             <span className="result-score-label">{tr.resultOpponent || 'Соперник'}</span>
             <div className="result-score-dots" />
-            <span className="result-score-val">{isHear ? `${oppScore} Hz` : isReact ? `${oppScore} ${tr.reactMs || 'мс'}` : isBJ ? `${oppScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${oppScore}/${total} ${tr.resultRounds || 'раундов'}` : `${oppScore}/${total}`}</span>
+            <span className="result-score-val">{isGrad ? `${oppScore} pts` : isHear ? `${oppScore} Hz` : isReact ? `${oppScore} ${tr.reactMs || 'мс'}` : isBJ ? `${oppScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${oppScore}/${total} ${tr.resultRounds || 'раундов'}` : `${oppScore}/${total}`}</span>
           </div>
         )}
       </div>

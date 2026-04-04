@@ -86,6 +86,25 @@ export const translations = {
     gameReactionSub: 'Кто быстрее нажмёт',
     gameHearingTitle: 'Слух',
     gameHearingSub: 'Угадай частоту звука',
+    gameGradientTitle: 'Градиент',
+    gameGradientSub: 'Повтори цвет по памяти',
+
+    // Gradient sheet
+    sheetGradRounds: 'раундов',
+    sheetGradTime: 'сек показ',
+    sheetGradRule1: 'Запомни цвет — он показывается 2 секунды',
+    sheetGradRule2: 'Настрой три ползунка (R, G, B) чтобы повторить цвет',
+    sheetGradRule3: 'Побеждает тот, кто точнее повторил все 5 цветов',
+
+    // Gradient in-game
+    gradRemember: 'Запомни!',
+    gradAdjust: 'Повтори!',
+    gradTarget: 'Цель',
+    gradYours: 'Твой цвет',
+    gradDiff: 'Разница',
+    gradRound: 'Раунд',
+    gradResult: 'Результат',
+    gradTotalDiff: 'Общая разница',
 
     // Hearing sheet
     sheetHearRounds: 'раундов',
@@ -457,6 +476,25 @@ export const translations = {
     gameReactionSub: 'Fastest tap wins',
     gameHearingTitle: 'Hearing',
     gameHearingSub: 'Match the frequency',
+    gameGradientTitle: 'Gradient',
+    gameGradientSub: 'Match the color',
+
+    // Gradient sheet
+    sheetGradRounds: 'rounds',
+    sheetGradTime: 'sec preview',
+    sheetGradRule1: 'Memorize the color — shown for 2 seconds',
+    sheetGradRule2: 'Adjust three sliders (R, G, B) to recreate it',
+    sheetGradRule3: 'Most accurate color match across 5 rounds wins',
+
+    // Gradient in-game
+    gradRemember: 'Remember!',
+    gradAdjust: 'Match it!',
+    gradTarget: 'Target',
+    gradYours: 'Your color',
+    gradDiff: 'Difference',
+    gradRound: 'Round',
+    gradResult: 'Result',
+    gradTotalDiff: 'Total difference',
 
     // Hearing sheet
     sheetHearRounds: 'rounds',
