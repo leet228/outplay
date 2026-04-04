@@ -1199,6 +1199,12 @@ const GAME_SHEETS = {
   hearing: {
     icon: '🎶',
     svgIcon: (color) => <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={color} strokeWidth="2"/><circle cx="18" cy="16" r="3" stroke={color} strokeWidth="2"/></svg>,
+    stats: [
+      { val: '5', lblKey: 'sheetHearRounds' },
+      { val: '3', lblKey: 'sheetHearTime' },
+      { val: '1v1', lblKey: 'sheetStatMode' },
+    ],
+    ruleKeys: ['sheetHearRule1', 'sheetHearRule2', 'sheetHearRule3'],
   },
   gradient: {
     icon: '🌈',
