@@ -9,7 +9,7 @@
 
 -- First ensure there's an active season
 INSERT INTO guild_seasons (id, start_date, end_date, prize_pool, is_active)
-VALUES ('s0000000-0000-0000-0000-000000000001', CURRENT_DATE - 30, CURRENT_DATE + 60, 5000, true)
+VALUES ('a0000000-0000-0000-0000-300000000003', CURRENT_DATE - 30, CURRENT_DATE + 60, 5000, true)
 ON CONFLICT DO NOTHING;
 
 -- Guild PnL (Outplay Elite = +12500, Phantom = +8400)
