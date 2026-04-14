@@ -428,7 +428,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     // Bot timer: подключить бота через 30-60 сек если не нашёл человека
     // Если первая попытка не удалась — повтор через 10с
     if (appSettings?.bot_enabled !== false) {
-      const botDelay = (30 + Math.floor(Math.random() * 31)) * 1000
+      const botDelay = (20 + Math.floor(Math.random() * 21)) * 1000
       const tryCreateBot = async (retries = 2) => {
         if (matchFoundRef.current || searchCancelledRef.current) return
         try {
