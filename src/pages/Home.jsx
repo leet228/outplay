@@ -625,7 +625,64 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteMsg, setInviteMsg] = useState(null) // 'sent' | 'error' | 'balance' | 'offline'
   const [acceptError, setAcceptError] = useState(null) // invite id with balance error
+  const [carouselIndex, setCarouselIndex] = useState(0)
+  const [carouselDrag, setCarouselDrag] = useState(0)
+  const [carouselDragging, setCarouselDragging] = useState(false)
+  const carouselTouchStartX = useRef(0)
+  const carouselTouchStartY = useRef(0)
+  const carouselLockedAxis = useRef(null) // 'x' | 'y' | null
   const debounceRef = useRef(null)
+
+  // Available games list (stable order) — memo-free since GAMES is module-level constant
+  const carouselGames = GAMES.filter(g => g.available)
+
+  // When invite sheet opens for a new friend, reset to first game and pre-select it
+  useEffect(() => {
+    if (inviteTarget) {
+      setCarouselIndex(0)
+      setInviteGame(carouselGames[0]?.id ?? null)
+    }
+  }, [inviteTarget?.id])
+
+  function goToCarousel(i) {
+    const len = carouselGames.length
+    if (!len) return
+    const next = ((i % len) + len) % len
+    setCarouselIndex(next)
+    setInviteGame(carouselGames[next].id)
+    haptic('light')
+  }
+
+  function onCarouselTouchStart(e) {
+    carouselTouchStartX.current = e.touches[0].clientX
+    carouselTouchStartY.current = e.touches[0].clientY
+    carouselLockedAxis.current = null
+    setCarouselDrag(0)
+    setCarouselDragging(true)
+  }
+  function onCarouselTouchMove(e) {
+    const dx = e.touches[0].clientX - carouselTouchStartX.current
+    const dy = e.touches[0].clientY - carouselTouchStartY.current
+    if (carouselLockedAxis.current === null) {
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        carouselLockedAxis.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
+      }
+    }
+    if (carouselLockedAxis.current === 'x') {
+      e.preventDefault?.()
+      setCarouselDrag(dx)
+    }
+  }
+  function onCarouselTouchEnd() {
+    setCarouselDragging(false)
+    if (carouselLockedAxis.current === 'x') {
+      const threshold = 50
+      if (carouselDrag > threshold) goToCarousel(carouselIndex - 1)
+      else if (carouselDrag < -threshold) goToCarousel(carouselIndex + 1)
+    }
+    setCarouselDrag(0)
+    carouselLockedAxis.current = null
+  }
 
   // Cleanup debounce on unmount
   useEffect(() => {
@@ -883,11 +940,10 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
               const gameIcon = gameCfg.svgIcon ? gameCfg.svgIcon(gameData.accent) : gameCfg.icon
               const gameLabel = t[gameData.titleKey] || inv.game_type
               return (
-                <div key={inv.id} className="friends-row friends-invite-row">
+                <div key={inv.id} className="friends-row friends-invite-row" style={{ '--row-accent': gameData.accent }}>
                   <FriendAvatar user={sender || { first_name: '?' }} showOnline />
                   <div className="friends-info">
                     <span className="friends-name">{sender?.first_name || '?'}{sender?.is_pro && <span className="pro-user-badge pro-user-badge--sm">PRO</span>}</span>
-                    <span className="friends-invite-meta">{gameIcon} {gameLabel} · {formatCurrency(inv.stake, currency, rates)}</span>
                   </div>
                   {!expired ? (
                     <div className="friends-req-actions">
@@ -903,6 +959,14 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
                   ) : (
                     <span className="friends-badge friends-badge--pending">Expired</span>
                   )}
+                  <div className="invite-meta-wrap">
+                    <span className="invite-meta-pill" style={{ '--pill-accent': gameData.accent }}>
+                      <span className="invite-meta-icon">{gameIcon}</span>
+                      <span className="invite-meta-name">{gameLabel}</span>
+                      <span className="invite-meta-sep" />
+                      <span className="invite-meta-stake">{formatCurrency(inv.stake, currency, rates)}</span>
+                    </span>
+                  </div>
                 </div>
               )
             })}
@@ -1106,20 +1170,75 @@ function FriendsPanel({ open, onClose, t, user, navigate, balance, currency, rat
             <h3 className="invite-sheet-title">{t.inviteTitle} {inviteTarget.first_name}</h3>
 
             <span className="invite-sheet-label">{t.inviteSelectGame}</span>
-            <div className="invite-game-cards">
-              {GAMES.filter(g => g.available).map(g => {
-                const cfg = GAME_SHEETS[g.id]
-                return (
-                  <button
-                    key={g.id}
-                    className={`invite-game-card ${inviteGame === g.id ? 'active' : ''}`}
-                    onClick={() => { haptic('light'); setInviteGame(g.id) }}
-                  >
-                    <span className="invite-game-icon">{cfg?.svgIcon ? cfg.svgIcon(g.accent) : cfg?.icon}</span>
-                    <span className="invite-game-label">{t[g.titleKey]}</span>
-                  </button>
-                )
-              })}
+            <div className="invite-carousel">
+              <button
+                className="invite-carousel-arrow left"
+                onClick={() => goToCarousel(carouselIndex - 1)}
+                aria-label="prev"
+                type="button"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              <div
+                className="invite-carousel-viewport"
+                onTouchStart={onCarouselTouchStart}
+                onTouchMove={onCarouselTouchMove}
+                onTouchEnd={onCarouselTouchEnd}
+                onTouchCancel={onCarouselTouchEnd}
+              >
+                <div
+                  className="invite-carousel-track"
+                  style={{
+                    transform: `translateX(calc(${-carouselIndex * 100}% + ${carouselDrag}px))`,
+                    transition: carouselDragging ? 'none' : 'transform 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
+                  }}
+                >
+                  {carouselGames.map((g, i) => {
+                    const cfg = GAME_SHEETS[g.id]
+                    const isActive = i === carouselIndex
+                    return (
+                      <div key={g.id} className="invite-carousel-slide">
+                        <div
+                          className={`invite-carousel-card ${isActive ? 'active' : ''}`}
+                          style={{
+                            '--game-accent': g.accent,
+                            '--game-shadow': g.shadow,
+                          }}
+                        >
+                          <div className="invite-carousel-glow" />
+                          <div className="invite-carousel-icon">
+                            {cfg?.svgIcon
+                              ? cfg.svgIcon(g.accent)
+                              : <span className="invite-carousel-emoji">{cfg?.icon}</span>}
+                          </div>
+                          <div className="invite-carousel-title">{t[g.titleKey]}</div>
+                          {t[g.subKey] && <div className="invite-carousel-sub">{t[g.subKey]}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              <button
+                className="invite-carousel-arrow right"
+                onClick={() => goToCarousel(carouselIndex + 1)}
+                aria-label="next"
+                type="button"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+            <div className="invite-carousel-dots">
+              {carouselGames.map((g, i) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  className={`invite-carousel-dot ${i === carouselIndex ? 'active' : ''}`}
+                  style={i === carouselIndex ? { background: g.accent, boxShadow: `0 0 8px ${g.accent}80` } : undefined}
+                  onClick={() => goToCarousel(i)}
+                  aria-label={t[g.titleKey]}
+                />
+              ))}
             </div>
 
             <span className="invite-sheet-label">{t.inviteStake}</span>

@@ -1167,6 +1167,10 @@
   overflow-y: auto;
 }
 
+.friends-list > * {
+  flex-shrink: 0;
+}
+
 .friends-empty {
   text-align: center;
   color: var(--text-muted);
@@ -1184,6 +1188,14 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 12px 0 6px;
+}
+
+/* Divider between sibling groups (not the first) */
+.friends-list > * + .friends-group-label,
+.friends-list > * + :not(.friends-group-label) ~ .friends-group-label {
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 .friends-online-dot {
@@ -1475,9 +1487,12 @@
    Game Invites Section
 ═══════════════════════════════════ */
 .friends-invites {
-  padding: 0 16px 8px;
+  padding: 0 16px 12px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .friends-invite-dot {
@@ -1496,7 +1511,117 @@
 }
 
 .friends-invite-row {
-  padding-right: 8px;
+  position: relative;
+  padding: 10px 8px 12px 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--row-accent, var(--accent)) 7%, transparent), transparent 65%),
+    var(--surface);
+  border: 1px solid color-mix(in srgb, var(--row-accent, var(--accent)) 18%, var(--border));
+  border-radius: 16px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+  overflow: hidden;
+}
+
+.friends-invite-row .friends-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.friends-invite-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--row-accent, var(--accent)), transparent);
+  opacity: 0.85;
+}
+
+.friends-invite-row:active {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--row-accent, var(--accent)) 12%, transparent), transparent 65%),
+    var(--surface);
+}
+
+/* New premium pill for incoming invite meta */
+.invite-meta-wrap {
+  flex: 1 1 100%;
+  margin-left: 52px;
+  min-width: 0;
+  display: block;
+}
+
+.invite-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 3px;
+  max-width: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--pill-accent) 22%, transparent),
+    color-mix(in srgb, var(--pill-accent) 8%, transparent) 70%,
+    color-mix(in srgb, var(--pill-accent) 4%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--pill-accent) 40%, var(--border));
+  color: color-mix(in srgb, var(--pill-accent) 85%, #ffffff);
+  font-size: 11.5px;
+  font-weight: 800;
+  max-width: 100%;
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--pill-accent) 20%, transparent) inset,
+    0 4px 12px -6px color-mix(in srgb, var(--pill-accent) 45%, transparent);
+  align-self: flex-start;
+  letter-spacing: 0.1px;
+}
+
+.invite-meta-icon {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--pill-accent) 35%, transparent), transparent 70%),
+    color-mix(in srgb, var(--pill-accent) 18%, #00000040);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--pill-accent) 30%, transparent) inset;
+}
+.invite-meta-icon svg { width: 12px; height: 12px; }
+.invite-meta-icon > span { font-size: 13px; line-height: 1; }
+
+.invite-meta-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-size: 10.5px;
+}
+
+.invite-meta-sep {
+  width: 1px;
+  height: 10px;
+  background: color-mix(in srgb, var(--pill-accent) 55%, transparent);
+  margin: 0 1px;
+  flex-shrink: 0;
+}
+
+.invite-meta-stake {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 800;
+  letter-spacing: 0.1px;
 }
 
 .friends-invite-meta {
@@ -1586,52 +1711,170 @@
   letter-spacing: 0.9px;
 }
 
-.invite-game-cards {
+/* ── Invite game carousel ── */
+.invite-carousel {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 6px;
+  margin: 0 -4px;
 }
 
-.invite-game-card {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  padding: 12px 4px;
-  border-radius: 14px;
+.invite-carousel-arrow {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   border: 1px solid var(--border);
-  background: #ffffff06;
-  color: var(--text-muted);
+  background: #ffffff08;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: all 0.15s;
   -webkit-tap-highlight-color: transparent;
-  min-width: 0;
-  overflow: hidden;
+  padding: 0;
 }
-
-.invite-game-card:active {
-  transform: scale(0.95);
-}
-
-.invite-game-card.active {
+.invite-carousel-arrow:active {
+  transform: scale(0.88);
   background: var(--accent-dim);
   border-color: var(--accent);
   color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent)33;
 }
 
-.invite-game-icon {
-  font-size: 28px;
+.invite-carousel-viewport {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.invite-carousel-track {
+  display: flex;
+  will-change: transform;
+}
+
+.invite-carousel-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  padding: 6px 4px;
+  box-sizing: border-box;
+}
+
+.invite-carousel-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 14px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--game-accent) 14%, transparent) 0%, #ffffff04 55%, #ffffff02 100%),
+    var(--surface);
+  color: var(--text);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.25s, border-color 0.25s;
+  transform: scale(0.95);
+  opacity: 0.85;
+}
+
+.invite-carousel-card.active {
+  transform: scale(1);
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--game-accent) 55%, var(--border));
+  box-shadow:
+    0 10px 24px -12px color-mix(in srgb, var(--game-accent) 55%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--game-accent) 25%, transparent) inset;
+}
+
+.invite-carousel-glow {
+  position: absolute;
+  inset: -30% -20% auto -20%;
+  height: 120%;
+  background: radial-gradient(55% 60% at 50% 0%, color-mix(in srgb, var(--game-accent) 35%, transparent) 0%, transparent 70%);
+  filter: blur(4px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+  transition: opacity 0.25s;
+}
+.invite-carousel-card.active .invite-carousel-glow { opacity: 1; }
+
+.invite-carousel-icon {
+  position: relative;
+  z-index: 1;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--game-accent) 28%, transparent) 0%, transparent 70%),
+    color-mix(in srgb, var(--game-accent) 10%, #ffffff06);
+  border: 1px solid color-mix(in srgb, var(--game-accent) 35%, var(--border));
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--game-accent) 45%, transparent);
+}
+
+.invite-carousel-icon svg {
+  width: 36px;
+  height: 36px;
+  filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--game-accent) 40%, transparent));
+}
+
+.invite-carousel-emoji {
+  font-size: 36px;
   line-height: 1;
 }
 
-.invite-game-label {
-  font-size: 11px;
-  font-weight: 700;
+.invite-carousel-title {
+  position: relative;
+  z-index: 1;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--text);
   text-align: center;
   line-height: 1.2;
-  word-break: break-word;
-  max-width: 100%;
+}
+
+.invite-carousel-sub {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.3;
+  max-width: 240px;
+  letter-spacing: 0.1px;
+}
+
+.invite-carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.invite-carousel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: var(--border);
+  cursor: pointer;
+  transition: all 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.invite-carousel-dot.active {
+  width: 18px;
+  border-radius: 3px;
 }
 
 .invite-stake-input {

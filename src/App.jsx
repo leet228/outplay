@@ -361,6 +361,10 @@ export default function App() {
         { request_id: 'req2', from_user: { id: '6', first_name: 'Сергей',  username: 'serg_bet', avatar_url: null }, created_at: new Date(Date.now() - 7200000).toISOString() },
       ])
       store.setSentRequestIds(['4'])
+      store.setGameInvites([
+        { id: 'inv1', from_id: '1', game_type: 'quiz',      stake: 100, expires_at: new Date(Date.now() + 300000).toISOString() },
+        { id: 'inv2', from_id: '2', game_type: 'blackjack', stake: 50,  expires_at: new Date(Date.now() + 180000).toISOString() },
+      ])
       // Dev defaults
       store.setAppSettings({ stars_deposits: true, crypto_deposits: true, withdrawals: true, game_creation: true, subscriptions: true })
       fetchRates().then(r => store.setRates(r)).catch(() => {})
