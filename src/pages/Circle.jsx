@@ -125,6 +125,10 @@ function formatPercent(score) {
   return `${(score / PERCENT_SCALE).toFixed(2)}%`
 }
 
+function toProgressPercent(score) {
+  return Math.max(0, Math.min(100, score / PERCENT_SCALE))
+}
+
 function verdictKey(score, t) {
   if (score >= 9000) return t.circlePerfect
   if (score >= 7500) return t.circleGreat
@@ -745,7 +749,7 @@ export default function Circle() {
         ? t.circleFinish
         : t.circleReady
   const roundLabel = `${attemptIdx + 1}/${TOTAL_ROUNDS}`
-  const lastRoundScore = scores.length ? `${scores[scores.length - 1]}%` : '--'
+  const lastRoundScore = scores.length ? formatPercent(scores[scores.length - 1]) : '--'
   const urgentTime = timeLeft <= 2500
 
   if (phase === 'done' && matchSummary) {
@@ -757,18 +761,18 @@ export default function Circle() {
 
             <div className="circle-done-rounds">
               {matchSummary.myScores.map((score, index) => {
-                const tone = score >= 85 ? 'great' : score >= 60 ? 'ok' : 'bad'
+                const tone = score >= 8500 ? 'great' : score >= 6000 ? 'ok' : 'bad'
                 return (
                   <div key={index} className={`circle-done-round ${tone}`}>
                     <span>{t.circleAttempt} {index + 1}</span>
-                    <span>{score}%</span>
+                    <span>{formatPercent(score)}</span>
                   </div>
                 )
               })}
             </div>
 
             <div className="circle-done-total">
-              {t.circleAvgLabel}: <strong>{matchSummary.myAvg}%</strong>
+              {t.circleAvgLabel}: <strong>{formatPercent(matchSummary.myAvg)}</strong>
             </div>
 
             {waitingOpponent && (
@@ -801,7 +805,7 @@ export default function Circle() {
             </div>
             <div className="circle-meta-card">
               <span className="circle-meta-label">{t.circleAvgLabel}</span>
-              <span className="circle-meta-value">{scores.length ? `${avgScore}%` : '--'}</span>
+              <span className="circle-meta-value">{scores.length ? formatPercent(avgScore) : '--'}</span>
             </div>
             <div className="circle-meta-card">
               <span className="circle-meta-label">{t.circleScoreLabel}</span>
@@ -816,7 +820,7 @@ export default function Circle() {
               <span>{stageStatus}</span>
             </div>
             <div className={`circle-stage-clock ${urgentTime && phase === 'draw' ? 'urgent' : ''}`}>
-              {phase === 'draw' ? `${(timeLeft / 1000).toFixed(1)}s` : scores.length ? `${avgScore}%` : 'Ready'}
+              {phase === 'draw' ? `${(timeLeft / 1000).toFixed(1)}s` : scores.length ? formatPercent(avgScore) : 'Ready'}
             </div>
           </div>
 
@@ -848,19 +852,18 @@ export default function Circle() {
                 }}
               >
                 <div className="circle-result-score" style={{ color: scoreTone.color }}>
-                  {lastScore.score}
-                  <span className="circle-result-pct">%</span>
+                  {formatPercent(lastScore.score)}
                 </div>
                 <div className="circle-result-verdict">
                   {lastScore.reason === 'short' ? t.circleTooShort : verdictKey(lastScore.score, t)}
                 </div>
                 <div className="circle-result-meter">
-                  <span style={{ width: `${lastScore.score}%`, background: scoreTone.track }} />
+                  <span style={{ width: `${toProgressPercent(lastScore.score)}%`, background: scoreTone.track }} />
                 </div>
                 <div className="circle-result-meta">
                   <div className="circle-result-meta-item">
                     <span className="circle-result-meta-label">{t.circleAvgLabel}</span>
-                    <span className="circle-result-meta-value">{avgScore}%</span>
+                    <span className="circle-result-meta-value">{formatPercent(avgScore)}</span>
                   </div>
                   <div className={`circle-result-badge ${scoreTone.badgeClass}`}>
                     {scores.length}/{TOTAL_ROUNDS}

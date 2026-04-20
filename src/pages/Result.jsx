@@ -73,7 +73,7 @@ export default function Result() {
     if (isGrad) return `${value} pts`
     if (isHear) return `${value} Hz`
     if (isReact) return `${value} ${tr.reactMs || 'мс'}`
-    if (isCircle) return `${value}%`
+    if (isCircle) return `${(value / 100).toFixed(2)}%`
     if (isBJ) return `${value} ${tr.resultPoints || 'очков'}`
     if (isSeq) return `${value}/${total} ${tr.resultRounds || 'раундов'}`
     return `${value}/${total}`
