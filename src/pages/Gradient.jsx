@@ -5,6 +5,7 @@ import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { supabase, getGradientDuel, submitGradientResult, calcPayout, heartbeatDuel, forfeitDuel, claimForfeit } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
+import { botLower, botHigher, enforceDirection } from '../lib/botScore'
 import sound from '../lib/sounds'
 import './Gradient.css'
 
@@ -319,13 +320,12 @@ export default function Gradient() {
   }
 
   function generateBotResult(myTotalDiff) {
+    // lower diff = better. Guarantee strict direction vs myTotalDiff.
     const shouldWin = botShouldWinRef.current
-    let totalDiff
-    if (shouldWin) {
-      totalDiff = Math.max(15, myTotalDiff - 20 - Math.floor(Math.random() * 50))
-    } else {
-      totalDiff = myTotalDiff + 20 + Math.floor(Math.random() * 60)
-    }
+    const raw = shouldWin
+      ? botLower(myTotalDiff, 20, 50, 0)
+      : botHigher(myTotalDiff, 20, 60, 2000)
+    const totalDiff = enforceDirection(raw, myTotalDiff, shouldWin, 'lower', { floor: 0, ceiling: 2000 })
     return { totalDiff }
   }
 

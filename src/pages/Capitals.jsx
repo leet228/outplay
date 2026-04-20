@@ -15,6 +15,7 @@ import {
   claimForfeit,
 } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
+import { botLower, botHigher, enforceDirection } from '../lib/botScore'
 import sound from '../lib/sounds'
 import './Capitals.css'
 
@@ -206,10 +207,11 @@ function pickCapitals(n, seed) {
 }
 
 function generateBotTotal(myTotal, shouldWin) {
-  if (shouldWin) {
-    return Math.max(25, myTotal - (100 + Math.floor(Math.random() * 900)))
-  }
-  return myTotal + 80 + Math.floor(Math.random() * 850)
+  // lower total km = better. Guarantee strict direction vs myTotal.
+  const raw = shouldWin
+    ? botLower(myTotal, 100, 900, 0)
+    : botHigher(myTotal, 80, 850, 15000)
+  return enforceDirection(raw, myTotal, shouldWin, 'lower', { floor: 0, ceiling: 15000 })
 }
 
 export default function Capitals() {
@@ -679,6 +681,15 @@ export default function Capitals() {
       payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
       timeDiff = Math.abs(myTotal - botTotal)
     } else if (isBotGameRef.current) {
+      // Re-fetch bot_should_win right before generating score — protects against
+      // stale client state (e.g. if duel row was updated or initial load was off).
+      try {
+        const fresh = await getCapitalsDuel(duelId)
+        if (fresh && typeof fresh.bot_should_win === 'boolean') {
+          botShouldWinRef.current = fresh.bot_should_win
+        }
+      } catch {}
+
       const botTotal = generateBotTotal(myTotal, botShouldWinRef.current)
       oppScore = botTotal
 

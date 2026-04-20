@@ -5,6 +5,7 @@ import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { supabase, getHearingDuel, submitHearingResult, calcPayout, heartbeatDuel, forfeitDuel, claimForfeit } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
+import { botLower, botHigher, enforceDirection } from '../lib/botScore'
 import sound from '../lib/sounds'
 import './Hearing.css'
 
@@ -527,13 +528,12 @@ export default function Hearing() {
   }
 
   function generateBotResult(myTotalDiff) {
+    // lower diff Hz = better. Guarantee strict direction vs myTotalDiff.
     const shouldWin = botShouldWinRef.current
-    let totalDiff
-    if (shouldWin) {
-      totalDiff = Math.max(10, myTotalDiff - 20 - Math.floor(Math.random() * 40))
-    } else {
-      totalDiff = myTotalDiff + 20 + Math.floor(Math.random() * 60)
-    }
+    const raw = shouldWin
+      ? botLower(myTotalDiff, 20, 40, 0)
+      : botHigher(myTotalDiff, 20, 60, 5000)
+    const totalDiff = enforceDirection(raw, myTotalDiff, shouldWin, 'lower', { floor: 0, ceiling: 5000 })
     return { totalDiff }
   }
 

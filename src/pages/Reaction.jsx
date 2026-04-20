@@ -5,6 +5,7 @@ import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { supabase, getReactionDuel, submitReactionResult, calcPayout, heartbeatDuel, forfeitDuel, claimForfeit } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
+import { botLower, botHigher, enforceDirection } from '../lib/botScore'
 import sound from '../lib/sounds'
 import './Reaction.css'
 
@@ -372,15 +373,13 @@ export default function Reaction() {
 
   // ── Bot result ──
   function generateBotResult(myAvg) {
+    // lower avg reaction time (ms) = better. Guarantee strict direction vs myAvg.
+    // Floor 0 so pathologically fast player runs don't leave bot pinned above them.
     const shouldWin = botShouldWinRef.current
-    let avg
-    if (shouldWin) {
-      // Bot wins: generate faster time (180-350ms range, adjusted)
-      avg = Math.max(150, myAvg - 30 - Math.floor(Math.random() * 60))
-    } else {
-      // Bot loses: generate slower time
-      avg = myAvg + 30 + Math.floor(Math.random() * 80)
-    }
+    const raw = shouldWin
+      ? botLower(myAvg, 30, 60, 0)
+      : botHigher(myAvg, 30, 80, 5000)
+    const avg = enforceDirection(raw, myAvg, shouldWin, 'lower', { floor: 0, ceiling: 5000 })
     return { avg }
   }
 

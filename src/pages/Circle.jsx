@@ -14,6 +14,7 @@ import {
   claimForfeit,
 } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
+import { enforceDirection } from '../lib/botScore'
 import sound from '../lib/sounds'
 import './Circle.css'
 
@@ -193,6 +194,10 @@ function generateBotResult(myAvg, myTime, shouldWin) {
     scores[scores.length - 1] = clampScore(scores[scores.length - 1] - ((avg - myAvg) + 200))
     avg = average(scores)
   }
+
+  // Final safety: regardless of clamps above, force strict direction vs myAvg.
+  // Circle: higher avg = better.
+  avg = enforceDirection(avg, myAvg, shouldWin, 'higher', { floor: 0, ceiling: 10000 })
 
   let time
   if (avg === myAvg) {

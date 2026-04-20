@@ -5,6 +5,7 @@ import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
 import { supabase, getRaceDuel, submitRaceResult, calcPayout, heartbeatDuel, forfeitDuel, claimForfeit } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
+import { botLower, botHigher, enforceDirection } from '../lib/botScore'
 import sound from '../lib/sounds'
 import './Race.css'
 
@@ -481,13 +482,14 @@ export default function Race() {
   }
 
   function generateBotResult(myTime) {
+    // lower time (ms) = better. Guarantee strict direction vs myTime.
+    // Floor 0 so that even on a pathologically fast player run the bot can still
+    // sit strictly below — the visual mismatch is worse than an unrealistic bot time.
     const shouldWin = botShouldWinRef.current
-    let time
-    if (shouldWin) {
-      time = Math.max(5000, myTime - 500 - Math.floor(Math.random() * 1500))
-    } else {
-      time = myTime + 500 + Math.floor(Math.random() * 2000)
-    }
+    const raw = shouldWin
+      ? botLower(myTime, 500, 1500, 0)
+      : botHigher(myTime, 500, 2000, 120000)
+    const time = enforceDirection(raw, myTime, shouldWin, 'lower', { floor: 0, ceiling: 120000 })
     return { time }
   }
 

@@ -554,25 +554,34 @@ export default function Sequence() {
   }
 
   // ── Bot result generation ──
+  // Sequence: higher score wins; ties broken by LOWER time.
   function generateBotResult(myScore, myTime) {
     const shouldWin = botShouldWinRef.current
     let score, time
 
     if (shouldWin) {
       if (myScore < 3) {
+        // Bot wins by higher score
         score = Math.min(3, myScore + 1)
         time = 10 + Math.random() * 20
       } else {
+        // Player maxed — bot wins only by faster time (strict).
         score = 3
-        time = Math.max(3, myTime - (0.5 + Math.random() * 2.5))
+        // Guarantee strictly faster than myTime; go to 0.1s if needed.
+        const target = myTime - (0.5 + Math.random() * 2.5)
+        time = target < myTime ? target : myTime - 0.1
+        if (time <= 0) time = Math.max(0.1, myTime * 0.5)
       }
     } else {
       if (myScore > 0) {
+        // Bot loses by lower score
         score = Math.max(0, myScore - 1)
         time = 10 + Math.random() * 20
       } else {
+        // Player bottomed — bot loses only by slower time (strict).
         score = 0
-        time = myTime + (1 + Math.random() * 2)
+        const target = myTime + (1 + Math.random() * 2)
+        time = target > myTime ? target : myTime + 0.1
       }
     }
 
