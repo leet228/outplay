@@ -90,6 +90,33 @@ export const translations = {
     gameGradientSub: 'Повтори цвет по памяти',
     gameRaceTitle: 'Гонка',
     gameRaceSub: 'Проведи шарик по трассе',
+    gameCapitalsTitle: 'Столицы',
+    gameCapitalsSub: 'Найди столицу на карте мира',
+
+    // Capitals sheet
+    sheetCapRounds: 'раунда',
+    sheetCapTime: 'сек раунд',
+    sheetCapRule1: 'Поставь метку на карте где находится столица',
+    sheetCapRule2: 'У тебя 15 секунд на каждый раунд',
+    sheetCapRule3: 'Побеждает у кого меньше суммарная ошибка в км за 3 раунда',
+
+    // Capitals in-game
+    capFindCapitalOf: 'Найди столицу',
+    capMapHint: 'Тяни карту, увеличивай пальцами и ставь метку коротким тапом',
+    capPlacePin: 'Поставь метку на карте',
+    capReadyAnswer: 'Готов ответить',
+    capAnswer: 'Ответить',
+    capNoPin: 'Метка не поставлена',
+    capRoundOf: 'Раунд',
+    capYou: 'Ты',
+    capOpponent: 'Соперник',
+    capKm: 'км',
+    capKmAway: 'км до цели',
+    capMaxPenalty: 'Штраф 5000 км',
+    capPerfect: 'Идеально!',
+    capNext: 'Далее',
+    capTotal: 'Итого',
+    capWaitingOpponent: 'Ждём соперника...',
 
     // Race sheet
     sheetRaceRounds: 'заезд',
@@ -494,6 +521,33 @@ export const translations = {
     gameGradientSub: 'Match the color',
     gameRaceTitle: 'Race',
     gameRaceSub: 'Steer the ball through',
+    gameCapitalsTitle: 'Capitals',
+    gameCapitalsSub: 'Find the capital on the map',
+
+    // Capitals sheet
+    sheetCapRounds: 'rounds',
+    sheetCapTime: 'sec per round',
+    sheetCapRule1: 'Place a pin on the map where the capital is',
+    sheetCapRule2: 'You have 15 seconds per round',
+    sheetCapRule3: 'Lowest total km error across 3 rounds wins',
+
+    // Capitals in-game
+    capFindCapitalOf: 'Find the capital',
+    capMapHint: 'Drag, pinch to zoom, and tap to place your pin',
+    capPlacePin: 'Place a pin on the map',
+    capReadyAnswer: 'Ready to answer',
+    capAnswer: 'Answer',
+    capNoPin: 'No pin placed',
+    capRoundOf: 'Round',
+    capYou: 'You',
+    capOpponent: 'Opponent',
+    capKm: 'km',
+    capKmAway: 'km away',
+    capMaxPenalty: 'Max penalty 5000 km',
+    capPerfect: 'Perfect!',
+    capNext: 'Next',
+    capTotal: 'Total',
+    capWaitingOpponent: 'Waiting for opponent...',
 
     // Race sheet
     sheetRaceRounds: 'race',
