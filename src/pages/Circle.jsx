@@ -443,10 +443,10 @@ export default function Circle() {
       }
     }
 
-    if (result.score >= 85) {
+    if (result.score >= 8500) {
       haptic('heavy')
       sound.correct?.()
-    } else if (result.score >= 60) {
+    } else if (result.score >= 6000) {
       haptic('medium')
       sound.correct?.()
     } else {
@@ -476,7 +476,10 @@ export default function Circle() {
       remaining = Math.max(0, remaining - 50)
       setTimeLeft(remaining)
       if (remaining <= 0) {
-        clearRoundTimers()
+        if (tickIntervalRef.current) {
+          clearInterval(tickIntervalRef.current)
+          tickIntervalRef.current = null
+        }
         setDrawing(false)
         drawingRef.current = false
       }
