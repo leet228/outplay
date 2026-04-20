@@ -567,6 +567,16 @@ export default function Circle() {
     let tiebreak = false
     let timeDiff = 0
     let opponentScores = []
+    const shouldWaitForOpponent = !isDevDuel
+
+    setMatchSummary({
+      won: null,
+      myAvg: myScore,
+      opponentAvg: null,
+      myScores,
+      opponentScores: [],
+    })
+    setWaitingOpponent(shouldWaitForOpponent)
 
     if (isDevDuel) {
       const botResult = generateBotResult(myScore, myTime, botShouldWinRef.current)
@@ -582,7 +592,6 @@ export default function Circle() {
       opponentScores = botResult.scores
 
       await submitWithRetry(user.id, myScore, myTime)
-      setWaitingOpponent(true)
 
       const botDelay = Math.max(700, Math.min(4000, Math.round(Math.abs(botResult.time - myTime) * 1000)))
       await sleep(botDelay)
@@ -609,7 +618,6 @@ export default function Circle() {
       payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
     } else {
       await submitWithRetry(user.id, myScore, myTime)
-      setWaitingOpponent(true)
 
       const finalDuel = await waitForFinishedDuel(30, 2000, true, myScore)
       setWaitingOpponent(false)
