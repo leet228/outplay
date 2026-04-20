@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { useShallow } from 'zustand/react/shallow'
 import { supabase } from '../lib/supabase'
-import { findMatch, cancelMatchmaking, createBotDuel, pingMatchmaking } from '../lib/supabase'
+import { findMatch, cancelMatchmaking, createBotDuel } from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 import sound from '../lib/sounds'
 import { translations } from '../lib/i18n'
@@ -207,7 +207,6 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const pollRef = useRef(null)
   const timerRef = useRef(null)
   const botTimerRef = useRef(null)
-  const pingRef = useRef(null)
   const searchCancelledRef = useRef(false)
 
   useEffect(() => {
@@ -289,7 +288,6 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     if (botTimerRef.current) { clearTimeout(botTimerRef.current); botTimerRef.current = null }
-    if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null }
   }
 
   const matchFoundRef = useRef(false)
@@ -386,15 +384,6 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     // Queued — show searching UI
     setSearching(true)
     setSearchTime(0)
-
-    // Ping matchmaking every 5s to keep queue entry alive (TTL = 15s)
-    if (user.id !== 'dev') {
-      pingRef.current = setInterval(() => {
-        if (!searchCancelledRef.current && !matchFoundRef.current) {
-          pingMatchmaking(user.id)
-        }
-      }, 5000)
-    }
 
     // Realtime subscription
     const channel = supabase

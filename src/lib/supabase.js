@@ -589,11 +589,6 @@ export async function cancelMatchmaking(userId) {
   if (error) console.error('cancelMatchmaking error:', error)
 }
 
-export function pingMatchmaking(userId) {
-  supabase.rpc('ping_matchmaking', { p_user_id: userId })
-    .then(({ error }) => { if (error) console.error('pingMatchmaking error:', error) })
-}
-
 export async function submitAnswer(duelId, userId, questionIndex, answerIndex, isCorrect, timeSpent) {
   const { data, error } = await supabase.rpc('submit_answer', {
     p_duel_id: duelId,
@@ -758,7 +753,7 @@ export async function submitRaceResult(duelId, userId, score, time) {
 export async function getCapitalsDuel(duelId) {
   const { data, error } = await supabase
     .from('duels')
-    .select('id, creator_id, opponent_id, stake, status, is_bot_game, bot_should_win, game_type, creator_score, opponent_score, winner_id, creator_time, opponent_time')
+    .select('id, creator_id, opponent_id, stake, status, is_bot_game, bot_should_win, game_type, creator_score, opponent_score, winner_id, creator_time, opponent_time, capitals_seed')
     .eq('id', duelId)
     .single()
   if (error) { console.error('getCapitalsDuel error:', error); return null }

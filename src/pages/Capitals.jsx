@@ -171,10 +171,35 @@ function formatKm(km) {
   return Math.round(km).toLocaleString('ru-RU')
 }
 
-function pickCapitals(n) {
+// Stable fallback: derive a 32-bit seed from a UUID string (FNV-1a hash)
+function uuidToSeed(uuid) {
+  if (!uuid) return 1
+  let hash = 2166136261 >>> 0
+  for (let i = 0; i < uuid.length; i++) {
+    hash ^= uuid.charCodeAt(i)
+    hash = Math.imul(hash, 16777619) >>> 0
+  }
+  return hash || 1
+}
+
+// Deterministic PRNG — Mulberry32 (32-bit, good enough for shuffle)
+function mulberry32(seed) {
+  let a = seed >>> 0
+  return function () {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Fisher-Yates shuffle driven by a seeded RNG (or Math.random for dev fallback)
+function pickCapitals(n, seed) {
+  const rng = seed != null ? mulberry32(seed | 0) : Math.random
   const arr = [...CAPITALS]
   for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = Math.floor(rng() * (i + 1))
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr.slice(0, n)
@@ -206,7 +231,7 @@ export default function Capitals() {
   const [timeLeft, setTimeLeft] = useState(ROUND_TIME)
   const [myPin, setMyPin] = useState(null)
   const [rounds, setRounds] = useState([])
-  const [capitalsList] = useState(() => pickCapitals(TOTAL_ROUNDS))
+  const [capitalsList, setCapitalsList] = useState(null)
   const [waitingOpponent, setWaitingOpponent] = useState(false)
   const [zoom, setZoom] = useState(MIN_ZOOM)
   const [pan, setPan] = useState({ x: 0, y: 0 })
@@ -265,7 +290,7 @@ export default function Capitals() {
     roundIndexRef.current = roundIndex
   }, [roundIndex])
 
-  const currentCapital = capitalsList[roundIndex]
+  const currentCapital = capitalsList?.[roundIndex]
   const lastRound = rounds[rounds.length - 1]
 
   useEffect(() => {
@@ -273,6 +298,7 @@ export default function Capitals() {
     if (isDevDuel) {
       const parts = duelId.replace('dev-', '').split('-')
       const stake = parseInt(parts[parts.length - 1], 10) || 100
+      const seed = 1 + Math.floor(Math.random() * 2147483646)
       const mockDuel = {
         id: duelId,
         creator_id: 'dev',
@@ -282,9 +308,11 @@ export default function Capitals() {
         is_bot_game: true,
         bot_should_win: Math.random() < 0.5,
         game_type: 'capitals',
+        capitals_seed: seed,
       }
       setDuel(mockDuel)
       setActiveDuel(mockDuel)
+      setCapitalsList(pickCapitals(TOTAL_ROUNDS, seed))
       isBotGameRef.current = true
       botShouldWinRef.current = mockDuel.bot_should_win
       setLoading(false)
@@ -306,6 +334,10 @@ export default function Capitals() {
     }
     setDuel(duelData)
     setActiveDuel(duelData)
+    // Fallback: older duels (or race with uncommitted seed) — derive a seed
+    // from the duel UUID so both clients still produce the same list.
+    const seed = duelData.capitals_seed ?? uuidToSeed(duelData.id)
+    setCapitalsList(pickCapitals(TOTAL_ROUNDS, seed))
     if (duelData.is_bot_game) {
       isBotGameRef.current = true
       botShouldWinRef.current = !!duelData.bot_should_win
@@ -349,14 +381,14 @@ export default function Capitals() {
   }, [duelId, user?.id, isDevDuel])
 
   useEffect(() => {
-    if (loading || phase !== 'countdown') return
+    if (loading || !capitalsList || phase !== 'countdown') return
     if (countdown <= 0) {
       startRound()
       return
     }
     const id = setTimeout(() => setCountdown((value) => value - 1), 900)
     return () => clearTimeout(id)
-  }, [loading, phase, countdown])
+  }, [loading, capitalsList, phase, countdown])
 
   useEffect(() => {
     if (phase !== 'round') return
@@ -767,7 +799,7 @@ export default function Capitals() {
   const myPinXY = displayPin ? { x: projLng(displayPin.lng), y: projLat(displayPin.lat) } : null
   const correctXY = currentCapital ? { x: projLng(currentCapital.lng), y: projLat(currentCapital.lat) } : null
 
-  if (loading && !isDevDuel) {
+  if ((loading && !isDevDuel) || !capitalsList) {
     return <div className="cap-page"><div className="cap-shell"><span style={{ color: 'rgba(255,255,255,0.5)', textAlign: 'center' }}>{t.gameLoading || 'Loading...'}</span></div></div>
   }
 
