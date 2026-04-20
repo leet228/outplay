@@ -84,7 +84,7 @@ export default function Profile() {
         if (profile.game_stats) setGameStats(profile.game_stats)
       }
     })
-  }, [user?.id])
+  }, [setDailyStats, setRank, setRefEarnings, setTotalPnl, user?.id])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
   const [withdrawError, setWithdrawError] = useState(false)
@@ -324,7 +324,7 @@ export default function Profile() {
           </div>
           <div className="pro-stats-bars">
             {(() => {
-              const allGames = ['quiz', 'blackjack', 'sequence', 'reaction', 'hearing', 'gradient', 'capitals']
+              const allGames = ['quiz', 'blackjack', 'sequence', 'reaction', 'hearing', 'gradient', 'capitals', 'circle']
               const stats = gameStats || []
               return allGames.map(id => stats.find(s => s.game === id) || { game: id, wins: 0, total: 0 })
             })().map(g => {
@@ -338,8 +338,9 @@ export default function Profile() {
                 gradient: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={c} strokeWidth="2"/><circle cx="9" cy="10" r="3" stroke={c} strokeWidth="1.5" opacity="0.6"/><circle cx="15" cy="10" r="3" stroke={c} strokeWidth="1.5" opacity="0.6"/><circle cx="12" cy="15" r="3" stroke={c} strokeWidth="1.5" opacity="0.6"/></svg>,
                 race: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 15l2-6h12l2 6" stroke={c} strokeWidth="2" strokeLinecap="round"/><path d="M2 15h20v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2z" stroke={c} strokeWidth="2"/><circle cx="7" cy="19" r="2" stroke={c} strokeWidth="1.5"/><circle cx="17" cy="19" r="2" stroke={c} strokeWidth="1.5"/></svg>,
                 capitals: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="13" r="8" stroke={c} strokeWidth="2"/><path d="M3 13h16" stroke={c} strokeWidth="1.3" opacity="0.65"/><path d="M11 5a11 11 0 0 1 0 16a11 11 0 0 1 0-16z" stroke={c} strokeWidth="1.3" opacity="0.65"/><path d="M18 2c1.7 0 3 1.3 3 3s-3 5-3 5-3-3.3-3-5 1.3-3 3-3z" fill={c} stroke={c} strokeWidth="1.5" strokeLinejoin="round"/><circle cx="18" cy="5" r="1" fill="#fff"/></svg>,
+                circle: (c) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke={c} strokeWidth="2"/><path d="M12 8a4 4 0 1 1-4 4" stroke={c} strokeWidth="1.8" strokeLinecap="round"/></svg>,
               }
-              const colors = { quiz: '#3B82F6', blackjack: '#F59E0B', sequence: '#8B5CF6', reaction: '#10B981', hearing: '#EC4899', gradient: '#F43F5E', race: '#06B6D4', capitals: '#06B6D4' }
+              const colors = { quiz: '#3B82F6', blackjack: '#F59E0B', sequence: '#8B5CF6', reaction: '#10B981', hearing: '#EC4899', gradient: '#F43F5E', race: '#06B6D4', capitals: '#06B6D4', circle: '#A855F7' }
               const names = {
                 quiz: t.gameQuiz || 'Викторина',
                 blackjack: t.gameBlackjack || 'Блэкджек',
@@ -352,7 +353,7 @@ export default function Profile() {
               }
               return (
                 <div key={g.game} className="pro-stats-row">
-                  <span className="pro-stats-label">{gameIcons[g.game]?.(colors[g.game])} {names[g.game]}</span>
+                  <span className="pro-stats-label">{gameIcons[g.game]?.(colors[g.game])} {names[g.game] || (g.game === 'circle' ? (t.gameCircleTitle || 'Circle') : g.game)}</span>
                   <div className="pro-stats-bar-track">
                     <div className="pro-stats-bar-fill" style={{ width: `${wr}%`, background: wr >= 60 ? '#22c55e' : wr >= 40 ? '#f59e0b' : '#ef4444' }} />
                   </div>

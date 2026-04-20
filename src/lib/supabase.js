@@ -772,6 +772,27 @@ export async function submitCapitalsResult(duelId, userId, score, time) {
 }
 
 // ── Blackjack ───────────────────────────────────
+export async function getCircleDuel(duelId) {
+  const { data, error } = await supabase
+    .from('duels')
+    .select('id, creator_id, opponent_id, stake, status, is_bot_game, bot_should_win, game_type, creator_score, opponent_score, winner_id, creator_time, opponent_time')
+    .eq('id', duelId)
+    .single()
+  if (error) { console.error('getCircleDuel error:', error); return null }
+  return data
+}
+
+export async function submitCircleResult(duelId, userId, score, time) {
+  const { data, error } = await supabase.rpc('submit_circle_result', {
+    p_duel_id: duelId,
+    p_user_id: userId,
+    p_score: score,
+    p_time: time,
+  })
+  if (error) { console.error('submitCircleResult error:', error); return null }
+  return data
+}
+
 export async function getBlackjackState(duelId) {
   const { data, error } = await supabase
     .from('duels')

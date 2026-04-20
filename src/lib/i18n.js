@@ -92,6 +92,8 @@ export const translations = {
     gameRaceSub: 'Проведи шарик по трассе',
     gameCapitalsTitle: 'Столицы',
     gameCapitalsSub: 'Найди столицу на карте мира',
+    gameCircleTitle: 'Круг',
+    gameCircleSub: 'Нарисуй идеальный круг',
 
     // Capitals sheet
     sheetCapRounds: 'раунда',
@@ -117,6 +119,31 @@ export const translations = {
     capNext: 'Далее',
     capTotal: 'Итого',
     capWaitingOpponent: 'Ждём соперника...',
+
+    // Circle sheet
+    sheetCircleRounds: 'попытки',
+    sheetCircleTime: 'сек попытка',
+    sheetCircleRule1: 'Нарисуй пальцем круг одним росчерком',
+    sheetCircleRule2: 'Система оценит идеальность круга от 0 до 100%',
+    sheetCircleRule3: 'Побеждает игрок с большим средним баллом за 3 попытки',
+
+    // Circle in-game
+    circleAttempt: 'Попытка',
+    circleDrawHint: 'Нарисуй круг одним росчерком',
+    circleDrawing: 'Рисуй…',
+    circleScoreLabel: 'Оценка',
+    circleAvgLabel: 'Средний',
+    circleTooShort: 'Слишком короткая линия',
+    circlePerfect: 'Идеально!',
+    circleGreat: 'Отлично!',
+    circleGood: 'Неплохо',
+    circleWeak: 'Так себе',
+    circleWaitingOpponent: 'Ждём соперника...',
+    circleYou: 'Ты',
+    circleOpponent: 'Соперник',
+    circleNext: 'Далее',
+    circleReady: 'Готов',
+    circleFinish: 'Финиш',
 
     // Race sheet
     sheetRaceRounds: 'заезд',
@@ -523,6 +550,8 @@ export const translations = {
     gameRaceSub: 'Steer the ball through',
     gameCapitalsTitle: 'Capitals',
     gameCapitalsSub: 'Find the capital on the map',
+    gameCircleTitle: 'Circle',
+    gameCircleSub: 'Draw the perfect circle',
 
     // Capitals sheet
     sheetCapRounds: 'rounds',
@@ -548,6 +577,31 @@ export const translations = {
     capNext: 'Next',
     capTotal: 'Total',
     capWaitingOpponent: 'Waiting for opponent...',
+
+    // Circle sheet
+    sheetCircleRounds: 'attempts',
+    sheetCircleTime: 'sec per attempt',
+    sheetCircleRule1: 'Draw a circle with your finger in one stroke',
+    sheetCircleRule2: 'The system scores how perfect your circle is (0–100%)',
+    sheetCircleRule3: 'Highest average score across 3 attempts wins',
+
+    // Circle in-game
+    circleAttempt: 'Attempt',
+    circleDrawHint: 'Draw a circle in one stroke',
+    circleDrawing: 'Drawing…',
+    circleScoreLabel: 'Score',
+    circleAvgLabel: 'Average',
+    circleTooShort: 'Line too short',
+    circlePerfect: 'Perfect!',
+    circleGreat: 'Great!',
+    circleGood: 'Not bad',
+    circleWeak: 'So-so',
+    circleWaitingOpponent: 'Waiting for opponent...',
+    circleYou: 'You',
+    circleOpponent: 'Opponent',
+    circleNext: 'Next',
+    circleReady: 'Ready',
+    circleFinish: 'Finish',
 
     // Race sheet
     sheetRaceRounds: 'race',

@@ -9,22 +9,25 @@ import './Result.css'
 
 export default function Result() {
   const navigate = useNavigate()
-  const { lastResult, user } = useGameStore(
-    useShallow(s => ({ lastResult: s.lastResult, user: s.user }))
+  const { lastResult } = useGameStore(
+    useShallow((state) => ({ lastResult: state.lastResult }))
   )
-  const lang = useGameStore(s => s.lang)
-  const currency = useGameStore(s => s.currency)
-  const rates = useGameStore(s => s.rates)
-  const resetGame = useGameStore(s => s.resetGame)
-  const clearDuel = useGameStore(s => s.clearDuel)
+  const lang = useGameStore((state) => state.lang)
+  const currency = useGameStore((state) => state.currency)
+  const rates = useGameStore((state) => state.rates)
+  const resetGame = useGameStore((state) => state.resetGame)
+  const clearDuel = useGameStore((state) => state.clearDuel)
   const tr = translations[lang] || translations.ru
-
-  if (!lastResult) {
-    navigate('/')
-    return null
-  }
-
-  const { won, myScore, oppScore, total, payout, stake, tiebreak, timeDiff, gameType } = lastResult
+  const soundPlayedRef = useRef(false)
+  const won = lastResult?.won
+  const myScore = lastResult?.myScore ?? 0
+  const oppScore = lastResult?.oppScore
+  const total = lastResult?.total ?? 0
+  const payout = lastResult?.payout ?? 0
+  const stake = lastResult?.stake ?? 0
+  const tiebreak = lastResult?.tiebreak
+  const timeDiff = lastResult?.timeDiff ?? 0
+  const gameType = lastResult?.gameType
   const isBJ = gameType === 'blackjack'
   const isSeq = gameType === 'sequence'
   const isReact = gameType === 'reaction'
@@ -32,15 +35,11 @@ export default function Result() {
   const isGrad = gameType === 'gradient'
   const isRace = gameType === 'race'
   const isCap = gameType === 'capitals'
-
-  const fmtKm = (v) => (v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString('ru-RU'))
-
+  const isCircle = gameType === 'circle'
   const isWin = won === true
 
-  // Play victory/defeat + coin sounds on mount (skip for blackjack — it plays its own)
-  const soundPlayedRef = useRef(false)
   useEffect(() => {
-    if (soundPlayedRef.current || gameType === 'blackjack') return
+    if (!lastResult || soundPlayedRef.current || gameType === 'blackjack') return
     soundPlayedRef.current = true
     if (isWin) {
       sound.victory()
@@ -48,7 +47,12 @@ export default function Result() {
     } else {
       sound.defeat()
     }
-  }, [])
+  }, [gameType, isWin, lastResult])
+
+  if (!lastResult) {
+    navigate('/')
+    return null
+  }
 
   function formatCurrency(amount) {
     const rate = rates[currency?.code] || 1
@@ -63,55 +67,65 @@ export default function Result() {
     navigate('/')
   }
 
+  function renderScore(value) {
+    if (isCap) return `${value < 10 ? value.toFixed(1) : Math.round(value).toLocaleString('ru-RU')} ${tr.capKm || 'км'}`
+    if (isRace) return `${(value / 1000).toFixed(2)} s`
+    if (isGrad) return `${value} pts`
+    if (isHear) return `${value} Hz`
+    if (isReact) return `${value} ${tr.reactMs || 'мс'}`
+    if (isCircle) return `${value}%`
+    if (isBJ) return `${value} ${tr.resultPoints || 'очков'}`
+    if (isSeq) return `${value}/${total} ${tr.resultRounds || 'раундов'}`
+    return `${value}/${total}`
+  }
+
+  const tieTitle = isCircle
+    ? (tr.circleTieTitle || 'Одинаковая оценка!')
+    : (tr.resultTieTitle || 'Одинаковое количество правильных ответов!')
+  const tieDetail = isWin
+    ? (isCircle
+      ? (tr.circleTieFaster || 'Ты справился быстрее на {s} сек').replace('{s}', timeDiff)
+      : (tr.resultTieFaster || 'Вы были быстрее на {s} сек').replace('{s}', timeDiff))
+    : (isCircle
+      ? (tr.circleTieSlower || 'До победы не хватило {s} сек').replace('{s}', timeDiff)
+      : (tr.resultTieSlower || 'Вам не хватило {s} сек до победы').replace('{s}', timeDiff))
+
   return (
     <div className={`result ${isWin ? 'result-win' : 'result-lose'}`}>
-      {/* Icon */}
       <div className="result-icon">
         {isWin ? '🏆' : '💀'}
       </div>
 
-      {/* Title */}
       <h1 className="result-title">
         {isWin ? (tr.resultWin || 'Победа!') : (tr.resultLose || 'Поражение')}
       </h1>
 
-      {/* Amount */}
       <div className={`result-amount ${isWin ? 'win' : 'lose'}`}>
         {isWin ? `+${formatCurrency(payout)}` : `-${formatCurrency(stake)}`}
       </div>
 
-      {/* Tiebreak info */}
       {tiebreak && timeDiff > 0 && (
         <div className={`result-tiebreak ${isWin ? 'win' : 'lose'}`}>
-          <span className="result-tiebreak-title">
-            {tr.resultTieTitle || 'Одинаковое количество правильных ответов!'}
-          </span>
-          <span className="result-tiebreak-detail">
-            {isWin
-              ? (tr.resultTieFaster || 'Вы были быстрее на {s} сек ⚡').replace('{s}', timeDiff)
-              : (tr.resultTieSlower || 'Вам не хватило {s} сек до победы ⏱️').replace('{s}', timeDiff)
-            }
-          </span>
+          <span className="result-tiebreak-title">{tieTitle}</span>
+          <span className="result-tiebreak-detail">{tieDetail}</span>
         </div>
       )}
 
-      {/* Score */}
       <div className="result-score-card">
         <div className="result-score-row">
           <span className="result-score-label">{tr.resultYou || 'Вы'}</span>
           <div className="result-score-dots" />
-          <span className="result-score-val">{isCap ? `${fmtKm(myScore)} ${tr.capKm || 'км'}` : isRace ? `${(myScore / 1000).toFixed(2)} s` : isGrad ? `${myScore} pts` : isHear ? `${myScore} Hz` : isReact ? `${myScore} ${tr.reactMs || 'мс'}` : isBJ ? `${myScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${myScore}/${total} ${tr.resultRounds || 'раундов'}` : `${myScore}/${total}`}</span>
+          <span className="result-score-val">{renderScore(myScore)}</span>
         </div>
         {oppScore !== null && oppScore !== undefined && (
           <div className="result-score-row">
             <span className="result-score-label">{tr.resultOpponent || 'Соперник'}</span>
             <div className="result-score-dots" />
-            <span className="result-score-val">{isCap ? `${fmtKm(oppScore)} ${tr.capKm || 'км'}` : isRace ? `${(oppScore / 1000).toFixed(2)} s` : isGrad ? `${oppScore} pts` : isHear ? `${oppScore} Hz` : isReact ? `${oppScore} ${tr.reactMs || 'мс'}` : isBJ ? `${oppScore} ${tr.resultPoints || 'очков'}` : isSeq ? `${oppScore}/${total} ${tr.resultRounds || 'раундов'}` : `${oppScore}/${total}`}</span>
+            <span className="result-score-val">{renderScore(oppScore)}</span>
           </div>
         )}
       </div>
 
-      {/* Actions */}
       <div className="result-actions">
         <button className="result-btn primary" onClick={handleHome}>
           {tr.resultHome || 'На главную'}

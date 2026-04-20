@@ -29,6 +29,7 @@ import Hearing from './pages/Hearing'
 import Gradient from './pages/Gradient'
 import Race from './pages/Race'
 import Capitals from './pages/Capitals'
+import Circle from './pages/Circle'
 
 // Disable browser scroll restoration globally — SPA handles it manually
 if ('scrollRestoration' in history) {
@@ -58,7 +59,7 @@ function ScrollToTop() {
   return null
 }
 
-const NO_NAV = ['/game', '/blackjack', '/sequence', '/reaction', '/hearing', '/gradient', '/race', '/capitals', '/result', '/admin']
+const NO_NAV = ['/game', '/blackjack', '/sequence', '/reaction', '/hearing', '/gradient', '/race', '/capitals', '/circle', '/result', '/admin']
 
 function Layout() {
   const { pathname } = useLocation()
@@ -78,6 +79,7 @@ function Layout() {
         <Route path="/gradient/:duelId" element={<Gradient />} />
         <Route path="/race/:duelId" element={<Race />} />
         <Route path="/capitals/:duelId" element={<Capitals />} />
+        <Route path="/circle/:duelId" element={<Circle />} />
         <Route path="/result" element={<Result />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/guilds" element={<Guilds />} />
