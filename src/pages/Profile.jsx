@@ -324,7 +324,7 @@ export default function Profile() {
           </div>
           <div className="pro-stats-bars">
             {(() => {
-              const allGames = ['quiz', 'blackjack', 'sequence', 'reaction', 'hearing', 'gradient', 'race', 'capitals']
+              const allGames = ['quiz', 'blackjack', 'sequence', 'reaction', 'hearing', 'gradient', 'capitals']
               const stats = gameStats || []
               return allGames.map(id => stats.find(s => s.game === id) || { game: id, wins: 0, total: 0 })
             })().map(g => {
