@@ -441,7 +441,7 @@ export default function Profile() {
 
           <div className="settings-item">
             <span className="settings-item-label">{t.version}</span>
-            <span className="settings-item-value">0.1.0</span>
+            <span className="settings-item-value">0.2.2</span>
           </div>
         </div>
 
