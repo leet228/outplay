@@ -40,6 +40,7 @@ function formatTime(dateStr) {
   })
 }
 
+// eslint-disable-next-line no-unused-vars
 function formatDateTime(dateStr) {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleString('ru-RU', {
@@ -78,7 +79,24 @@ function getLogLevelColor(level) {
   return '#3b82f6'
 }
 
-const APP_VERSION = '0.1.0'
+function getRpcLatencyColor(ms) {
+  if (ms == null) return 'var(--text-muted)'
+  if (ms <= 80) return '#22c55e'
+  if (ms <= 220) return '#eab308'
+  return '#ef4444'
+}
+
+const IMPORTANT_RPC_FUNCTIONS = [
+  { name: 'get_bootstrap_data', label: 'App Bootstrap' },
+  { name: 'find_match', label: 'Matchmaking' },
+  { name: 'create_bot_duel', label: 'Bot Duel Create' },
+  { name: 'submit_quiz_result', label: 'Quiz Result Submit' },
+  { name: 'finalize_duel', label: 'Duel Finalize' },
+  { name: 'process_crypto_deposit', label: 'Crypto Credit' },
+  { name: 'request_withdrawal', label: 'Withdrawal Request' },
+]
+
+const APP_VERSION = '0.2.2'
 
 export default function AdminControl() {
   const [settings, setSettings] = useState(null)
@@ -168,6 +186,11 @@ export default function AdminControl() {
   const logs = serverInfo?.recent_logs || []
   const rpcStats = serverInfo?.rpc_stats || []
   const edgeStats = serverInfo?.edge_stats || {}
+  const rpcStatsMap = new Map(rpcStats.map(fn => [fn.name, fn]))
+  const importantRpcStats = IMPORTANT_RPC_FUNCTIONS.map((fn) => ({
+    ...fn,
+    stat: rpcStatsMap.get(fn.name) ?? null,
+  }))
   const errorLogs = logs.filter(l => l.level === 'error')
   const warnLogs = logs.filter(l => l.level === 'warn')
 
@@ -412,7 +435,36 @@ export default function AdminControl() {
         )}
       </div>
 
-      {/* 3. Error Log */}
+      {/* 3. Key Function Speeds */}
+      <div className="admin-server-section">
+        <h3 className="admin-section-title">Key Function Speeds</h3>
+
+        <div className="admin-important-grid">
+          {importantRpcStats.map(({ name, label, stat }) => {
+            const avgMs = stat ? Number(stat.avg_ms) : null
+            return (
+              <div key={name} className="admin-important-card">
+                <div className="admin-important-top">
+                  <span className="admin-important-label">{label}</span>
+                  <span className="admin-important-avg" style={{ color: getRpcLatencyColor(avgMs) }}>
+                    {avgMs != null ? `${avgMs}ms` : '—'}
+                  </span>
+                </div>
+                <div className="admin-important-name">{name}</div>
+                <div className="admin-important-meta">
+                  {stat ? `${stat.calls} calls / ${stat.total_ms}ms total` : 'No real calls yet'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="admin-info-mono">
+          Real average runtime from PostgreSQL function stats.
+        </div>
+      </div>
+
+      {/* 4. Error Log */}
       <div className="admin-server-section">
         <h3 className="admin-section-title">
           Error Log
@@ -457,7 +509,7 @@ export default function AdminControl() {
         )}
       </div>
 
-      {/* 4. Edge Functions */}
+      {/* 5. Edge Functions */}
       <div className="admin-server-section">
         <h3 className="admin-section-title">Edge Functions</h3>
 
@@ -486,7 +538,7 @@ export default function AdminControl() {
         </div>
       </div>
 
-      {/* 5. RPC Functions */}
+      {/* 6. RPC Functions */}
       <div className="admin-server-section">
         <h3 className="admin-section-title" onClick={() => toggleSection('rpc')} style={{ cursor: 'pointer' }}>
           RPC Functions ({rpcStats.length})
@@ -513,12 +565,12 @@ export default function AdminControl() {
 
         {rpcStats.length === 0 && !serverLoading && (
           <div className="admin-deposits-empty">
-            No RPC stats available (enable pg_stat_statements)
+            No RPC stats available yet
           </div>
         )}
       </div>
 
-      {/* 6. System Info */}
+      {/* 7. System Info */}
       <div className="admin-server-section">
         <h3 className="admin-section-title">System Info</h3>
 

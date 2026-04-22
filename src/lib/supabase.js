@@ -485,6 +485,17 @@ export async function getAppSettings() {
   return data
 }
 
+export async function getBootstrapData(userId, days = 30, leaderboardLimit = 10, recentOpponentsLimit = 20) {
+  const { data, error } = await rpcWithRetry('get_bootstrap_data', {
+    p_user_id: userId,
+    p_days: days,
+    p_leaderboard_limit: leaderboardLimit,
+    p_recent_opponents_limit: recentOpponentsLimit,
+  })
+  if (error) { console.error('getBootstrapData error:', error); return null }
+  return data
+}
+
 export async function updateAppSetting(key, value) {
   const { error } = await supabase.rpc('update_app_setting', { p_key: key, p_value: value })
   if (error) { console.error('updateAppSetting error:', error); return false }

@@ -15,21 +15,27 @@
   flex-direction: column;
   align-items: center;
   gap: 20px;
-  transition: transform 0.35s ease, opacity 0.35s ease;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 .game-content.slide-out {
-  transform: translateX(-100%);
-  opacity: 0;
+  animation: gameSlideOut 0.35s ease forwards;
 }
 
 .game-content.slide-in {
-  animation: slideIn 0.4s ease forwards;
+  animation: gameSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-@keyframes slideIn {
-  from { transform: translateX(60%); opacity: 0; }
-  to   { transform: translateX(0);   opacity: 1; }
+@keyframes gameSlideOut {
+  from { transform: translate3d(0, 0, 0); opacity: 1; }
+  to   { transform: translate3d(-100%, 0, 0); opacity: 0; }
+}
+
+@keyframes gameSlideIn {
+  from { transform: translate3d(56%, 0, 0); opacity: 0; }
+  to   { transform: translate3d(0, 0, 0); opacity: 1; }
 }
 
 /* Loading */

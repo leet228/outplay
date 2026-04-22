@@ -757,15 +757,24 @@ export default function Circle() {
   const avgScore = average(scores)
   const timePct = Math.max(0, (timeLeft / ROUND_TIME_MS) * 100)
   const scoreTone = getScoreTone(lastScore?.score ?? 0, lastScore?.reason)
-  const stageStatus = phase === 'draw'
-    ? (drawing ? t.circleDrawing : t.circleReady)
-    : phase === 'result'
-      ? t.circleScoreLabel
-      : phase === 'done'
-        ? t.circleFinish
-        : t.circleReady
+  const stageStatus = phase === 'countdown'
+    ? t.circleAttempt
+    : phase === 'draw'
+      ? t.circleAttempt
+      : phase === 'result'
+        ? (lastScore ? (lastScore.reason === 'short' ? t.circleTooShort : verdictKey(lastScore.score, t)) : t.circleAvgLabel)
+        : phase === 'done'
+          ? t.circleFinish
+          : t.circleAttempt
   const roundLabel = `${attemptIdx + 1}/${TOTAL_ROUNDS}`
   const lastRoundScore = scores.length ? formatPercent(scores[scores.length - 1]) : '--'
+  const stageValue = phase === 'draw'
+    ? `${(timeLeft / 1000).toFixed(1)}s`
+    : phase === 'result'
+      ? lastRoundScore
+      : scores.length
+        ? formatPercent(avgScore)
+        : roundLabel
   const urgentTime = timeLeft <= 2500
 
   if (phase === 'done' && matchSummary) {
@@ -773,7 +782,7 @@ export default function Circle() {
       <div className="circle-page circle-page--done">
         <div className="circle-done-shell">
           <div className="circle-done">
-            <span className="circle-done-title">{t.circleScoreLabel || 'Result'}</span>
+            <span className="circle-done-title">{t.circleFinish || 'Finished'}</span>
 
             <div className="circle-done-rounds">
               {matchSummary.myScores.map((score, index) => {
@@ -823,10 +832,6 @@ export default function Circle() {
               <span className="circle-meta-label">{t.circleAvgLabel}</span>
               <span className="circle-meta-value">{scores.length ? formatPercent(avgScore) : '--'}</span>
             </div>
-            <div className="circle-meta-card">
-              <span className="circle-meta-label">{t.circleScoreLabel}</span>
-              <span className="circle-meta-value">{lastRoundScore}</span>
-            </div>
           </div>
         </div>
 
@@ -836,7 +841,7 @@ export default function Circle() {
               <span>{stageStatus}</span>
             </div>
             <div className={`circle-stage-clock ${urgentTime && phase === 'draw' ? 'urgent' : ''}`}>
-              {phase === 'draw' ? `${(timeLeft / 1000).toFixed(1)}s` : scores.length ? formatPercent(avgScore) : 'Ready'}
+              {stageValue}
             </div>
           </div>
 

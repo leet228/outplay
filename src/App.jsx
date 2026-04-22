@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser, getStartParam } from './lib/telegram'
-import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings } from './lib/supabase'
+import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings, getBootstrapData } from './lib/supabase'
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
 import { initSounds, preloadAll } from './lib/sounds'
@@ -120,6 +120,97 @@ function writeCache(data) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(data))
   } catch { /* quota exceeded — ignore */ }
+}
+
+async function loadLegacyBootstrap(userId) {
+  const results = await Promise.allSettled([
+    getUserProfile(userId),
+    getPlans(),
+    getLeaderboard(10),
+    getGuildData(userId),
+    getRecentOpponents(userId),
+    getFriendsData(userId),
+    getAppSettings(),
+  ])
+
+  const [profile, plans, leaderboard, guildData, opponents, friendsData, settings] =
+    results.map(r => r.status === 'fulfilled' ? r.value : null)
+
+  return {
+    profile,
+    plans: plans ?? [],
+    leaderboard: leaderboard ?? [],
+    guild_data: guildData ?? null,
+    recent_opponents: opponents ?? [],
+    friends_data: friendsData ?? null,
+    app_settings: settings ?? null,
+  }
+}
+
+async function loadBootstrapBundle(userId) {
+  const data = await getBootstrapData(userId)
+  if (data) return data
+  console.warn('Falling back to legacy bootstrap requests')
+  return loadLegacyBootstrap(userId)
+}
+
+function applyBootstrapData(store, data, rates) {
+  if (rates) store.setRates(rates)
+  if (!data) return
+
+  const profile = data.profile ?? null
+  const plans = data.plans
+  const leaderboard = data.leaderboard
+  const guildData = data.guild_data ?? null
+  const opponents = data.recent_opponents
+  const friendsData = data.friends_data ?? null
+  const settings = data.app_settings ?? null
+
+  if (settings) store.setAppSettings(settings)
+
+  if (profile && !profile.error) {
+    store.setRank(profile.rank ?? 0)
+    store.setDailyStats(profile.daily_stats ?? [])
+    store.setTotalPnl(profile.total_pnl ?? 0)
+    store.setRefEarnings(profile.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
+  }
+
+  if (Array.isArray(plans)) store.setPlans(plans)
+  if (Array.isArray(leaderboard)) store.setLeaderboard(leaderboard)
+
+  if (guildData) {
+    store.setGuild(guildData.my_guild ?? null)
+    store.setGuildMembers(guildData.my_guild?.members ?? [])
+    store.setTopGuilds(guildData.top_guilds ?? [])
+    store.setGuildSeason(guildData.season ?? null)
+  }
+
+  if (Array.isArray(opponents)) store.setRecentOpponents(opponents)
+
+  if (friendsData) {
+    store.setFriends(friendsData.friends ?? [])
+    store.setFriendRequests(friendsData.incoming_requests ?? [])
+    store.setSentRequestIds(friendsData.outgoing_request_ids ?? [])
+  }
+}
+
+function cacheBootstrapData(data) {
+  if (!data) return
+
+  const guildData = data.guild_data ?? null
+  const friendsData = data.friends_data ?? null
+
+  writeCache({
+    leaderboard: Array.isArray(data.leaderboard) ? data.leaderboard : [],
+    topGuilds: guildData?.top_guilds ?? [],
+    guild: guildData?.my_guild ?? null,
+    guildMembers: guildData?.my_guild?.members ?? [],
+    guildSeason: guildData?.season ?? null,
+    recentOpponents: Array.isArray(data.recent_opponents) ? data.recent_opponents : [],
+    friends: friendsData?.friends ?? [],
+    friendRequests: friendsData?.incoming_requests ?? [],
+    sentRequestIds: friendsData?.outgoing_request_ids ?? [],
+  })
 }
 
 export default function App() {
@@ -268,26 +359,15 @@ export default function App() {
               setUser(user)
               setBalance(user.balance ?? 0)
               localStorage.setItem('outplay_user', JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, username: user.username }))
-              // Continue with real user bootstrap below
-              const cachedResults = await Promise.allSettled([
-                getUserProfile(user.id), getPlans(), getLeaderboard(10), getGuildData(user.id),
-                getRecentOpponents(user.id), getFriendsData(user.id), fetchRates(), getAppSettings(),
+              const [bootstrapResult, ratesResult] = await Promise.allSettled([
+                loadBootstrapBundle(user.id),
+                fetchRates(),
               ])
-              const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] =
-                cachedResults.map(r => r.status === 'fulfilled' ? r.value : null)
-              store.setRank(profile?.rank ?? 0)
-              store.setTotalPnl(profile?.total_pnl ?? 0)
-              store.setDailyStats(profile?.daily_stats ?? [])
-              store.setRefEarnings(profile?.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
-              store.setPlans(plans ?? [])
-              store.setLeaderboard(leaderboard ?? [])
-              if (guildData?.guild) { store.setGuild(guildData.guild); store.setGuildMembers(guildData.members ?? []) }
-              store.setTopGuilds(guildData?.top ?? [])
-              store.setGuildSeason(guildData?.season ?? null)
-              store.setRecentOpponents(opponents ?? [])
-              if (friendsData) { store.setFriends(friendsData.friends ?? []); store.setFriendRequests(friendsData.requests ?? []); store.setSentRequestIds(friendsData.sent_ids ?? []) }
-              store.setRates(rates ?? {})
-              store.setAppSettings(settings ?? {})
+              const bootstrapData = bootstrapResult.status === 'fulfilled' ? bootstrapResult.value : null
+              const rates = ratesResult.status === 'fulfilled' ? ratesResult.value : null
+
+              applyBootstrapData(store, bootstrapData, rates)
+              cacheBootstrapData(bootstrapData)
               return
             }
           }
@@ -385,71 +465,23 @@ export default function App() {
     setUser(user)
     setBalance(user.balance ?? 0)
     // Cache user for fallback if Telegram SDK fails on next load
-    try { localStorage.setItem('outplay_user', JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, username: user.username })) } catch {}
+    try {
+      localStorage.setItem('outplay_user', JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, username: user.username }))
+    } catch (_error) {
+      // Ignore cache write issues; app bootstrap should continue.
+    }
 
 
     // 8 parallel fetches — all data for the entire app
-    const results = await Promise.allSettled([
-      getUserProfile(user.id),
-      getPlans(),
-      getLeaderboard(10),
-      getGuildData(user.id),
-      getRecentOpponents(user.id),
-      getFriendsData(user.id),
+    const [bootstrapResult, ratesResult] = await Promise.allSettled([
+      loadBootstrapBundle(user.id),
       fetchRates(),
-      getAppSettings(),
     ])
-    const [profile, plans, leaderboard, guildData, opponents, friendsData, rates, settings] =
-      results.map(r => r.status === 'fulfilled' ? r.value : null)
+    const bootstrapData = bootstrapResult.status === 'fulfilled' ? bootstrapResult.value : null
+    const rates = ratesResult.status === 'fulfilled' ? ratesResult.value : null
 
-    // Exchange rates
-    if (rates) store.setRates(rates)
-
-    // App settings (feature flags)
-    if (settings) store.setAppSettings(settings)
-
-    // Profile
-    if (profile && !profile.error) {
-      store.setRank(profile.rank)
-      store.setDailyStats(profile.daily_stats ?? [])
-      store.setTotalPnl(profile.total_pnl ?? 0)
-      store.setRefEarnings(profile.ref_earnings ?? { day: 0, week: 0, month: 0, all: 0 })
-    }
-    if (plans.length > 0) store.setPlans(plans)
-
-    // Leaderboard
-    store.setLeaderboard(leaderboard)
-
-    // Guilds
-    if (guildData) {
-      store.setGuild(guildData.my_guild ?? null)
-      store.setGuildMembers(guildData.my_guild?.members ?? [])
-      store.setTopGuilds(guildData.top_guilds ?? [])
-      store.setGuildSeason(guildData.season ?? null)
-    }
-
-    // Recent opponents
-    store.setRecentOpponents(opponents ?? [])
-
-    // Friends
-    if (friendsData) {
-      store.setFriends(friendsData.friends ?? [])
-      store.setFriendRequests(friendsData.incoming_requests ?? [])
-      store.setSentRequestIds(friendsData.outgoing_request_ids ?? [])
-    }
-
-    // Write cache for instant load next time
-    writeCache({
-      leaderboard,
-      topGuilds:       guildData?.top_guilds ?? [],
-      guild:           guildData?.my_guild ?? null,
-      guildMembers:    guildData?.my_guild?.members ?? [],
-      guildSeason:     guildData?.season ?? null,
-      recentOpponents: opponents ?? [],
-      friends:         friendsData?.friends ?? [],
-      friendRequests:  friendsData?.incoming_requests ?? [],
-      sentRequestIds:  friendsData?.outgoing_request_ids ?? [],
-    })
+    applyBootstrapData(store, bootstrapData, rates)
+    cacheBootstrapData(bootstrapData)
 
     // Sync currency/lang from DB → localStorage (DB is source of truth for cross-device)
     const currencyMap = {
