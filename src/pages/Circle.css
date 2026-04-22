@@ -159,11 +159,10 @@
   z-index: 4;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
 }
 
-.circle-stage-badge,
 .circle-stage-clock {
   display: inline-flex;
   align-items: center;
@@ -612,7 +611,6 @@
     right: 12px;
   }
 
-  .circle-stage-badge,
   .circle-stage-clock {
     min-height: 34px;
     padding: 0 12px;

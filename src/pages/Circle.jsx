@@ -757,15 +757,6 @@ export default function Circle() {
   const avgScore = average(scores)
   const timePct = Math.max(0, (timeLeft / ROUND_TIME_MS) * 100)
   const scoreTone = getScoreTone(lastScore?.score ?? 0, lastScore?.reason)
-  const stageStatus = phase === 'countdown'
-    ? t.circleAttempt
-    : phase === 'draw'
-      ? t.circleAttempt
-      : phase === 'result'
-        ? (lastScore ? (lastScore.reason === 'short' ? t.circleTooShort : verdictKey(lastScore.score, t)) : t.circleAvgLabel)
-        : phase === 'done'
-          ? t.circleFinish
-          : t.circleAttempt
   const roundLabel = `${attemptIdx + 1}/${TOTAL_ROUNDS}`
   const lastRoundScore = scores.length ? formatPercent(scores[scores.length - 1]) : '--'
   const stageValue = phase === 'draw'
@@ -837,9 +828,6 @@ export default function Circle() {
 
         <div className={`circle-stage circle-stage--${phase}`} ref={containerRef}>
           <div className="circle-stage-head">
-            <div className="circle-stage-badge">
-              <span>{stageStatus}</span>
-            </div>
             <div className={`circle-stage-clock ${urgentTime && phase === 'draw' ? 'urgent' : ''}`}>
               {stageValue}
             </div>
