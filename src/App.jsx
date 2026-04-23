@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { initTelegram, getTelegramUser, getStartParam } from './lib/telegram'
-import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings, getBootstrapData } from './lib/supabase'
+import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, getGuildData, getRecentOpponents, getFriendsData, pingOnline, getUserBalance, getAppSettings, getBootstrapCriticalData, getBootstrapDeferredData } from './lib/supabase'
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
 import { initSounds, preloadAll } from './lib/sounds'
@@ -41,6 +41,14 @@ const IS_TELEGRAM = !!window.Telegram?.WebApp?.initData
 const IS_DEV = import.meta.env.DEV
 
 const CACHE_KEY = 'outplay_data'
+
+function readCache() {
+  try {
+    return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -111,6 +119,7 @@ function hydrateFromCache() {
     if (cache.friends)          store.setFriends(cache.friends)
     if (cache.friendRequests)   store.setFriendRequests(cache.friendRequests)
     if (cache.sentRequestIds)   store.setSentRequestIds(cache.sentRequestIds)
+    if (cache.appSettings)      store.setAppSettings(cache.appSettings)
     return true
   } catch { return false }
 }
@@ -122,18 +131,47 @@ function writeCache(data) {
   } catch { /* quota exceeded — ignore */ }
 }
 
-async function loadLegacyBootstrap(userId) {
+function mergeCache(partial) {
+  writeCache({
+    ...readCache(),
+    ...partial,
+  })
+}
+
+async function loadCriticalBootstrap(userId) {
+  const data = await getBootstrapCriticalData(userId)
+  if (data) return data
+
+  console.warn('Falling back to legacy critical bootstrap requests')
+
+  const results = await Promise.allSettled([
+    getFriendsData(userId),
+    getAppSettings(),
+  ])
+
+  const [friendsData, settings] = results.map(r => r.status === 'fulfilled' ? r.value : null)
+
+  return {
+    friends_data: friendsData ?? null,
+    app_settings: settings ?? null,
+  }
+}
+
+async function loadDeferredBootstrap(userId) {
+  const data = await getBootstrapDeferredData(userId)
+  if (data) return data
+
+  console.warn('Falling back to legacy deferred bootstrap requests')
+
   const results = await Promise.allSettled([
     getUserProfile(userId),
     getPlans(),
     getLeaderboard(10),
     getGuildData(userId),
     getRecentOpponents(userId),
-    getFriendsData(userId),
-    getAppSettings(),
   ])
 
-  const [profile, plans, leaderboard, guildData, opponents, friendsData, settings] =
+  const [profile, plans, leaderboard, guildData, opponents] =
     results.map(r => r.status === 'fulfilled' ? r.value : null)
 
   return {
@@ -142,19 +180,25 @@ async function loadLegacyBootstrap(userId) {
     leaderboard: leaderboard ?? [],
     guild_data: guildData ?? null,
     recent_opponents: opponents ?? [],
-    friends_data: friendsData ?? null,
-    app_settings: settings ?? null,
   }
 }
 
-async function loadBootstrapBundle(userId) {
-  const data = await getBootstrapData(userId)
-  if (data) return data
-  console.warn('Falling back to legacy bootstrap requests')
-  return loadLegacyBootstrap(userId)
+function applyCriticalBootstrapData(store, data) {
+  if (!data) return
+
+  const friendsData = data.friends_data ?? null
+  const settings = data.app_settings ?? null
+
+  if (settings) store.setAppSettings(settings)
+
+  if (friendsData) {
+    store.setFriends(friendsData.friends ?? [])
+    store.setFriendRequests(friendsData.incoming_requests ?? [])
+    store.setSentRequestIds(friendsData.outgoing_request_ids ?? [])
+  }
 }
 
-function applyBootstrapData(store, data, rates) {
+function applyDeferredBootstrapData(store, data, rates) {
   if (rates) store.setRates(rates)
   if (!data) return
 
@@ -163,10 +207,6 @@ function applyBootstrapData(store, data, rates) {
   const leaderboard = data.leaderboard
   const guildData = data.guild_data ?? null
   const opponents = data.recent_opponents
-  const friendsData = data.friends_data ?? null
-  const settings = data.app_settings ?? null
-
-  if (settings) store.setAppSettings(settings)
 
   if (profile && !profile.error) {
     store.setRank(profile.rank ?? 0)
@@ -186,30 +226,46 @@ function applyBootstrapData(store, data, rates) {
   }
 
   if (Array.isArray(opponents)) store.setRecentOpponents(opponents)
-
-  if (friendsData) {
-    store.setFriends(friendsData.friends ?? [])
-    store.setFriendRequests(friendsData.incoming_requests ?? [])
-    store.setSentRequestIds(friendsData.outgoing_request_ids ?? [])
-  }
 }
 
-function cacheBootstrapData(data) {
+function cacheCriticalBootstrapData(data) {
+  if (!data) return
+
+  const friendsData = data.friends_data ?? null
+
+  mergeCache({
+    friends: friendsData?.friends ?? [],
+    friendRequests: friendsData?.incoming_requests ?? [],
+    sentRequestIds: friendsData?.outgoing_request_ids ?? [],
+    appSettings: data.app_settings ?? {},
+  })
+}
+
+function cacheDeferredBootstrapData(data) {
   if (!data) return
 
   const guildData = data.guild_data ?? null
-  const friendsData = data.friends_data ?? null
 
-  writeCache({
+  mergeCache({
     leaderboard: Array.isArray(data.leaderboard) ? data.leaderboard : [],
     topGuilds: guildData?.top_guilds ?? [],
     guild: guildData?.my_guild ?? null,
     guildMembers: guildData?.my_guild?.members ?? [],
     guildSeason: guildData?.season ?? null,
     recentOpponents: Array.isArray(data.recent_opponents) ? data.recent_opponents : [],
-    friends: friendsData?.friends ?? [],
-    friendRequests: friendsData?.incoming_requests ?? [],
-    sentRequestIds: friendsData?.outgoing_request_ids ?? [],
+  })
+}
+
+function startDeferredBootstrap(userId, store) {
+  Promise.allSettled([
+    loadDeferredBootstrap(userId),
+    fetchRates(),
+  ]).then(([bootstrapResult, ratesResult]) => {
+    const deferredData = bootstrapResult.status === 'fulfilled' ? bootstrapResult.value : null
+    const rates = ratesResult.status === 'fulfilled' ? ratesResult.value : null
+
+    applyDeferredBootstrapData(store, deferredData, rates)
+    cacheDeferredBootstrapData(deferredData)
   })
 }
 
@@ -359,15 +415,10 @@ export default function App() {
               setUser(user)
               setBalance(user.balance ?? 0)
               localStorage.setItem('outplay_user', JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, username: user.username }))
-              const [bootstrapResult, ratesResult] = await Promise.allSettled([
-                loadBootstrapBundle(user.id),
-                fetchRates(),
-              ])
-              const bootstrapData = bootstrapResult.status === 'fulfilled' ? bootstrapResult.value : null
-              const rates = ratesResult.status === 'fulfilled' ? ratesResult.value : null
-
-              applyBootstrapData(store, bootstrapData, rates)
-              cacheBootstrapData(bootstrapData)
+              const criticalData = await loadCriticalBootstrap(user.id)
+              applyCriticalBootstrapData(store, criticalData)
+              cacheCriticalBootstrapData(criticalData)
+              startDeferredBootstrap(user.id, store)
               return
             }
           }
@@ -473,15 +524,10 @@ export default function App() {
 
 
     // 8 parallel fetches — all data for the entire app
-    const [bootstrapResult, ratesResult] = await Promise.allSettled([
-      loadBootstrapBundle(user.id),
-      fetchRates(),
-    ])
-    const bootstrapData = bootstrapResult.status === 'fulfilled' ? bootstrapResult.value : null
-    const rates = ratesResult.status === 'fulfilled' ? ratesResult.value : null
-
-    applyBootstrapData(store, bootstrapData, rates)
-    cacheBootstrapData(bootstrapData)
+    const criticalData = await loadCriticalBootstrap(user.id)
+    applyCriticalBootstrapData(store, criticalData)
+    cacheCriticalBootstrapData(criticalData)
+    startDeferredBootstrap(user.id, store)
 
     // Sync currency/lang from DB → localStorage (DB is source of truth for cross-device)
     const currencyMap = {

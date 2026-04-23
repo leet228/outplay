@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { translations } from '../lib/i18n'
-import { supabase, getReactionDuel, submitReactionResult, calcPayout, heartbeatDuel, forfeitDuel, claimForfeit } from '../lib/supabase'
+import { supabase, getReactionDuel, submitReactionResult, calcPayout, heartbeatDuel, forfeitDuel, waitForFinishedDuelState } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
 import { botLower, botHigher, enforceDirection } from '../lib/botScore'
 import sound from '../lib/sounds'
@@ -273,15 +273,11 @@ export default function Reaction() {
         await submitReactionResult(duelId, BOT_USER_ID, myScore, botTime)
       }
 
-      // Fetch final duel state
-      await new Promise(r => setTimeout(r, 500))
-      let finalDuel = null
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const { data } = await supabase
-          .from('duels').select('*').eq('id', duelId).single()
-        if (data?.status === 'finished') { finalDuel = data; break }
-        await new Promise(r => setTimeout(r, 1500))
-      }
+      const finalDuel = await waitForFinishedDuelState({
+        duelId,
+        columns: '*',
+        timeoutMs: 12000,
+      })
 
       setWaitingOpponent(false)
 
@@ -309,29 +305,13 @@ export default function Reaction() {
         await submitReactionResult(duelId, user.id, myScore, myTime)
       }
 
-      // Poll for finished state + check opponent heartbeat
-      let finalDuel = null
-      for (let attempt = 0; attempt < 30; attempt++) {
-        const { data } = await supabase
-          .from('duels').select('*').eq('id', duelId).single()
-        if (data?.status === 'finished') { finalDuel = data; break }
-        // Every ~10s check opponent heartbeat
-        if (attempt > 0 && attempt % 5 === 0 && !forfeitedRef.current) {
-          const res = await claimForfeit(duelId, user.id)
-          if (res?.status === 'forfeited') {
-            finalDuel = {
-              status: 'finished',
-              winner_id: user.id,
-              creator_id: duel.creator_id,
-              opponent_id: duel.opponent_id,
-              creator_time: myTime,
-              opponent_time: null,
-            }
-            break
-          }
-        }
-        await new Promise(r => setTimeout(r, 2000))
-      }
+      const finalDuel = await waitForFinishedDuelState({
+        duelId,
+        userId: user.id,
+        columns: '*',
+        timeoutMs: 90000,
+        forfeitCheckMs: 10000,
+      })
 
       setWaitingOpponent(false)
 

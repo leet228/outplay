@@ -205,6 +205,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
   const errorTimer = useRef(null)
   const channelRef = useRef(null)
   const pollRef = useRef(null)
+  const backupPollStartRef = useRef(null)
   const timerRef = useRef(null)
   const botTimerRef = useRef(null)
   const searchCancelledRef = useRef(false)
@@ -286,6 +287,7 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
     searchCancelledRef.current = true
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+    if (backupPollStartRef.current) { clearTimeout(backupPollStartRef.current); backupPollStartRef.current = null }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     if (botTimerRef.current) { clearTimeout(botTimerRef.current); botTimerRef.current = null }
   }
@@ -307,6 +309,21 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
       const route = game?.id === 'blackjack' ? '/blackjack' : game?.id === 'sequence' ? '/sequence' : game?.id === 'reaction' ? '/reaction' : game?.id === 'hearing' ? '/hearing' : game?.id === 'gradient' ? '/gradient' : game?.id === 'race' ? '/race' : game?.id === 'capitals' ? '/capitals' : game?.id === 'circle' ? '/circle' : '/game'
       navigate(`${route}/${duelId}`)
     }, 1500)
+  }
+
+  function startBackupMatchPoll(userId) {
+    if (pollRef.current) return
+    pollRef.current = setInterval(async () => {
+      const { data } = await supabase
+        .from('duels')
+        .select('id')
+        .or(`creator_id.eq.${userId},opponent_id.eq.${userId}`)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (data) handleMatchFound(data.id)
+    }, 15000)
   }
 
   function toggleStake(amount) {
@@ -398,21 +415,15 @@ function GameSheet({ game, t, balance, currency, rates, onClose }) {
           handleMatchFound(payload.new.id)
         }
       })
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          startBackupMatchPoll(user.id)
+        }
+      })
     channelRef.current = channel
 
-    // Fallback polling
-    pollRef.current = setInterval(async () => {
-      const { data } = await supabase
-        .from('duels')
-        .select('id')
-        .or(`creator_id.eq.${user.id},opponent_id.eq.${user.id}`)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (data) handleMatchFound(data.id)
-    }, 3000)
+    // Slow emergency backup only if realtime silently misses an event
+    backupPollStartRef.current = setTimeout(() => startBackupMatchPoll(user.id), 15000)
 
     // Bot timer: подключить бота через 30-60 сек если не нашёл человека
     // Если первая попытка не удалась — повтор через 10с

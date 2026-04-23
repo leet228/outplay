@@ -12,7 +12,7 @@ import {
   calcPayout,
   heartbeatDuel,
   forfeitDuel,
-  claimForfeit,
+  waitForFinishedDuelState,
 } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
 import { botLower, botHigher, enforceDirection } from '../lib/botScore'
@@ -708,16 +708,11 @@ export default function Capitals() {
         await submitCapitalsResult(duelId, BOT_USER_ID, botTotal, botTotal / 1000)
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      let finalDuel = null
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const { data } = await supabase.from('duels').select('*').eq('id', duelId).single()
-        if (data?.status === 'finished') {
-          finalDuel = data
-          break
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1500))
-      }
+      const finalDuel = await waitForFinishedDuelState({
+        duelId,
+        columns: '*',
+        timeoutMs: 12000,
+      })
       setWaitingOpponent(false)
 
       if (finalDuel?.status === 'finished') {
@@ -739,29 +734,13 @@ export default function Capitals() {
         await submitCapitalsResult(duelId, user.id, myTotal, myTime)
       }
 
-      let finalDuel = null
-      for (let attempt = 0; attempt < 30; attempt++) {
-        const { data } = await supabase.from('duels').select('*').eq('id', duelId).single()
-        if (data?.status === 'finished') {
-          finalDuel = data
-          break
-        }
-        if (attempt > 0 && attempt % 5 === 0 && !forfeitedRef.current) {
-          const res = await claimForfeit(duelId, user.id)
-          if (res?.status === 'forfeited') {
-            finalDuel = {
-              status: 'finished',
-              winner_id: user.id,
-              creator_id: duel.creator_id,
-              opponent_id: duel.opponent_id,
-              creator_score: myTotal,
-              opponent_score: null,
-            }
-            break
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-      }
+      const finalDuel = await waitForFinishedDuelState({
+        duelId,
+        userId: user.id,
+        columns: '*',
+        timeoutMs: 90000,
+        forfeitCheckMs: 10000,
+      })
       setWaitingOpponent(false)
 
       const isCreator = duel.creator_id === user.id

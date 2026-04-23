@@ -11,7 +11,7 @@ import {
   submitCircleResult,
   heartbeatDuel,
   forfeitDuel,
-  claimForfeit,
+  waitForFinishedDuelState,
 } from '../lib/supabase'
 import { updateLocalStats } from '../lib/gameUtils'
 import { enforceDirection } from '../lib/botScore'
@@ -521,39 +521,13 @@ export default function Circle() {
     return result
   }, [duelId])
 
-  const waitForFinishedDuel = useCallback(async (attempts, delayMs, allowForfeitCheck = false, myScore = 0) => {
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      const { data } = await supabase
-        .from('duels')
-        .select('*')
-        .eq('id', duelId)
-        .single()
-
-      if (data?.status === 'finished') {
-        return data
-      }
-
-      if (allowForfeitCheck && attempt > 0 && attempt % 5 === 0 && !forfeitedRef.current) {
-        const res = await claimForfeit(duelId, user.id)
-        if (res?.status === 'forfeited') {
-          return {
-            status: 'finished',
-            winner_id: user.id,
-            creator_id: duel.creator_id,
-            opponent_id: duel.opponent_id,
-            creator_score: duel.creator_id === user.id ? myScore : 0,
-            opponent_score: duel.creator_id === user.id ? 0 : myScore,
-            creator_time: duel.creator_id === user.id ? totalTimeRef.current : null,
-            opponent_time: duel.creator_id === user.id ? null : totalTimeRef.current,
-          }
-        }
-      }
-
-      await sleep(delayMs)
-    }
-
-    return null
-  }, [duel, duelId, user])
+  const waitForFinishedDuel = useCallback(async (options = {}) => {
+    return await waitForFinishedDuelState({
+      duelId,
+      columns: '*',
+      ...options,
+    })
+  }, [duelId])
 
   const finishGame = useCallback(async () => {
     if (!duel || finishedRef.current) return
@@ -602,7 +576,7 @@ export default function Circle() {
       await sleep(botDelay)
       await submitWithRetry(BOT_USER_ID, botResult.avg, botResult.time)
 
-      const finalDuel = await waitForFinishedDuel(6, 1500)
+      const finalDuel = await waitForFinishedDuel({ timeoutMs: 12000 })
       setWaitingOpponent(false)
 
       if (finalDuel?.status === 'finished') {
@@ -624,7 +598,11 @@ export default function Circle() {
     } else {
       await submitWithRetry(user.id, myScore, myTime)
 
-      const finalDuel = await waitForFinishedDuel(30, 2000, true, myScore)
+      const finalDuel = await waitForFinishedDuel({
+        userId: user.id,
+        timeoutMs: 90000,
+        forfeitCheckMs: 10000,
+      })
       setWaitingOpponent(false)
 
       if (finalDuel?.status === 'finished') {

@@ -496,6 +496,25 @@ export async function getBootstrapData(userId, days = 30, leaderboardLimit = 10,
   return data
 }
 
+export async function getBootstrapCriticalData(userId) {
+  const { data, error } = await rpcWithRetry('get_bootstrap_critical_data', {
+    p_user_id: userId,
+  })
+  if (error) { console.error('getBootstrapCriticalData error:', error); return null }
+  return data
+}
+
+export async function getBootstrapDeferredData(userId, days = 30, leaderboardLimit = 10, recentOpponentsLimit = 20) {
+  const { data, error } = await rpcWithRetry('get_bootstrap_deferred_data', {
+    p_user_id: userId,
+    p_days: days,
+    p_leaderboard_limit: leaderboardLimit,
+    p_recent_opponents_limit: recentOpponentsLimit,
+  })
+  if (error) { console.error('getBootstrapDeferredData error:', error); return null }
+  return data
+}
+
 export async function updateAppSetting(key, value) {
   const { error } = await supabase.rpc('update_app_setting', { p_key: key, p_value: value })
   if (error) { console.error('updateAppSetting error:', error); return false }
@@ -648,6 +667,99 @@ export async function claimForfeit(duelId, userId) {
   const { data, error } = await supabase.rpc('claim_forfeit', { p_duel_id: duelId, p_user_id: userId })
   if (error) { console.error('claimForfeit error:', error); return null }
   return data
+}
+
+export async function getDuelState(duelId, columns = '*') {
+  const { data, error } = await supabase
+    .from('duels')
+    .select(columns)
+    .eq('id', duelId)
+    .single()
+  if (error) { console.error('getDuelState error:', error); return null }
+  return data
+}
+
+export function subscribeToDuelUpdates(duelId, callback, event = 'UPDATE') {
+  const channel = supabase
+    .channel(`duel-${duelId}-${Math.random().toString(36).slice(2, 8)}`)
+    .on('postgres_changes', {
+      event,
+      schema: 'public',
+      table: 'duels',
+      filter: `id=eq.${duelId}`,
+    }, payload => {
+      callback(payload.new, payload)
+    })
+    .subscribe()
+  return channel
+}
+
+export async function waitForFinishedDuelState({
+  duelId,
+  userId,
+  columns = '*',
+  timeoutMs = 90000,
+  forfeitCheckMs = 10000,
+  fallbackPollMs = 15000,
+} = {}) {
+  return await new Promise((resolve) => {
+    let settled = false
+    let channel = null
+    let timeoutId = null
+    let forfeitIntervalId = null
+    let fallbackPollId = null
+
+    const cleanup = () => {
+      if (timeoutId) clearTimeout(timeoutId)
+      if (forfeitIntervalId) clearInterval(forfeitIntervalId)
+      if (fallbackPollId) clearInterval(fallbackPollId)
+      if (channel) supabase.removeChannel(channel)
+    }
+
+    const finish = (value) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(value)
+    }
+
+    const fetchLatest = async () => {
+      const duel = await getDuelState(duelId, columns)
+      if (duel?.status === 'finished') {
+        finish(duel)
+        return duel
+      }
+      return duel
+    }
+
+    channel = subscribeToDuelUpdates(duelId, (duel) => {
+      if (duel?.status === 'finished') {
+        finish(duel)
+      }
+    })
+
+    fetchLatest().catch(() => {})
+
+    fallbackPollId = setInterval(() => {
+      fetchLatest().catch(() => {})
+    }, fallbackPollMs)
+
+    if (userId) {
+      forfeitIntervalId = setInterval(async () => {
+        if (settled) return
+        const res = await claimForfeit(duelId, userId)
+        if (res?.status === 'forfeited') {
+          const duel = await getDuelState(duelId, columns)
+          finish(duel)
+        }
+      }, forfeitCheckMs)
+    }
+
+    timeoutId = setTimeout(async () => {
+      const duel = await getDuelState(duelId, columns)
+      finish(duel?.status === 'finished' ? duel : null)
+    }, timeoutMs)
+  })
 }
 
 // ── Sequence ────────────────────────────────────
