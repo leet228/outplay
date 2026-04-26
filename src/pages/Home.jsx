@@ -9,14 +9,7 @@ import sound from '../lib/sounds'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendsData, sendGameInvite, acceptGameInvite, rejectGameInvite, cancelAllPendingInvites, getPendingInvites } from '../lib/supabase'
-import blackjackCardArt from '../assets/games/blackjack-card.jpg'
-import capitalsCardArt from '../assets/games/capitals-card.jpg'
-import circleCardArt from '../assets/games/circle-card.jpg'
-import gradientCardArt from '../assets/games/gradient-card.jpg'
-import hearingCardArt from '../assets/games/hearing-card.jpg'
-import quizCardArt from '../assets/games/quiz-card.jpg'
-import reactionCardArt from '../assets/games/reaction-card.jpg'
-import sequenceCardArt from '../assets/games/sequence-card.jpg'
+import { GAME_CARD_ART } from '../lib/gameAssets'
 import './Home.css'
 
 /* ── Icons ── */
@@ -1375,17 +1368,6 @@ const GAME_SHEETS = {
   },
 }
 
-const GAME_CARD_ART = {
-  quiz: quizCardArt,
-  sequence: sequenceCardArt,
-  blackjack: blackjackCardArt,
-  reaction: reactionCardArt,
-  hearing: hearingCardArt,
-  gradient: gradientCardArt,
-  capitals: capitalsCardArt,
-  circle: circleCardArt,
-}
-
 const GAMES = [
   { id: 'quiz', titleKey: 'gameQuizTitle', subKey: 'gameQuizSub', available: true, accent: '#3B82F6', shadow: '#1d3461', art: GAME_CARD_ART.quiz },
   { id: 'sequence', titleKey: 'gameSequenceTitle', subKey: 'gameSequenceSub', available: true, accent: '#8B5CF6', shadow: '#2d1b69', art: GAME_CARD_ART.sequence },
@@ -1517,7 +1499,7 @@ export default function Home() {
               style={{ '--card-accent': GAMES[0].accent, '--card-shadow': GAMES[0].shadow }}
               onClick={() => handleGameTap(GAMES[0])}
             >
-              <img className="game-card-art" src={GAMES[0].art} alt="" loading="lazy" decoding="async" aria-hidden="true" />
+              <img className="game-card-art" src={GAMES[0].art} alt="" loading="eager" decoding="async" aria-hidden="true" />
               <div className="game-card-art-overlay" />
               <div className="game-card-glow" />
               <span className="game-card-title">{t[GAMES[0].titleKey]}</span>
@@ -1538,7 +1520,7 @@ export default function Home() {
                     >
                       {g.art ? (
                         <>
-                          <img className="game-card-art" src={g.art} alt="" loading="lazy" decoding="async" aria-hidden="true" />
+                          <img className="game-card-art" src={g.art} alt="" loading="eager" decoding="async" aria-hidden="true" />
                           <div className="game-card-art-overlay" />
                           <div className="game-card-glow" />
                           <span className="game-card-title">{t[g.titleKey]}</span>

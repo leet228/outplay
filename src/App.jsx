@@ -5,6 +5,7 @@ import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, ge
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
 import { initSounds, preloadAll } from './lib/sounds'
+import { getStoreImageUrls, preloadGameCardImages, preloadStoreImages } from './lib/imagePreload'
 import './App.css'
 import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
@@ -282,6 +283,7 @@ export default function App() {
     // Init sound system + preload all sounds in background
     initSounds()
     preloadAll()
+    preloadGameCardImages()
 
     const isOnboarded = localStorage.getItem('outplay_onboarded')
     const SPLASH_MIN = 1400 // ms
@@ -304,6 +306,23 @@ export default function App() {
         }, delay)
       })
     }
+  }, [])
+
+  // Warm already-known remote avatars without adding extra DB/API requests.
+  useEffect(() => {
+    let lastSignature = ''
+
+    const warmStoreImages = (state = useGameStore.getState()) => {
+      const urls = getStoreImageUrls(state)
+      const signature = urls.join('|')
+      if (signature === lastSignature) return
+      lastSignature = signature
+      preloadStoreImages(state)
+    }
+
+    warmStoreImages()
+    const unsubscribe = useGameStore.subscribe(warmStoreImages)
+    return unsubscribe
   }, [])
 
   // Ping online every 2 min so friends see us as online
