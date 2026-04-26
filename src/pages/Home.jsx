@@ -9,6 +9,14 @@ import sound from '../lib/sounds'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendsData, sendGameInvite, acceptGameInvite, rejectGameInvite, cancelAllPendingInvites, getPendingInvites } from '../lib/supabase'
+import blackjackCardArt from '../assets/games/blackjack-card.jpg'
+import capitalsCardArt from '../assets/games/capitals-card.jpg'
+import circleCardArt from '../assets/games/circle-card.jpg'
+import gradientCardArt from '../assets/games/gradient-card.jpg'
+import hearingCardArt from '../assets/games/hearing-card.jpg'
+import quizCardArt from '../assets/games/quiz-card.jpg'
+import reactionCardArt from '../assets/games/reaction-card.jpg'
+import sequenceCardArt from '../assets/games/sequence-card.jpg'
 import './Home.css'
 
 /* ── Icons ── */
@@ -1367,15 +1375,26 @@ const GAME_SHEETS = {
   },
 }
 
+const GAME_CARD_ART = {
+  quiz: quizCardArt,
+  sequence: sequenceCardArt,
+  blackjack: blackjackCardArt,
+  reaction: reactionCardArt,
+  hearing: hearingCardArt,
+  gradient: gradientCardArt,
+  capitals: capitalsCardArt,
+  circle: circleCardArt,
+}
+
 const GAMES = [
-  { id: 'quiz', titleKey: 'gameQuizTitle', subKey: 'gameQuizSub', available: true, accent: '#3B82F6', shadow: '#1d3461' },
-  { id: 'sequence', titleKey: 'gameSequenceTitle', subKey: 'gameSequenceSub', available: true, accent: '#8B5CF6', shadow: '#2d1b69' },
-  { id: 'blackjack', titleKey: 'gameBlackjackTitle', subKey: 'gameBlackjackSub', available: true, accent: '#F59E0B', shadow: '#78350f' },
-  { id: 'reaction', titleKey: 'gameReactionTitle', subKey: 'gameReactionSub', available: true, accent: '#10B981', shadow: '#064e3b' },
-  { id: 'hearing', titleKey: 'gameHearingTitle', subKey: 'gameHearingSub', available: true, accent: '#EC4899', shadow: '#831843' },
-  { id: 'gradient', titleKey: 'gameGradientTitle', subKey: 'gameGradientSub', available: true, accent: '#F43F5E', shadow: '#881337' },
-  { id: 'capitals', titleKey: 'gameCapitalsTitle', subKey: 'gameCapitalsSub', available: true, accent: '#06B6D4', shadow: '#0e4a63' },
-  { id: 'circle', titleKey: 'gameCircleTitle', subKey: 'gameCircleSub', available: true, accent: '#A855F7', shadow: '#581c87' },
+  { id: 'quiz', titleKey: 'gameQuizTitle', subKey: 'gameQuizSub', available: true, accent: '#3B82F6', shadow: '#1d3461', art: GAME_CARD_ART.quiz },
+  { id: 'sequence', titleKey: 'gameSequenceTitle', subKey: 'gameSequenceSub', available: true, accent: '#8B5CF6', shadow: '#2d1b69', art: GAME_CARD_ART.sequence },
+  { id: 'blackjack', titleKey: 'gameBlackjackTitle', subKey: 'gameBlackjackSub', available: true, accent: '#F59E0B', shadow: '#78350f', art: GAME_CARD_ART.blackjack },
+  { id: 'reaction', titleKey: 'gameReactionTitle', subKey: 'gameReactionSub', available: true, accent: '#10B981', shadow: '#064e3b', art: GAME_CARD_ART.reaction },
+  { id: 'hearing', titleKey: 'gameHearingTitle', subKey: 'gameHearingSub', available: true, accent: '#EC4899', shadow: '#831843', art: GAME_CARD_ART.hearing },
+  { id: 'gradient', titleKey: 'gameGradientTitle', subKey: 'gameGradientSub', available: true, accent: '#F43F5E', shadow: '#881337', art: GAME_CARD_ART.gradient },
+  { id: 'capitals', titleKey: 'gameCapitalsTitle', subKey: 'gameCapitalsSub', available: true, accent: '#06B6D4', shadow: '#0e4a63', art: GAME_CARD_ART.capitals },
+  { id: 'circle', titleKey: 'gameCircleTitle', subKey: 'gameCircleSub', available: true, accent: '#A855F7', shadow: '#581c87', art: GAME_CARD_ART.circle },
 ]
 
 /* ── Home ── */
@@ -1394,6 +1413,7 @@ export default function Home() {
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)
   const [friendsOpen, setFriendsOpen] = useState(false)
+  const [gameSection, setGameSection] = useState('duels')
 
   const isAdmin = user && (
     ADMIN_IDS.includes(user.id) ||
@@ -1468,59 +1488,98 @@ export default function Home() {
       <BannerCarousel t={t} />
 
       <div className="games-section">
-        <span className="games-label">{t.gamesLabel}</span>
-        <div className="games-grid">
-
+        <div className="games-tabs" role="tablist" aria-label={t.gamesLabel}>
           <button
-            className="game-card game-card--main"
-            style={{ '--card-accent': GAMES[0].accent, '--card-shadow': GAMES[0].shadow }}
-            onClick={() => handleGameTap(GAMES[0])}
+            type="button"
+            className={`games-tab ${gameSection === 'duels' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={gameSection === 'duels'}
+            onClick={() => { haptic('light'); setGameSection('duels') }}
           >
-            <div className="game-card-glow" />
-            <div className="game-card-deco" style={{ top: '12%', left: '28px', transform: 'rotate(-18deg)' }}><LightningIcon /></div>
-            <div className="game-card-deco" style={{ top: '44%', left: '6px', transform: 'rotate(6deg)' }}><SparkleIcon /></div>
-            <div className="game-card-deco" style={{ bottom: '12%', left: '28px', transform: 'rotate(-8deg)' }}><StarIcon /></div>
-            <div className="game-card-deco" style={{ top: '12%', right: '28px', transform: 'rotate(16deg)' }}><TrophyIcon /></div>
-            <div className="game-card-deco" style={{ top: '44%', right: '6px', transform: 'rotate(-10deg)' }}><CrownIcon /></div>
-            <div className="game-card-deco" style={{ bottom: '12%', right: '28px', transform: 'rotate(6deg)' }}><TargetIcon /></div>
-            <div className="game-card-icon game-card-icon--center">
-              <QuizIcon />
-            </div>
-            <span className="game-card-title">{t.gameQuizTitle}</span>
+            {t.gamesDuelTab}
           </button>
-
-          {/* Render secondary games in rows of 2 */}
-          {Array.from({ length: Math.ceil((GAMES.length - 1) / 2) }, (_, rowIdx) => {
-            const rowGames = GAMES.slice(1 + rowIdx * 2, 1 + rowIdx * 2 + 2)
-            return (
-              <div className="games-row" key={rowIdx}>
-                {rowGames.map(g => (
-                  <button
-                    key={g.id}
-                    className={`game-card game-card--small ${!g.available ? 'game-card--soon' : ''}`}
-                    style={{ '--card-accent': g.accent, '--card-shadow': g.shadow }}
-                    onClick={() => handleGameTap(g)}
-                    disabled={!g.available}
-                  >
-                    <div className="game-card-glow" />
-                    <span className="game-card-emoji">{GAME_SHEETS[g.id]?.svgIcon ? GAME_SHEETS[g.id].svgIcon(g.accent) : GAME_SHEETS[g.id]?.icon}</span>
-                    <div className="game-card-info">
-                      <span className="game-card-title">{t[g.titleKey]}</span>
-                      <span className="game-card-sub">{t[g.subKey]}</span>
-                    </div>
-                    {!g.available && <div className="game-card-badge">{t.soon}</div>}
-                  </button>
-                ))}
-                {rowGames.length === 1 && <div className="game-card-placeholder" />}
-              </div>
-            )
-          })}
-
-          <div className="games-more-soon">
-            <span>{t.moreGamesSoon}</span>
-          </div>
-
+          <button
+            type="button"
+            className={`games-tab ${gameSection === 'slots' ? 'active' : ''}`}
+            role="tab"
+            aria-selected={gameSection === 'slots'}
+            onClick={() => { haptic('light'); setGameSection('slots') }}
+          >
+            {t.gamesSlotsTab}
+          </button>
         </div>
+
+        {gameSection === 'duels' ? (
+          <div className="games-grid">
+
+            <button
+              className="game-card game-card--main game-card--with-art"
+              style={{ '--card-accent': GAMES[0].accent, '--card-shadow': GAMES[0].shadow }}
+              onClick={() => handleGameTap(GAMES[0])}
+            >
+              <img className="game-card-art" src={GAMES[0].art} alt="" loading="lazy" decoding="async" aria-hidden="true" />
+              <div className="game-card-art-overlay" />
+              <div className="game-card-glow" />
+              <span className="game-card-title">{t[GAMES[0].titleKey]}</span>
+            </button>
+
+            {/* Render secondary games in rows of 2 */}
+            {Array.from({ length: Math.ceil((GAMES.length - 1) / 2) }, (_, rowIdx) => {
+              const rowGames = GAMES.slice(1 + rowIdx * 2, 1 + rowIdx * 2 + 2)
+              return (
+                <div className="games-row" key={rowIdx}>
+                  {rowGames.map(g => (
+                    <button
+                      key={g.id}
+                      className={`game-card game-card--small game-card--${g.id} ${g.art ? 'game-card--with-art' : ''} ${!g.available ? 'game-card--soon' : ''}`}
+                      style={{ '--card-accent': g.accent, '--card-shadow': g.shadow }}
+                      onClick={() => handleGameTap(g)}
+                      disabled={!g.available}
+                    >
+                      {g.art ? (
+                        <>
+                          <img className="game-card-art" src={g.art} alt="" loading="lazy" decoding="async" aria-hidden="true" />
+                          <div className="game-card-art-overlay" />
+                          <div className="game-card-glow" />
+                          <span className="game-card-title">{t[g.titleKey]}</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="game-card-glow" />
+                          <span className="game-card-emoji">{GAME_SHEETS[g.id]?.svgIcon ? GAME_SHEETS[g.id].svgIcon(g.accent) : GAME_SHEETS[g.id]?.icon}</span>
+                          <div className="game-card-info">
+                            <span className="game-card-title">{t[g.titleKey]}</span>
+                            <span className="game-card-sub">{t[g.subKey]}</span>
+                          </div>
+                        </>
+                      )}
+                      {!g.available && <div className="game-card-badge">{t.soon}</div>}
+                    </button>
+                  ))}
+                  {rowGames.length === 1 && <div className="game-card-placeholder" />}
+                </div>
+              )
+            })}
+
+            <div className="games-more-soon">
+              <span>{t.moreGamesSoon}</span>
+            </div>
+
+          </div>
+        ) : (
+          <div className="slots-empty">
+            <div className="slots-empty-card">
+              <svg className="slots-empty-icon" width="52" height="52" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="4" y="5" width="16" height="14" rx="4" stroke="currentColor" strokeWidth="2" />
+                <path d="M9 10h.01M12 10h.01M15 10h.01M8 15h8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                <path d="M17 5l1.4-2.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="slots-empty-title">{t.slotsEmptyTitle}</span>
+              <span className="slots-empty-sub">{t.slotsEmptySub}</span>
+            </div>
+          </div>
+        )}
+
       </div>
 
       <FriendsPanel open={friendsOpen} onClose={closeFriends} t={t} user={user} navigate={navigate} balance={balance} currency={currency} rates={rates} />
