@@ -77,9 +77,9 @@
 
 .topbar-logo {
   font-family: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
-  font-size: 46px;
+  font-size: 56px;
   font-weight: 800;
-  letter-spacing: -1.5px;
+  letter-spacing: -2px;
   color: #fff;
   text-transform: lowercase;
   pointer-events: none;
