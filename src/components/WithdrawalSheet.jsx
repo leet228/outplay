@@ -6,7 +6,7 @@ import { translations } from '../lib/i18n'
 import { requestWithdrawal } from '../lib/supabase'
 import './WithdrawalSheet.css'
 
-const MIN_WITHDRAW_RUB = 2000
+const MIN_WITHDRAW_RUB = 500
 // Combined network fee: includes gas + 2% platform fee
 const FEE_PERCENT = 0.02
 const GAS_TON = 0.01
