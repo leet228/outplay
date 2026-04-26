@@ -274,20 +274,31 @@ function ReferralSection({ t, currency, rates, user }) {
   const earnings = refEarnings ? (refEarnings[period] ?? 0) : 0
   const items = referrals?.items ?? []
   const total = referrals?.total ?? 0
+  const allTimeEarnings = refEarnings ? (refEarnings.all ?? 0) : 0
   const sorted = [...items].sort((a, b) => b.earned[period] - a.earned[period])
   const displayed = sorted.slice(0, visible)
   const hasMore = visible < items.length
 
   return (
     <div className="ref-section">
-
-      {/* Divider */}
-      <div className="ref-divider" />
-
-      {/* Header */}
-      <div className="ref-header">
+      <div className="ref-hero">
+        <div className="ref-hero-orb ref-hero-orb--primary" />
+        <div className="ref-hero-orb ref-hero-orb--secondary" />
+        <div className="ref-hero-badge">
+          <span>2%</span>
+        </div>
         <h2 className="ref-title">{t.refTitle}</h2>
         <p className="ref-subtitle">{t.refSubtitle}</p>
+        <div className="ref-hero-stats">
+          <div className="ref-hero-stat">
+            <strong>{referralsLoading && referrals === null ? '…' : total}</strong>
+            <span>{t.refCount}</span>
+          </div>
+          <div className="ref-hero-stat">
+            <strong>{formatCurrency(allTimeEarnings, currency, rates)}</strong>
+            <span>{t.refAll}</span>
+          </div>
+        </div>
       </div>
 
       {/* Link card */}

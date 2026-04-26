@@ -5,7 +5,7 @@ import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, ge
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
 import { initSounds, preloadAll } from './lib/sounds'
-import { getStoreImageUrls, preloadGameCardImages, preloadStoreImages } from './lib/imagePreload'
+import { getStoreImageUrls, preloadAppImages, preloadGameCardImages, preloadStoreImages } from './lib/imagePreload'
 import './App.css'
 import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
@@ -283,6 +283,7 @@ export default function App() {
     // Init sound system + preload all sounds in background
     initSounds()
     preloadAll()
+    preloadAppImages()
     preloadGameCardImages()
 
     const isOnboarded = localStorage.getItem('outplay_onboarded')
@@ -475,21 +476,8 @@ export default function App() {
         { id: '9',  first_name: 'Лера',      username: 'lera_win',   balance: 210,  wins: 7,  losses: 9 },
         { id: '10', first_name: 'Паша',      username: 'pasha_ok',   balance: 95,   wins: 5,  losses: 6 },
       ])
-      store.setGuild({
-        id: 'g1', name: 'IQ Masters', description: 'High IQ only.',
-        avatar_url: null, creator_id: 'dev', rank: 8,
-        member_count: 8, pnl: 21500, creator_name: 'Dev',
-      })
-      store.setGuildMembers([
-        { user_id: 'dev', first_name: 'Dev',       username: 'dev',      role: 'creator', pnl: 8200, is_pro: true },
-        { user_id: '2',   first_name: 'Мария',     username: 'masha_q',  role: 'member',  pnl: 5400, is_pro: true },
-        { user_id: '3',   first_name: 'Дмитрий',   username: 'dima_iq',  role: 'member',  pnl: 3800 },
-        { user_id: '4',   first_name: 'Кирилл',    username: 'kirill99', role: 'member',  pnl: 2100 },
-        { user_id: '5',   first_name: 'Анна',      username: 'anna_win', role: 'member',  pnl: 1200 },
-        { user_id: '6',   first_name: 'Сергей',    username: 'serg_top', role: 'member',  pnl: 500  },
-        { user_id: '7',   first_name: 'Оля',       username: 'olya_q',   role: 'member',  pnl: 200  },
-        { user_id: '8',   first_name: 'Максим',    username: 'max_iq',   role: 'member',  pnl: 100  },
-      ])
+      store.setGuild(null)
+      store.setGuildMembers([])
       store.setTopGuilds([
         { id: 'tg1', name: 'Alpha Wolves',  tag: 'AL', member_count: 48, pnl: 128450, creator_name: 'Виктор' },
         { id: 'tg2', name: 'Brain Storm',   tag: 'BR', member_count: 50, pnl: 95200,  creator_name: 'Настя'  },

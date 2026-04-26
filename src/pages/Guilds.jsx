@@ -385,11 +385,16 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden'
+      document.body.classList.add('guilds-create-sheet-open')
     } else {
       document.body.style.overflow = ''
+      document.body.classList.remove('guilds-create-sheet-open')
       setTimeout(() => { setName(''); setDesc(''); setAvatar(null); setError('') }, 300)
     }
-    return () => { document.body.style.overflow = '' }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.classList.remove('guilds-create-sheet-open')
+    }
   }, [open])
 
   useEffect(() => {
@@ -414,6 +419,9 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
   }
 
   const createCost = user?.is_pro ? CREATE_COST_PRO : CREATE_COST
+  const canCreate = name.trim().length >= 2
+  const previewName = name.trim() || t.guildsNamePlaceholder
+  const previewColor = guildColor(previewName)
 
   async function handleCreate() {
     if (!canCreate || creating) return
@@ -434,8 +442,6 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
     setCreating(false)
   }
 
-  const canCreate = name.trim().length >= 2
-
   return (
     <>
       <div className={`guilds-sheet-overlay ${open ? 'visible' : ''}`} onClick={onClose} />
@@ -444,52 +450,53 @@ function CreateGuildSheet({ open, onClose, onCreated, t, currency, rates, balanc
 
         <h2 className="guilds-sheet-title">{t.guildsCreateTitle}</h2>
 
-        {/* Avatar upload */}
-        <button className="guilds-sheet-avatar" onClick={() => fileRef.current?.click()}>
-          {avatar ? (
-            <img src={avatar} alt="" className="guilds-sheet-avatar-img" />
-          ) : (
-            <div className="guilds-sheet-avatar-placeholder">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
-                  stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="1.5"/>
-              </svg>
+        <div className="guild-create-preview">
+          <div className="guild-create-preview-glow" style={{ background: previewColor }} />
+          <div className="guild-create-preview-top">
+            <button type="button" className="guilds-sheet-avatar guild-create-preview-avatar" onClick={() => fileRef.current?.click()}>
+              {avatar ? (
+                <span className="guild-create-avatar-frame">
+                  <img src={avatar} alt="" className="guilds-sheet-avatar-img" />
+                  <span className="guild-create-avatar-upload">{t.guildsUpload}</span>
+                </span>
+              ) : (
+                <div className="guilds-sheet-avatar-placeholder">
+                  <span className="guild-create-avatar-upload">{t.guildsUpload}</span>
+                </div>
+              )}
+            </button>
+            <div className="guild-create-preview-copy">
+              <input
+                className="guild-create-preview-name-input"
+                type="text"
+                placeholder={t.guildsNamePlaceholder}
+                value={name}
+                onChange={e => setName(e.target.value)}
+                maxLength={50}
+                aria-label={t.guildsName}
+              />
+              <span className="guild-create-preview-members">0/50</span>
             </div>
-          )}
-          <span className="guilds-sheet-avatar-label">{t.guildsAvatar}</span>
+          </div>
+          <textarea
+            className="guild-create-preview-desc-input"
+            placeholder={t.guildsDescPlaceholder}
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            maxLength={1000}
+            rows={2}
+            aria-label={t.guildsDesc}
+          />
+          <div className="guild-create-preview-bottom">
+            <span>{t.guildsCreator}: {user?.first_name || 'Dev'}</span>
+            <strong>{formatCurrency(0, currency, rates, { sign: '+' })}</strong>
+          </div>
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
             style={{ display: 'none' }}
             onChange={handleAvatar}
-          />
-        </button>
-
-        {/* Name input */}
-        <div className="guilds-sheet-field">
-          <label className="guilds-sheet-field-label">{t.guildsName}</label>
-          <input
-            className="guilds-sheet-input"
-            type="text"
-            placeholder={t.guildsNamePlaceholder}
-            value={name}
-            onChange={e => setName(e.target.value)}
-            maxLength={50}
-          />
-        </div>
-
-        {/* Description input */}
-        <div className="guilds-sheet-field">
-          <label className="guilds-sheet-field-label">{t.guildsDesc}</label>
-          <textarea
-            className="guilds-sheet-input guilds-sheet-textarea"
-            placeholder={t.guildsDescPlaceholder}
-            value={desc}
-            onChange={e => setDesc(e.target.value)}
-            maxLength={1000}
-            rows={3}
           />
         </div>
 
@@ -880,7 +887,7 @@ export default function Guilds() {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
           </svg>
-          {t.guildsCreate}
+          <span className="guilds-create-text">{t.guildsCreate}</span>
         </button>
         <button className="guilds-find" onClick={() => { haptic('light'); setFindOpen(true) }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">

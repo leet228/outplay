@@ -5,6 +5,7 @@ import { createStarsInvoice, processDeposit, getUserBalance } from '../lib/supab
 import { formatCurrency, convertFromRub } from '../lib/currency'
 import { translations } from '../lib/i18n'
 import { TON_ADDRESS } from '../lib/addresses'
+import tgStarSrc from '../assets/star/tgstar.png'
 import './DepositSheet.css'
 
 const PRESETS = [100, 500, 1000]
@@ -22,26 +23,18 @@ function TonIcon({ size = 22 }) {
   )
 }
 
-function TgStarIcon({ size = 22 }) {
-  const id = `tgs${Math.random().toString(36).slice(2, 6)}`
+function TgStarIcon({ size = 22, className = '' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 120 120" fill="none" style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
-      <defs>
-        <linearGradient id={`${id}-b`} x1="20" y1="10" x2="100" y2="110" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#F5A623"/>
-          <stop offset="100%" stopColor="#E8780A"/>
-        </linearGradient>
-        <linearGradient id={`${id}-f`} x1="30" y1="15" x2="90" y2="105" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#FFDA44"/>
-          <stop offset="50%" stopColor="#FFC933"/>
-          <stop offset="100%" stopColor="#F5B731"/>
-        </linearGradient>
-      </defs>
-      {/* Orange border */}
-      <path d="M60 5 C62 5 64 6 65 8 L76 34 C77 36 79 38 81 38 L109 42 C113 42 115 47 112 50 L91 70 C89 72 88 74 89 77 L95 104 C96 108 92 111 88 109 L64 96 C62 95 59 95 57 96 L33 109 C29 111 25 108 26 104 L32 77 C32 74 32 72 30 70 L9 50 C6 47 8 42 12 42 L40 38 C42 38 44 36 45 34 L56 8 C57 6 59 5 60 5Z" fill={`url(#${id}-b)`}/>
-      {/* Golden body */}
-      <path d="M60 14 C61 14 63 15 63.5 16 L73 38 C74 40 76 42 78 42 L103 45 C106 46 107 49 105 51 L87 68 C85 70 85 72 85 74 L90 98 C91 101 88 103 85 102 L63 90 C61 89 59 89 57 90 L36 102 C33 103 30 101 31 98 L36 74 C36 72 36 70 34 68 L16 51 C14 49 15 46 18 45 L43 42 C45 42 47 40 48 38 L57.5 16 C58 15 59.5 14 60 14Z" fill={`url(#${id}-f)`}/>
-    </svg>
+    <img
+      className={`tg-star-icon ${className}`.trim()}
+      src={tgStarSrc}
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      draggable="false"
+      style={{ width: size, height: size }}
+    />
   )
 }
 
@@ -87,7 +80,7 @@ async function pollBalance(userId, prevBalance, maxRetries = 4) {
 }
 
 export default function DepositSheet() {
-  const { depositOpen, setDepositOpen, lang, currency, rates, user, balance, setBalance, setBalanceBounce, appSettings } = useGameStore()
+  const { depositOpen, setDepositOpen, lang, currency, rates, user, setBalance, setBalanceBounce, appSettings } = useGameStore()
   const t = translations[lang]
   const starsEnabled = appSettings.stars_deposits !== false
   const cryptoEnabled = appSettings.crypto_deposits !== false
@@ -321,7 +314,7 @@ export default function DepositSheet() {
             {starsEnabled && (
               <button className="deposit-option deposit-option--stars" onClick={() => { haptic('medium'); setView('stars') }}>
                 <div className="deposit-option-icon">
-                  <TgStarIcon size={28} />
+                  <TgStarIcon size={44} />
                 </div>
                 <div className="deposit-option-info">
                   <span className="deposit-option-title">{t.depositStars}</span>
@@ -361,7 +354,7 @@ export default function DepositSheet() {
                   className={`deposit-preset ${selected === amount && custom === '' ? 'active' : ''}`}
                   onClick={() => handlePreset(amount)}
                 >
-                  <span className="deposit-preset-stars"><TgStarIcon size={16} /> {amount}</span>
+                  <span className="deposit-preset-stars"><TgStarIcon size={30} /> {amount}</span>
                   <span className="deposit-preset-rub">{formatCurrency(amount, currency, rates, { approximate: true })}</span>
                 </button>
               ))}
@@ -370,7 +363,7 @@ export default function DepositSheet() {
             <div className="deposit-custom-wrap">
               <span className="deposit-custom-label">{t.depositCustom}</span>
               <div className={`deposit-custom-input-wrap ${custom !== '' && !isCustomValid ? 'error' : ''} ${custom !== '' && isCustomValid ? 'filled' : ''}`}>
-                <span className="deposit-custom-star"><TgStarIcon size={16} /></span>
+                <span className="deposit-custom-star"><TgStarIcon size={30} /></span>
                 <input
                   className="deposit-custom-input"
                   type="number"
@@ -390,7 +383,7 @@ export default function DepositSheet() {
               {loading ? (
                 <div className="deposit-btn-spinner" />
               ) : (
-                <>{t.depositBuy} {activeAmount >= MIN_STARS ? activeAmount : '—'} <TgStarIcon size={18} /></>
+                <>{t.depositBuy} {activeAmount >= MIN_STARS ? activeAmount : '—'} <TgStarIcon size={32} /></>
 
               )}
             </button>

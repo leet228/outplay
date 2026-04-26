@@ -1,8 +1,10 @@
 import { GAME_CARD_IMAGE_URLS } from './gameAssets'
+import tgStarSrc from '../assets/star/tgstar.png'
 
 const preloadedUrls = new Set()
 const activePreloads = new Map()
 const IMAGE_URL_KEYS = ['avatar_url', 'photo_url']
+const APP_IMAGE_URLS = [tgStarSrc]
 
 function isImageUrl(url) {
   if (typeof url !== 'string') return false
@@ -102,6 +104,10 @@ export function getStoreImageUrls(state) {
 
 export function preloadGameCardImages() {
   return preloadImages(GAME_CARD_IMAGE_URLS, { idle: false, limit: GAME_CARD_IMAGE_URLS.length })
+}
+
+export function preloadAppImages() {
+  return preloadImages(APP_IMAGE_URLS, { idle: false, limit: APP_IMAGE_URLS.length })
 }
 
 export function preloadStoreImages(state) {

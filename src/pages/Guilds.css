@@ -1392,3 +1392,870 @@
   color: var(--accent);
   flex-shrink: 0;
 }
+
+/* Main guilds screen refresh */
+.guilds {
+  position: relative;
+  align-items: stretch;
+  padding: 0 18px 16px;
+  padding-top: calc(var(--safe-top, 0px) + 30px);
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 18px);
+  gap: 18px;
+  isolation: isolate;
+  overflow-x: hidden;
+}
+
+.guilds::before {
+  content: "";
+  position: absolute;
+  inset: -120px -80px auto;
+  height: 430px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 22% 18%, rgba(59, 130, 246, 0.18), transparent 34%),
+    radial-gradient(circle at 86% 8%, rgba(34, 197, 94, 0.14), transparent 30%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.72), transparent 82%);
+  filter: blur(4px);
+}
+
+.guilds-timer {
+  align-items: stretch;
+  gap: 10px;
+  padding: 0 2px 2px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.guilds-timer-label {
+  color: rgba(148, 163, 184, 0.82);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.3px;
+}
+
+.guilds-timer-digits {
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.17);
+}
+
+.guilds-timer-block {
+  flex: 1;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.guilds-timer-num {
+  font-size: clamp(27px, 9vw, 38px);
+  letter-spacing: -1.4px;
+  color: #f8fafc;
+}
+
+.guilds-timer-unit {
+  color: rgba(148, 163, 184, 0.72);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.guilds-timer-sep {
+  align-self: flex-start;
+  margin: 2px 2px 0;
+  color: rgba(148, 163, 184, 0.28);
+  font-size: 26px;
+}
+
+.guilds-prize {
+  min-height: 168px;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 24px 22px 22px;
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 84% 14%, rgba(251, 191, 36, 0.38), transparent 26%),
+    radial-gradient(circle at 12% 94%, rgba(34, 197, 94, 0.18), transparent 38%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(10, 15, 27, 0.98) 52%, rgba(20, 83, 45, 0.46));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 22px 44px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.guilds-prize::after {
+  content: "";
+  position: absolute;
+  inset: auto 20px 18px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.55), transparent);
+  opacity: 0.75;
+}
+
+.guilds-prize-glow {
+  top: -45%;
+  left: auto;
+  right: -80px;
+  width: 230px;
+  height: 230px;
+  transform: none;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.22), transparent 68%);
+}
+
+.guilds-prize-glow--bottom {
+  right: auto;
+  left: -110px;
+  bottom: -70px;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.16), transparent 70%);
+}
+
+.guilds-prize-sparkle {
+  background: rgba(251, 191, 36, 0.8);
+}
+
+.guilds-prize-icon {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 56px;
+  height: 56px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  box-shadow: none;
+}
+
+.guilds-prize-label {
+  color: rgba(226, 232, 240, 0.74);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.4px;
+}
+
+.guilds-prize-amount {
+  font-size: clamp(42px, 13vw, 62px);
+  letter-spacing: -2.5px;
+  background: linear-gradient(180deg, #ffffff 0%, #fde68a 45%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 8px 22px rgba(245, 158, 11, 0.2));
+}
+
+.guilds-actions {
+  gap: 9px;
+}
+
+.guilds-create,
+.guilds-find {
+  min-height: 48px;
+  padding: 13px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -0.15px;
+  box-shadow: none;
+}
+
+.guilds-create {
+  border: 0;
+  background: linear-gradient(135deg, #38bdf8, #2563eb 58%, #1d4ed8);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.22);
+}
+
+.guilds-find {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(148, 163, 184, 0.22);
+}
+
+.guilds-find svg {
+  color: rgba(226, 232, 240, 0.72);
+}
+
+.guilds-list-card {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: 8px;
+}
+
+.guilds-list-header {
+  padding: 4px 2px 8px;
+}
+
+.guilds-list-title {
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: -0.5px;
+  text-transform: none;
+}
+
+.guilds-rows {
+  gap: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.guild-row {
+  min-height: 68px;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.guild-row:first-child {
+  border-top: 0;
+}
+
+.guild-row:active {
+  opacity: 0.78;
+}
+
+.guild-row--mine {
+  margin: 6px 0;
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(34, 197, 94, 0.06));
+  border: 1px solid rgba(96, 165, 250, 0.22) !important;
+  border-radius: 22px;
+}
+
+.guild-rank {
+  width: 28px;
+  color: rgba(148, 163, 184, 0.72);
+  font-size: 17px;
+  font-weight: 950;
+  letter-spacing: -0.5px;
+}
+
+.guild-avatar,
+.guild-avatar-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 17px;
+}
+
+.guild-avatar {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.guild-info {
+  gap: 3px;
+}
+
+.guild-name {
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+}
+
+.guild-members {
+  color: rgba(148, 163, 184, 0.76);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.guild-pnl {
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -0.25px;
+}
+
+.guild-pnl.positive {
+  color: #22c55e;
+}
+
+.guild-pnl.negative {
+  color: #fb7185;
+}
+
+.my-guild-card {
+  padding: 2px 0 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0;
+}
+
+.my-guild-label {
+  margin-bottom: 10px;
+  color: rgba(148, 163, 184, 0.82);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+}
+
+.my-guild-rank {
+  width: 28px;
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.guilds-how-toggle {
+  justify-content: space-between;
+  padding: 14px 2px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.guilds-how {
+  gap: 0;
+  padding: 0 0 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.guilds-how-item {
+  gap: 12px;
+  padding: 14px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.11);
+  border-radius: 0;
+}
+
+.guilds-how-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 21px;
+}
+
+/* Guilds hero and create sheet polish */
+.guilds-timer {
+  align-items: center;
+  text-align: center;
+}
+
+.guilds-timer-digits {
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+  justify-content: center;
+}
+
+.guilds-timer-block {
+  align-items: center;
+}
+
+.guilds-prize {
+  min-height: 214px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding: 28px 22px 30px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.65), transparent 18%),
+    radial-gradient(circle at 50% 42%, rgba(251, 191, 36, 0.58), transparent 46%),
+    radial-gradient(circle at 18% 86%, rgba(34, 197, 94, 0.34), transparent 42%),
+    linear-gradient(145deg, #301400 0%, #8a3b00 42%, #f59e0b 74%, #fef08a 118%);
+  border-color: rgba(253, 230, 138, 0.58);
+  box-shadow:
+    0 0 42px rgba(245, 158, 11, 0.34),
+    0 24px 64px rgba(245, 158, 11, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34);
+}
+
+.guilds-prize::before {
+  content: "";
+  position: absolute;
+  inset: -60% -35%;
+  background: linear-gradient(115deg, transparent 34%, rgba(255, 255, 255, 0.34) 48%, transparent 62%);
+  transform: translateX(-36%) rotate(8deg);
+  animation: guildPrizeShine 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.guilds-prize::after {
+  inset: auto 54px 26px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+}
+
+@keyframes guildPrizeShine {
+  0%, 55% { transform: translateX(-44%) rotate(8deg); opacity: 0; }
+  68% { opacity: 0.9; }
+  100% { transform: translateX(44%) rotate(8deg); opacity: 0; }
+}
+
+.guilds-prize-glow {
+  right: auto;
+  left: 50%;
+  top: -84px;
+  width: 320px;
+  height: 320px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.32), rgba(251, 191, 36, 0.18) 42%, transparent 70%);
+}
+
+.guilds-prize-glow--bottom {
+  left: 50%;
+  bottom: -150px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.22), transparent 70%);
+}
+
+.guilds-prize-icon {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: 1;
+  width: 72px;
+  height: 72px;
+  border-radius: 26px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.34), rgba(251, 191, 36, 0.12)),
+    rgba(120, 53, 15, 0.22);
+  border-color: rgba(255, 255, 255, 0.42);
+  box-shadow:
+    0 0 28px rgba(255, 255, 255, 0.22),
+    0 14px 30px rgba(120, 53, 15, 0.28);
+}
+
+.guilds-prize-label,
+.guilds-prize-amount {
+  position: relative;
+  z-index: 1;
+}
+
+.guilds-prize-label {
+  color: #fff7ed;
+  font-size: 12px;
+  letter-spacing: 1.8px;
+  text-shadow: 0 2px 12px rgba(120, 53, 15, 0.45);
+}
+
+.guilds-prize-amount {
+  font-size: clamp(54px, 16vw, 78px);
+  letter-spacing: -3.4px;
+  background: linear-gradient(180deg, #ffffff 0%, #fff7ed 35%, #fef08a 72%, #fb923c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter:
+    drop-shadow(0 2px 0 rgba(120, 53, 15, 0.34))
+    drop-shadow(0 12px 28px rgba(255, 255, 255, 0.2));
+}
+
+.guilds-actions {
+  justify-content: center;
+  gap: 8px;
+}
+
+.guilds-create,
+.guilds-find {
+  flex: 0 0 auto;
+  min-height: 39px;
+  padding: 9px 14px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.guilds-create {
+  min-width: 98px;
+}
+
+.guilds-find {
+  min-width: 128px;
+}
+
+.guilds-sheet {
+  background:
+    radial-gradient(circle at 50% -10%, rgba(59, 130, 246, 0.18), transparent 35%),
+    linear-gradient(180deg, #111827 0%, #070b13 100%);
+  border-top-color: rgba(148, 163, 184, 0.22);
+  box-shadow: 0 -28px 70px rgba(0, 0, 0, 0.45);
+}
+
+.guilds-sheet-handle {
+  background: rgba(226, 232, 240, 0.22);
+  margin-bottom: 18px;
+}
+
+.guilds-sheet-title {
+  margin-bottom: 18px;
+  font-size: 23px;
+  font-weight: 950;
+  letter-spacing: -0.7px;
+}
+
+.guild-create-preview {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(255, 255, 255, 0.13), transparent 24%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(8, 13, 24, 0.98));
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.guild-create-preview-glow {
+  position: absolute;
+  right: -62px;
+  top: -62px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  opacity: 0.22;
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.guild-create-preview-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.guild-create-preview-avatar {
+  flex: 0 0 auto;
+  margin: 0;
+  gap: 7px;
+}
+
+.guild-create-preview-avatar .guilds-sheet-avatar-placeholder,
+.guild-create-preview-avatar .guilds-sheet-avatar-img {
+  width: 66px;
+  height: 66px;
+  border-radius: 22px;
+}
+
+.guild-create-preview-avatar .guilds-sheet-avatar-placeholder {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035)),
+    rgba(15, 23, 42, 0.78);
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: -0.8px;
+}
+
+.guild-create-preview-avatar .guilds-sheet-avatar-label {
+  color: rgba(226, 232, 240, 0.64);
+  font-size: 10px;
+  font-weight: 900;
+  max-width: 72px;
+  line-height: 1.1;
+}
+
+.guild-create-preview-copy {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.guild-create-preview-kicker {
+  color: rgba(148, 163, 184, 0.82);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.guild-create-preview-name {
+  color: #f8fafc;
+  font-size: 20px;
+  font-weight: 950;
+  letter-spacing: -0.7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guild-create-preview-members {
+  color: rgba(226, 232, 240, 0.58);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.guild-create-preview-desc {
+  position: relative;
+  min-height: 38px;
+  margin: 0;
+  color: rgba(226, 232, 240, 0.76);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.45;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.guild-create-preview-bottom {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  color: rgba(148, 163, 184, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.guild-create-preview-bottom strong {
+  color: #22c55e;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.guilds-sheet-field {
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.guilds-sheet-field-label {
+  color: rgba(148, 163, 184, 0.82);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 1.1px;
+}
+
+.guilds-sheet-input {
+  padding: 14px 15px;
+  border-radius: 18px;
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.62);
+  font-weight: 750;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.guilds-sheet-input:focus {
+  border-color: rgba(96, 165, 250, 0.72);
+  box-shadow:
+    0 0 0 3px rgba(59, 130, 246, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.guilds-sheet-textarea {
+  min-height: 86px;
+}
+
+.guilds-sheet-cost {
+  border-radius: 18px;
+  border-color: rgba(251, 191, 36, 0.18);
+  background:
+    linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(59, 130, 246, 0.06)),
+    rgba(15, 23, 42, 0.62);
+}
+
+.guilds-sheet-submit {
+  border-radius: 18px;
+  background: linear-gradient(135deg, #38bdf8, #2563eb 62%, #1d4ed8);
+  font-weight: 950;
+  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.28);
+}
+
+.guilds-prize::before {
+  animation: none;
+  opacity: 0;
+}
+
+.guilds-prize--visible::before {
+  animation: guildPrizeShine 4.2s ease-in-out infinite;
+}
+
+.guilds-create svg {
+  flex-shrink: 0;
+}
+
+.guilds-create-text {
+  margin-left: -3px;
+}
+
+.guild-create-preview {
+  gap: 13px;
+  margin-bottom: 16px;
+  padding: 18px 18px 16px;
+}
+
+.guild-create-preview-top {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.guild-create-preview-avatar {
+  align-self: flex-start;
+}
+
+.guild-create-preview-avatar .guilds-sheet-avatar-placeholder,
+.guild-create-avatar-frame {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+.guild-create-preview-avatar .guilds-sheet-avatar-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px;
+}
+
+.guild-create-avatar-frame {
+  display: block;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.guild-create-avatar-frame .guilds-sheet-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.guild-create-avatar-tag {
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: -0.8px;
+}
+
+.guild-create-avatar-upload {
+  color: rgba(226, 232, 240, 0.76);
+  font-size: 9px;
+  font-weight: 950;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.guild-create-avatar-frame .guild-create-avatar-upload {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  padding: 4px 5px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(2, 6, 23, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.guild-create-preview-copy {
+  gap: 5px;
+  padding-top: 5px;
+}
+
+.guild-create-preview-name-input,
+.guild-create-preview-desc-input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #f8fafc;
+  font-family: inherit;
+}
+
+.guild-create-preview-name-input {
+  min-width: 0;
+  padding: 0;
+  font-size: 20px;
+  font-weight: 950;
+  line-height: 1.15;
+  letter-spacing: -0.75px;
+}
+
+.guild-create-preview-name-input::placeholder {
+  color: rgba(248, 250, 252, 0.95);
+  opacity: 1;
+}
+
+.guild-create-preview-members {
+  line-height: 1;
+}
+
+.guild-create-preview-desc-input {
+  position: relative;
+  min-height: 46px;
+  padding: 0;
+  resize: none;
+  color: rgba(226, 232, 240, 0.86);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.guild-create-preview-desc-input::placeholder {
+  color: rgba(226, 232, 240, 0.86);
+  opacity: 1;
+}
+
+.guild-create-preview-bottom {
+  margin-top: 2px;
+}
+
+.bottom-nav {
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease;
+}
+
+body.guilds-create-sheet-open .bottom-nav {
+  transform: translateX(-50%) translateY(calc(100% + 20px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guild-create-preview-avatar .guilds-sheet-avatar-placeholder {
+  justify-content: center;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.guild-create-preview-name-input {
+  padding: 9px 11px;
+  margin-left: -11px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 15px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015)),
+    rgba(15, 23, 42, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.guild-create-preview-name-input:focus {
+  border-color: rgba(96, 165, 250, 0.62);
+  background: rgba(15, 23, 42, 0.34);
+  box-shadow:
+    0 0 0 3px rgba(59, 130, 246, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.guild-create-preview-desc-input {
+  padding: 12px 13px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 17px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012)),
+    rgba(15, 23, 42, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.guild-create-preview-desc-input:focus {
+  border-color: rgba(96, 165, 250, 0.52);
+  background: rgba(15, 23, 42, 0.32);
+  box-shadow:
+    0 0 0 3px rgba(59, 130, 246, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
