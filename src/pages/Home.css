@@ -69,9 +69,10 @@
 }
 
 .topbar-left {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   align-self: center;
 }
 
@@ -86,6 +87,11 @@
 }
 
 .topbar-admin {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 8px;
   background: rgba(59, 130, 246, 0.15);
   border: 1px solid rgba(59, 130, 246, 0.3);
   border-radius: 8px;
