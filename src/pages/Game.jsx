@@ -166,7 +166,7 @@ export default function Game() {
   // ── Bot logic (local only, no DB writes) ──
   function generateBotAnswer(qi, question, humanTimeSpent, humanIsCorrect) {
     const botShouldWin = botShouldWinRef.current
-    const humanCorrect = myAnswersRef.current.filter(a => a.isCorrect).length + (humanIsCorrect ? 1 : 0)
+    const humanCorrect = myAnswersRef.current.filter(a => a.isCorrect).length
     const botCorrect = botAnswersRef.current.filter(a => a.isCorrect).length
     const remaining = QUESTION_COUNT - qi - 1
     const isLast = remaining === 0
@@ -190,6 +190,16 @@ export default function Game() {
       }
     }
 
+    // Safety net: in quiz higher score wins, so a losing bot must never
+    // visibly outscore the player. If the player has 0, the best valid
+    // losing bot score is also 0 and the server tie-break decides.
+    if (!botShouldWin && shouldBeCorrect && botCorrect + 1 >= humanCorrect) {
+      shouldBeCorrect = false
+    }
+    if (botShouldWin && !shouldBeCorrect && botCorrect + remaining <= humanCorrect) {
+      shouldBeCorrect = true
+    }
+
     let timeSpent = shouldBeCorrect ? 2 + Math.random() * 6 : 5 + Math.random() * 8
     if (isLast && (botCorrect + (shouldBeCorrect ? 1 : 0)) === humanCorrect) {
       if (botShouldWin) {
@@ -203,6 +213,58 @@ export default function Game() {
     const result = { questionIndex: qi, isCorrect: shouldBeCorrect, timeSpent }
     botAnswersRef.current.push(result)
     return result
+  }
+
+  function alignBotQuizOutcome() {
+    if (!isBotGameRef.current) return
+    const botShouldWin = botShouldWinRef.current
+    const answers = botAnswersRef.current
+    if (!answers.length) return
+
+    const humanScore = myAnswersRef.current.filter(a => a.isCorrect).length
+    let botScore = answers.filter(a => a.isCorrect).length
+    const canBotWinByScore = humanScore < QUESTION_COUNT
+    const canBotLoseByScore = humanScore > 0
+    const useScoreWin = botShouldWin && canBotWinByScore && Math.random() < 0.65
+    const useScoreLoss = !botShouldWin && canBotLoseByScore && Math.random() < 0.65
+    const targetScore = botShouldWin
+      ? (useScoreWin ? humanScore + 1 : humanScore)
+      : (useScoreLoss ? humanScore - 1 : humanScore)
+
+    for (const answer of answers) {
+      if (botScore >= targetScore) break
+      if (!answer.isCorrect) {
+        answer.isCorrect = true
+        answer.timeSpent = botShouldWin
+          ? Math.min(answer.timeSpent, 2 + Math.random() * 2)
+          : Math.max(answer.timeSpent, 5 + Math.random() * 5)
+        botScore++
+      }
+    }
+
+    for (let i = answers.length - 1; i >= 0 && botScore > targetScore; i--) {
+      if (answers[i].isCorrect) {
+        answers[i].isCorrect = false
+        answers[i].timeSpent = botShouldWin
+          ? Math.min(answers[i].timeSpent, 3 + Math.random() * 3)
+          : Math.max(answers[i].timeSpent, 8 + Math.random() * 5)
+        botScore--
+      }
+    }
+
+    // Equal score is allowed for realism, but time must match bot_should_win.
+    if (botScore === humanScore) {
+      const humanTime = myAnswersRef.current.reduce((s, a) => s + a.timeSpent, 0)
+      const botTime = answers.reduce((s, a) => s + a.timeSpent, 0)
+      const last = answers[answers.length - 1]
+
+      if (botShouldWin && botTime >= humanTime) {
+        last.timeSpent = Math.max(0.5, last.timeSpent - (botTime - humanTime + 0.8))
+      } else if (!botShouldWin && botTime <= humanTime) {
+        last.timeSpent = last.timeSpent + (humanTime - botTime + 0.8)
+      }
+      last.timeSpent = Math.round(last.timeSpent * 10) / 10
+    }
   }
 
   function handleSelect(index) {
@@ -300,6 +362,7 @@ export default function Game() {
 
     if (isDevDuel) {
       // ═══ DEV MODE ═══
+      alignBotQuizOutcome()
       oppScore = botAnswersRef.current.filter(a => a.isCorrect).length
       if (myScore > oppScore) {
         won = true
@@ -314,6 +377,7 @@ export default function Game() {
       payout = won ? calcPayout(duel.stake, user?.is_pro) : 0
 
     } else if (isBotGameRef.current) {
+      alignBotQuizOutcome()
       // ═══ BOT GAME ═══
       oppScore = botAnswersRef.current.filter(a => a.isCorrect).length
       const botTime = Math.round(botAnswersRef.current.reduce((s, a) => s + a.timeSpent, 0) * 10) / 10
