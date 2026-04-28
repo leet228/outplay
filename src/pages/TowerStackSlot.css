@@ -666,13 +666,11 @@
   right: 20px;
   top: 50%;
   transform: translateY(-50%);
-  display: grid;
-  grid-template-columns: 28px minmax(74px, max-content);
-  grid-template-rows: auto auto;
-  column-gap: 12px;
-  min-width: 120px;
-  align-items: center;
-  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
 }
 
 .tower-balance-box span,
@@ -685,9 +683,7 @@
 }
 
 .tower-bet-stepper span {
-  grid-column: 2;
-  grid-row: 1;
-  align-self: end;
+  align-self: flex-end;
 }
 
 .tower-balance-box strong,
@@ -701,8 +697,6 @@
 }
 
 .tower-bet-stepper strong {
-  grid-column: 2;
-  grid-row: 2;
   text-align: right;
 }
 
@@ -791,13 +785,9 @@
 }
 
 .tower-stepper-buttons {
-  position: static;
-  grid-column: 1;
-  grid-row: 1 / 3;
-  align-self: center;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  flex-direction: row;
+  gap: 6px;
 }
 
 .tower-stepper-buttons button {
