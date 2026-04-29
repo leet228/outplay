@@ -101,12 +101,19 @@ export default function TowerStackSlot() {
   }, [balance, stake, isRoundActive, maxAffordableIdx])
 
   // ── Telegram BackButton + cleanup ──
+  // Re-binds when round-active state changes so the handler sees the
+  // latest value and only prompts confirmation if a real bet is on the line.
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return
     tg.BackButton.show()
     const back = () => {
       haptic('light')
+      // No active round → just leave silently.
+      if (!isRoundActive || isFinished) {
+        navigate('/')
+        return
+      }
       setExitConfirm(true)
     }
     tg.BackButton.onClick(back)
@@ -114,7 +121,7 @@ export default function TowerStackSlot() {
       tg.BackButton.offClick(back)
       tg.BackButton.hide()
     }
-  }, [navigate])
+  }, [navigate, isRoundActive, isFinished])
 
   useEffect(() => {
     return () => {
