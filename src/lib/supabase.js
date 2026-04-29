@@ -1013,3 +1013,29 @@ export async function getRecentCryptoDeposits(limit = 10) {
   if (error) { console.error('getRecentCryptoDeposits error:', error); return [] }
   return data
 }
+
+// ── Slots ───────────────────────────────────
+// Списание ставки и создание раунда. Возвращает { ok, round_id, balance } или { error }.
+export async function startSlotRound(userId, slotId, stakeRub) {
+  const { data, error } = await supabase.rpc('start_slot_round', {
+    p_user_id: userId,
+    p_slot_id: slotId,
+    p_stake_rub: stakeRub,
+  })
+  if (error) { console.error('startSlotRound error:', error); return { error: error.message } }
+  return data
+}
+
+// Финализация раунда: outcome = 'cashed' | 'fallen' | 'aborted'
+// Если 'cashed' — payoutRub зачисляется на баланс (capped at 100x stake server-side).
+export async function finishSlotRound(roundId, outcome, payoutRub, floors, multiplier = 1) {
+  const { data, error } = await supabase.rpc('finish_slot_round', {
+    p_round_id: roundId,
+    p_outcome: outcome,
+    p_payout_rub: Math.max(0, Math.round(payoutRub || 0)),
+    p_floors: Math.max(0, Math.round(floors || 0)),
+    p_multiplier: Number(multiplier) || 1,
+  })
+  if (error) { console.error('finishSlotRound error:', error); return { error: error.message } }
+  return data
+}
