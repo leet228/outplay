@@ -253,5 +253,13 @@ GRANT EXECUTE ON FUNCTION finish_slot_round(UUID, TEXT, INTEGER, INTEGER, NUMERI
 
 
 -- ╔═══════════════════════════════════════════╗
+-- ║  5. Перезагрузка PostgREST schema cache   ║
+-- ╚═══════════════════════════════════════════╝
+-- Без этого PostgREST может не увидеть новые функции до рестарта.
+
+NOTIFY pgrst, 'reload schema';
+
+
+-- ╔═══════════════════════════════════════════╗
 -- ║  DONE! Slot backend migration ready       ║
 -- ╚═══════════════════════════════════════════╝
