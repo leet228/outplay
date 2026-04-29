@@ -49,7 +49,6 @@ export default function TowerStackSlot() {
   const [fallingBlock, setFallingBlock] = useState(null)
   const [craneTarget, setCraneTarget] = useState(0)
   const [phase, setPhase] = useState('ready')
-  const [message, setMessage] = useState(t.slotTowerReady)
   const [lastWin, setLastWin] = useState(0)
   const [exitConfirm, setExitConfirm] = useState(false)
   const [roundId, setRoundId] = useState(null) // server-side round id (null when no active round)
@@ -189,7 +188,6 @@ export default function TowerStackSlot() {
     setCraneTarget(0)
     setPhase('ready')
     setLastWin(0)
-    setMessage(t.slotTowerReady)
     setRoundId(null)
   }
 
@@ -248,7 +246,6 @@ export default function TowerStackSlot() {
     setCraneTarget(releaseOffset)
     setFallingBlock(nextBlock)
     setPhase('swinging')
-    setMessage(t.slotTowerDropping)
 
     dropTimerRef.current = window.setTimeout(() => {
       setPhase('dropping')
@@ -262,14 +259,12 @@ export default function TowerStackSlot() {
         if (willFall) {
           haptic('error')
           setPhase('fallen')
-          setMessage(t.slotTowerFallen)
           // Server: finalize round as 'fallen' (no payout).
           const fallMult = Number((1 + newBlocks.length * 0.3).toFixed(1))
           callFinishRound('fallen', 0, newBlocks.length, fallMult)
         } else {
           haptic('success')
           setPhase('ready')
-          setMessage(t.slotTowerSuccess)
         }
       }, 1080)
     }, 980)
@@ -281,7 +276,6 @@ export default function TowerStackSlot() {
     const payout = potentialWin
     setLastWin(payout)
     setPhase('cashed')
-    setMessage(t.slotTowerCashed)
     callFinishRound('cashed', payout, blocks.length, multiplier)
   }
 
@@ -417,7 +411,7 @@ export default function TowerStackSlot() {
         {serverError && (
           <div className="tower-result tower-result--error">
             {serverError === 'min_balance'
-              ? t.slotMinBalance
+              ? t.slotMinBalance.replace('{amount}', formatCurrency(MIN_BALANCE_RUB, currency, rates))
               : serverError === 'insufficient'
                 ? t.slotInsufficient
                 : t.slotStartFailed}
