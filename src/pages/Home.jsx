@@ -1433,9 +1433,13 @@ function SlotPreview({ slot, t, onClose }) {
       tg.BackButton.show()
       tg.BackButton.onClick(onClose)
     } else {
+      tg.BackButton.hide()
       tg.BackButton.offClick(onClose)
     }
-    return () => tg.BackButton.offClick(onClose)
+    return () => {
+      tg.BackButton.offClick(onClose)
+      tg.BackButton.hide()
+    }
   }, [slot, onClose])
 
   if (!slot) return null
