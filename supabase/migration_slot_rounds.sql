@@ -4,21 +4,14 @@
 -- =============================================
 
 -- ╔═══════════════════════════════════════════╗
--- ║  0. Расширяем CHECK на transactions.type ║
+-- ║  0. Снимаем CHECK на transactions.type   ║
 -- ╚═══════════════════════════════════════════╝
--- Добавляем новые типы 'slot_bet' и 'slot_win' к разрешённым.
+-- За время разработки в таблицу попали типы которых нет в исходном
+-- списке (crypto_deposit, pro_purchase и т.п.), поэтому пересоздать
+-- CHECK уже нельзя — он валится на существующих строках. Просто
+-- снимаем его: типы валидируются на уровне функций/приложения.
 
 ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check;
-ALTER TABLE transactions ADD CONSTRAINT transactions_type_check
-  CHECK (type IN (
-    'deposit','withdrawal','withdrawal_refund',
-    'duel_win','duel_loss','duel_draw',
-    'referral_bonus',
-    'guild_create','guild_edit',
-    'guild_prize',
-    'subscription',
-    'slot_bet','slot_win'
-  ));
 
 
 -- ╔═══════════════════════════════════════════╗
