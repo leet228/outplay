@@ -116,8 +116,31 @@ serve(async (req) => {
         : MINI_APP_URL
 
       const text = startParam.startsWith('ref_')
-        ? '🎁 Тебя пригласил друг! Открой приложение и получи бонус 100 ⭐'
-        : '🎮 Добро пожаловать в Outplay! Играй, побеждай, зарабатывай.'
+        ? [
+          '<b>Your friend invited you to Outplay!</b>',
+          '',
+          '<blockquote>Start bonus:',
+          '⭐ Join through this invite and get your welcome reward.',
+          '🎮 Play fast 1v1 duels: Quiz, Blackjack, Reaction and more.',
+          '🏆 Choose a game and take the bank.',
+          '👥 Invite friends and earn referral rewards too.',
+          '💎 Climb leaderboards, join guilds and become PRO.</blockquote>',
+          '',
+          '<b>Outplay — accept the invite and outplay everyone.</b>',
+        ].join('\n')
+        : [
+          '<b>Outplay — mini-games with real stakes!</b>',
+          '',
+          '<blockquote>Your bonuses:',
+          '⭐ Bonus rewards for active players.',
+          '🎮 1v1 duels: Quiz, Blackjack, Reaction and more.',
+          '🏆 Choose a game and take the bank.',
+          '👥 Invite friends and get referral rewards.',
+          '💎 Join guilds, climb leaderboards, become PRO.',
+          '⚡ Fast top-ups and smooth Telegram gameplay.</blockquote>',
+          '',
+          '<b>Outplay — choose a game and outplay everyone.</b>',
+        ].join('\n')
 
       await fetch(`${TELEGRAM_API}/sendMessage`, {
         method: 'POST',
@@ -125,9 +148,10 @@ serve(async (req) => {
         body: JSON.stringify({
           chat_id: chatId,
           text,
+          parse_mode: 'HTML',
           reply_markup: {
             inline_keyboard: [[
-              { text: '🚀 Открыть Outplay', url: appUrl }
+              { text: 'Play', url: appUrl }
             ]]
           }
         }),

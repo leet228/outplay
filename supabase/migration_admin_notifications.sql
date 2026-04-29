@@ -138,13 +138,13 @@ BEGIN
 
   SELECT username INTO v_username FROM users WHERE id = NEW.user_id;
 
-  v_msg := '🐛 <b>Новый баг-репорт</b>' || chr(10) ||
+  v_msg := '🐛 <b>New bug report</b>' || chr(10) ||
            '👤 @' || COALESCE(v_username, 'unknown') || chr(10) ||
            '📝 ' || LEFT(COALESCE(NEW.description, ''), 300);
 
   v_photo_count := COALESCE(array_length(NEW.photos, 1), 0);
   IF v_photo_count > 0 THEN
-    v_msg := v_msg || chr(10) || '📎 Фото: ' || v_photo_count;
+    v_msg := v_msg || chr(10) || '📎 Photos: ' || v_photo_count;
   END IF;
 
   IF NEW.device_info IS NOT NULL AND NEW.device_info != '' THEN

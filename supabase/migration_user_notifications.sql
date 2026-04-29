@@ -67,6 +67,7 @@ DECLARE
   v_tg_id  BIGINT;
   v_balance INTEGER;
   v_msg    TEXT;
+  v_paid   TEXT := '';
 BEGIN
   IF NEW.type != 'deposit' THEN RETURN NEW; END IF;
 
@@ -75,8 +76,15 @@ BEGIN
 
   IF v_tg_id IS NULL OR v_tg_id <= 0 THEN RETURN NEW; END IF;
 
-  v_msg := '💰 Баланс пополнен на ' || ABS(NEW.amount) || ' ⭐' || chr(10) ||
-           'Текущий баланс: ' || v_balance || ' ₽';
+  IF NEW.currency_amount IS NOT NULL AND NEW.currency_code IS NOT NULL THEN
+    v_paid := chr(10) || 'Paid: ' ||
+      TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM TO_CHAR(ABS(NEW.currency_amount), 'FM999999990.00'))) ||
+      ' ' || UPPER(NEW.currency_code);
+  END IF;
+
+  v_msg := '💰 Balance topped up by ' || ABS(NEW.amount) || ' ⭐' ||
+           v_paid || chr(10) ||
+           'Current balance: ' || v_balance || ' ⭐';
 
   PERFORM notify_user(v_tg_id, v_msg);
   RETURN NEW;
@@ -114,8 +122,8 @@ BEGIN
 
   v_amount := ABS(NEW.amount)::TEXT;
 
-  v_msg := '💸 Вывод ' || v_amount || ' ₽ оформлен' || chr(10) ||
-           'Ожидайте зачисления в течение 2 минут';
+  v_msg := '💸 Withdrawal requested: ' || v_amount || ' ⭐' || chr(10) ||
+           'Estimated payout time: up to 2 minutes';
 
   PERFORM notify_user(v_tg_id, v_msg);
   RETURN NEW;
@@ -155,26 +163,26 @@ BEGIN
   IF v_tg_id IS NULL OR v_tg_id <= 0 THEN RETURN NEW; END IF;
 
   -- Get sender name
-  SELECT COALESCE(first_name, username, 'Игрок') INTO v_sender
+  SELECT COALESCE(first_name, username, 'Player') INTO v_sender
   FROM users WHERE id = NEW.from_id;
 
   -- Game type label
   CASE NEW.game_type
-    WHEN 'quiz' THEN v_game_label := 'Викторина';
-    WHEN 'blackjack' THEN v_game_label := 'Блэкджек';
-    WHEN 'sequence' THEN v_game_label := 'Последовательность';
+    WHEN 'quiz' THEN v_game_label := 'Quiz';
+    WHEN 'blackjack' THEN v_game_label := 'Blackjack';
+    WHEN 'sequence' THEN v_game_label := 'Memory';
     ELSE v_game_label := NEW.game_type;
   END CASE;
 
-  v_msg := '🎮 ' || v_sender || ' зовёт тебя в игру!' || chr(10) ||
-           'Ставка: ' || NEW.stake || ' ₽ · ' || v_game_label;
+  v_msg := '🎮 ' || v_sender || ' invited you to a duel!' || chr(10) ||
+           'Stake: ' || NEW.stake || ' ⭐ · ' || v_game_label;
 
   -- Inline button to open mini app
   v_markup := jsonb_build_object(
     'inline_keyboard', jsonb_build_array(
       jsonb_build_array(
         jsonb_build_object(
-          'text', '▶️ Открыть игру',
+          'text', '▶️ Open game',
           'url', 'https://t.me/outplaymoneybot/app'
         )
       )
@@ -209,14 +217,14 @@ DECLARE
   v_msg   TEXT;
   v_markup JSONB;
 BEGIN
-  v_msg := '🏆 Сезон гильдий завершён!' || chr(10) ||
-           'Заходи посмотреть результаты';
+  v_msg := '🏆 The guild season is over!' || chr(10) ||
+           'Open Outplay to see the results.';
 
   v_markup := jsonb_build_object(
     'inline_keyboard', jsonb_build_array(
       jsonb_build_array(
         jsonb_build_object(
-          'text', '🏆 Результаты',
+          'text', '🏆 Results',
           'url', 'https://t.me/outplaymoneybot/app'
         )
       )
@@ -250,13 +258,13 @@ DECLARE
   v_msg    TEXT;
   v_markup JSONB;
 BEGIN
-  v_msg := '💥 Давно не играл — зайди и покажи класс!';
+  v_msg := '💥 You have not played for a while — jump back in and outplay everyone!';
 
   v_markup := jsonb_build_object(
     'inline_keyboard', jsonb_build_array(
       jsonb_build_array(
         jsonb_build_object(
-          'text', '🎮 Играть',
+          'text', '🎮 Play',
           'url', 'https://t.me/outplaymoneybot/app'
         )
       )

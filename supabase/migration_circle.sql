@@ -857,31 +857,31 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT COALESCE(first_name, username, 'Игрок') INTO v_sender
+  SELECT COALESCE(first_name, username, 'Player') INTO v_sender
   FROM users
   WHERE id = NEW.from_id;
 
   CASE NEW.game_type
-    WHEN 'quiz' THEN v_game_label := 'Викторина';
-    WHEN 'blackjack' THEN v_game_label := 'Блэкджек';
-    WHEN 'sequence' THEN v_game_label := 'Последовательность';
-    WHEN 'reaction' THEN v_game_label := 'Реакция';
-    WHEN 'hearing' THEN v_game_label := 'Слух';
-    WHEN 'gradient' THEN v_game_label := 'Градиент';
-    WHEN 'race' THEN v_game_label := 'Гонка';
-    WHEN 'capitals' THEN v_game_label := 'Столицы';
-    WHEN 'circle' THEN v_game_label := 'Круг';
+    WHEN 'quiz' THEN v_game_label := 'Quiz';
+    WHEN 'blackjack' THEN v_game_label := 'Blackjack';
+    WHEN 'sequence' THEN v_game_label := 'Memory';
+    WHEN 'reaction' THEN v_game_label := 'Reaction';
+    WHEN 'hearing' THEN v_game_label := 'Hearing';
+    WHEN 'gradient' THEN v_game_label := 'Gradient';
+    WHEN 'race' THEN v_game_label := 'Race';
+    WHEN 'capitals' THEN v_game_label := 'Capitals';
+    WHEN 'circle' THEN v_game_label := 'Circle';
     ELSE v_game_label := NEW.game_type;
   END CASE;
 
-  v_msg := '🎮 ' || v_sender || ' зовёт тебя в игру!' || chr(10) ||
-           'Ставка: ' || NEW.stake || ' ₽ · ' || v_game_label;
+  v_msg := '🎮 ' || v_sender || ' invited you to a duel!' || chr(10) ||
+           'Stake: ' || NEW.stake || ' ⭐ · ' || v_game_label;
 
   v_markup := jsonb_build_object(
     'inline_keyboard', jsonb_build_array(
       jsonb_build_array(
         jsonb_build_object(
-          'text', '▶️ Открыть игру',
+          'text', '▶️ Open game',
           'url', 'https://t.me/outplaymoneybot/app'
         )
       )

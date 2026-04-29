@@ -1379,6 +1379,97 @@ const GAMES = [
   { id: 'circle', titleKey: 'gameCircleTitle', subKey: 'gameCircleSub', available: true, accent: '#A855F7', shadow: '#581c87', art: GAME_CARD_ART.circle },
 ]
 
+const SLOTS = [
+  {
+    id: 'tower-stack',
+    titleKey: 'slotTowerTitle',
+    subKey: 'slotTowerSub',
+    route: '/slots/tower-stack',
+    accent: '#f59e0b',
+    shadow: '#7c2d12',
+  },
+]
+
+function TowerSlotArtwork({ large = false, animated = false }) {
+  return (
+    <div className={`tower-slot-card-art ${large ? 'tower-slot-card-art--large' : ''} ${animated ? 'tower-slot-card-art--animated' : ''}`} aria-hidden="true">
+      <span className="tower-slot-art-sun" />
+      <span className="tower-slot-art-cloud tower-slot-art-cloud--one" />
+      <span className="tower-slot-art-cloud tower-slot-art-cloud--two" />
+      <span className="tower-slot-art-cloud tower-slot-art-cloud--three" />
+      <span className="tower-slot-art-rail" />
+      <span className="tower-slot-art-cable" />
+      <span className="tower-slot-art-hook" />
+      <span className="tower-slot-art-crane" />
+      <span className="tower-slot-art-block tower-slot-art-block--drop">
+        <span />
+        <span />
+      </span>
+      <span className="tower-slot-art-stack">
+        <i className="tower-slot-art-block tower-slot-art-block--base"><span /><span /></i>
+        <i className="tower-slot-art-block tower-slot-art-block--mid"><span /><span /></i>
+      </span>
+      <span className="tower-slot-art-grass" />
+    </div>
+  )
+}
+
+function SlotPreview({ slot, t, onClose }) {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (slot) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [slot])
+
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp
+    if (!tg) return
+    if (slot) {
+      tg.BackButton.show()
+      tg.BackButton.onClick(onClose)
+    } else {
+      tg.BackButton.offClick(onClose)
+    }
+    return () => tg.BackButton.offClick(onClose)
+  }, [slot, onClose])
+
+  if (!slot) return null
+
+  function handlePlay() {
+    haptic('medium')
+    onClose()
+    navigate(slot.route)
+  }
+
+  return (
+    <div className="slot-preview-backdrop" onClick={onClose}>
+      <div className="slot-preview-card" onClick={(e) => e.stopPropagation()}>
+        <button className="slot-preview-close" type="button" onClick={onClose} aria-label={t.close || 'Close'}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+          </svg>
+        </button>
+        <div className="slot-preview-visual">
+          <TowerSlotArtwork large animated />
+        </div>
+        <div className="slot-preview-copy">
+          <span className="slot-preview-kicker">{t.slotTowerKicker}</span>
+          <h3>{t[slot.titleKey]}</h3>
+          <p>{t.slotTowerPreview}</p>
+        </div>
+        <button className="slot-preview-play" type="button" onClick={handlePlay}>
+          {t.slotPlay}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ── Home ── */
 // Admin Telegram IDs — same list as in Admin.jsx
 const ADMIN_IDS = ['dev', 945676433]
@@ -1394,6 +1485,7 @@ export default function Home() {
   const navigate = useNavigate()
   const t = translations[lang]
   const [sheetGame, setSheetGame] = useState(null)
+  const [slotPreview, setSlotPreview] = useState(null)
   const [friendsOpen, setFriendsOpen] = useState(false)
   const [gameSection, setGameSection] = useState('duels')
 
@@ -1406,6 +1498,11 @@ export default function Home() {
   const closeSheet = useCallback(() => {
     haptic('light')
     setSheetGame(null)
+  }, [])
+
+  const closeSlotPreview = useCallback(() => {
+    haptic('light')
+    setSlotPreview(null)
   }, [])
 
   const closeFriends = useCallback(() => {
@@ -1428,6 +1525,11 @@ export default function Home() {
     if (!game.available) return
     haptic('medium')
     setSheetGame(game)
+  }
+
+  function handleSlotTap(slot) {
+    haptic('medium')
+    setSlotPreview(slot)
   }
 
   return (
@@ -1549,16 +1651,19 @@ export default function Home() {
 
           </div>
         ) : (
-          <div className="slots-empty">
-            <div className="slots-empty-card">
-              <svg className="slots-empty-icon" width="52" height="52" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <rect x="4" y="5" width="16" height="14" rx="4" stroke="currentColor" strokeWidth="2" />
-                <path d="M9 10h.01M12 10h.01M15 10h.01M8 15h8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-                <path d="M17 5l1.4-2.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <span className="slots-empty-title">{t.slotsEmptyTitle}</span>
-              <span className="slots-empty-sub">{t.slotsEmptySub}</span>
-            </div>
+          <div className="slots-grid">
+            {SLOTS.map(slot => (
+              <button
+                key={slot.id}
+                type="button"
+                className="slot-card"
+                style={{ '--slot-accent': slot.accent, '--slot-shadow': slot.shadow }}
+                onClick={() => handleSlotTap(slot)}
+              >
+                <TowerSlotArtwork />
+                <span className="slot-card-title">{t[slot.titleKey]}</span>
+              </button>
+            ))}
           </div>
         )}
 
@@ -1574,6 +1679,7 @@ export default function Home() {
         rates={rates}
         onClose={closeSheet}
       />
+      <SlotPreview slot={slotPreview} t={t} onClose={closeSlotPreview} />
     </div>
   )
 }

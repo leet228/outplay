@@ -46,13 +46,13 @@ function formatBugReportMessage(data: Record<string, unknown>): string {
   const username = data.username ? `@${escapeHtml(String(data.username))}` : 'unknown'
   const desc = escapeHtml(String(data.description || '').substring(0, 300))
   const photos = Number(data.photos_count) || 0
-  const device = escapeHtml(String(data.device_info || '—'))
+  const device = escapeHtml(String(data.device_info || '-'))
 
-  let text = `🐛 <b>Новый баг-репорт</b>\n`
+  let text = `🐛 <b>New bug report</b>\n`
   text += `👤 ${username}\n`
   text += `📝 ${desc}\n`
-  if (photos > 0) text += `📎 Фото: ${photos}\n`
-  if (device && device !== '—') text += `📱 ${device}`
+  if (photos > 0) text += `📎 Photos: ${photos}\n`
+  if (device && device !== '-') text += `📱 ${device}`
 
   return text
 }
