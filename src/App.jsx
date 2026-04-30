@@ -289,26 +289,34 @@ export default function App() {
     preloadGameCardImages()
 
     const isOnboarded = localStorage.getItem('outplay_onboarded')
-    const SPLASH_MIN = 1400 // ms
-    const hasCached = hydrateFromCache()
+    const SPLASH_MIN = 1400 // ms — minimum splash duration (brand moment)
+    const SPLASH_MAX = 8000 // ms — hard ceiling so dead network never wedges splash
 
-    if (hasCached) {
-      // Cache exists → show app after splash, refresh data in background
-      bootstrap().catch(() => {})
+    // Hydrate cached secondary data so screens show instantly once splash hides.
+    // We still WAIT for bootstrap to finish (user + balance) before transitioning.
+    hydrateFromCache()
+
+    const splashStart = Date.now()
+    let advanced = false
+    const advance = () => {
+      if (advanced) return
+      advanced = true
+      const elapsed = Date.now() - splashStart
+      const delay = Math.max(0, SPLASH_MIN - elapsed)
       setTimeout(() => {
         setPhase(isOnboarded ? 'app' : 'onboarding')
-      }, SPLASH_MIN)
-    } else {
-      // No cache → wait for bootstrap to finish
-      const splashStart = Date.now()
-      bootstrap().then(() => {
-        const elapsed = Date.now() - splashStart
-        const delay = Math.max(0, SPLASH_MIN - elapsed)
-        setTimeout(() => {
-          setPhase(isOnboarded ? 'app' : 'onboarding')
-        }, delay)
-      })
+      }, delay)
     }
+
+    // Safety net: if network is dead and bootstrap hangs, advance anyway.
+    const maxTimer = setTimeout(advance, SPLASH_MAX)
+
+    bootstrap()
+      .catch(err => { console.error('Bootstrap failed:', err) })
+      .finally(() => {
+        clearTimeout(maxTimer)
+        advance()
+      })
   }, [])
 
   // Warm already-known remote avatars without adding extra DB/API requests.
