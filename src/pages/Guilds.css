@@ -2212,7 +2212,8 @@
   transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease;
 }
 
-body.guilds-create-sheet-open .bottom-nav {
+body.guilds-create-sheet-open .bottom-nav,
+body.guilds-sheet-open .bottom-nav {
   transform: translateX(-50%) translateY(calc(100% + 20px));
   opacity: 0;
   pointer-events: none;

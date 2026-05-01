@@ -46,8 +46,10 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden'
+      document.body.classList.add('guilds-sheet-open')
     } else {
       document.body.style.overflow = ''
+      document.body.classList.remove('guilds-sheet-open')
       setKickTarget(null)
       setEditing(false)
       setEditName('')
@@ -59,7 +61,10 @@ function GuildDetailSheet({ guild, members, onClose, t, currency, rates, isOwner
       setLeaving(false)
       setEditError('')
     }
-    return () => { document.body.style.overflow = '' }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.classList.remove('guilds-sheet-open')
+    }
   }, [open])
 
   useEffect(() => {
@@ -535,12 +540,17 @@ function FindGuildSheet({ open, onClose, onJoined, t, currency, rates, topGuilds
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden'
+      document.body.classList.add('guilds-sheet-open')
       setResults(topGuilds)
     } else {
       document.body.style.overflow = ''
+      document.body.classList.remove('guilds-sheet-open')
       setTimeout(() => { setQuery(''); setJoinTarget(null); setResults([]) }, 300)
     }
-    return () => { document.body.style.overflow = '' }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.classList.remove('guilds-sheet-open')
+    }
   }, [open, topGuilds])
 
   useEffect(() => {
