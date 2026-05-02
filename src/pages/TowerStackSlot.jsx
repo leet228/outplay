@@ -113,6 +113,8 @@ export default function TowerStackSlot() {
   const [exitConfirm, setExitConfirm] = useState(false)
   const [roundId, setRoundId] = useState(null) // server-side round id (null when no active round)
   const [serverError, setServerError] = useState(null) // 'start_failed' | 'insufficient' | null
+  const [stageHeight, setStageHeight] = useState(510) // measured at runtime
+  const stageRef = useRef(null)
   const dropTimerRef = useRef(null)
   const errorTimerRef = useRef(null)
   const finishingRef = useRef(false) // guards against double-finish during async
@@ -121,18 +123,26 @@ export default function TowerStackSlot() {
 
   const multiplier = useMemo(() => Number((1 + blocks.length * 0.3).toFixed(1)), [blocks.length])
   const potentialWin = Math.round(stake * multiplier)
-  // Lift the world so the active building stays in view; sums the actual
-  // heights instead of assuming a constant per block. Camera shifts after
-  // every newly placed house — only the most recent story stays anchored.
+  // Lift the world so the active building stays in view. During the drop
+  // animation we project the falling block as if it's already placed —
+  // that way the world settles into its final lift while the block is
+  // still in mid-air, eliminating any post-landing teleport.
   const cameraLift = useMemo(() => {
+    const isFalling = (phase === 'swinging' || phase === 'dropping') && fallingBlock
+    const projected = isFalling ? [...blocks, fallingBlock] : blocks
     const visibleStories = 1
-    if (blocks.length <= visibleStories) return 0
+    if (projected.length <= visibleStories) return 0
     let sum = 0
-    for (let i = 0; i < blocks.length - visibleStories; i++) {
-      sum += (blocks[i].bodyH + blocks[i].roofH - 6)
+    for (let i = 0; i < projected.length - visibleStories; i++) {
+      sum += (projected[i].bodyH + projected[i].roofH - 6)
     }
     return sum
-  }, [blocks])
+  }, [blocks, fallingBlock, phase])
+
+  // Distance the falling house travels: from the crane's load anchor (at
+  // stage_top + 210) down to where it lands (always stage_height − 166
+  // because the projected lift keeps the topmost story anchored).
+  const fallStartY = -(stageHeight - 376)
   const isBusy = phase === 'swinging' || phase === 'dropping' || phase === 'starting'
   const isDropping = phase === 'dropping'
   const isFinished = phase === 'fallen' || phase === 'cashed'
@@ -199,6 +209,19 @@ export default function TowerStackSlot() {
       if (dropTimerRef.current) window.clearTimeout(dropTimerRef.current)
       if (errorTimerRef.current) window.clearTimeout(errorTimerRef.current)
     }
+  }, [])
+
+  // Measure the playable stage so the fall distance stays accurate across
+  // device sizes (mobile, desktop, safe-area changes from rotation, etc.).
+  useEffect(() => {
+    if (!stageRef.current) return
+    const update = () => {
+      if (stageRef.current) setStageHeight(stageRef.current.offsetHeight)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(stageRef.current)
+    return () => ro.disconnect()
   }, [])
 
   // ── Server round start/finish helpers ──
@@ -345,6 +368,7 @@ export default function TowerStackSlot() {
         const newBlocks = [...blocks, nextBlock]
         setBlocks(newBlocks)
         setCraneTarget(0)
+        // Animation duration above is 0.85s — wait that long before resolving.
 
         if (willFall) {
           haptic('error')
@@ -356,7 +380,7 @@ export default function TowerStackSlot() {
           haptic('success')
           setPhase('ready')
         }
-      }, 1080)
+      }, 880)
     }, 980)
   }
 
@@ -413,7 +437,7 @@ export default function TowerStackSlot() {
           </div>
         </div>
 
-        <main className="tower-slot-stage" aria-label="Tower Stack Bet">
+        <main ref={stageRef} className="tower-slot-stage" aria-label="Tower Stack Bet">
           <div
             className={[
               'tower-crane',
@@ -437,11 +461,15 @@ export default function TowerStackSlot() {
                 <span className="tower-crane-hook-line tower-crane-hook-line--right" />
               </span>
               <span
-                className={`tower-crane-load tower-house tower-house--${craneHouse.color} tower-house--${craneHouse.kind} ${isDropping ? 'is-releasing' : ''}`}
+                className={`tower-crane-load tower-house tower-house--${craneHouse.color} tower-house--${craneHouse.kind}`}
                 style={{
                   '--load-width': `${craneHouseWidth}px`,
                   '--body-h': `${craneHouse.bodyH}px`,
                   '--roof-h': `${craneHouse.roofH}px`,
+                  // Hide while the in-stack falling house is animating —
+                  // the falling element is the "same" house, so showing
+                  // both at once makes them detach visually.
+                  visibility: isDropping ? 'hidden' : 'visible',
                 }}
               >
                 <HouseSilhouette kind={craneHouse.kind} />
@@ -478,6 +506,7 @@ export default function TowerStackSlot() {
                     '--body-h': `${block.bodyH}px`,
                     '--roof-h': `${block.roofH}px`,
                     '--accuracy': `${block.accuracy}%`,
+                    '--fall-start-y': fallingBlock?.id === block.id ? `${fallStartY}px` : undefined,
                   }}
                 >
                   <HouseSilhouette kind={block.kind} />

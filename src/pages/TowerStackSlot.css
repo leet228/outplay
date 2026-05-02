@@ -40,9 +40,7 @@
   inset: 0 0 214px;
   z-index: 0;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 74% 19%, rgba(255, 247, 164, 0.95) 0 7%, transparent 7.4%),
-    linear-gradient(180deg, #1f3db0 0%, #2d75df 48%, #85d9ff 100%);
+  background: linear-gradient(180deg, #1f3db0 0%, #2d75df 48%, #85d9ff 100%);
 }
 
 .tower-slot-sky::before {
@@ -483,7 +481,7 @@
 }
 
 .tower-house.is-falling {
-  animation: towerHouseDrop 0.95s cubic-bezier(0.4, 0.04, 0.18, 1.06) both;
+  animation: towerHouseDrop 0.85s cubic-bezier(0.4, 0.04, 0.18, 1.06) both;
 }
 
 .tower-house.is-doomed {
@@ -491,10 +489,12 @@
 }
 
 @keyframes towerHouseDrop {
-  0%   { translate: 0 -260px; opacity: 0.95; }
-  55%  { translate: 0 -38px; }
-  74%  { translate: 0 8px; }
-  88%  { translate: 0 -3px; }
+  /* Starts exactly at the crane's hook position (computed in JS via
+     --fall-start-y based on stage height) and lands at the natural
+     stack position with a small landing bounce. */
+  0%   { translate: 0 var(--fall-start-y, -134px); opacity: 1; }
+  72%  { translate: 0 7px; }
+  86%  { translate: 0 -3px; }
   100% { translate: 0 0; }
 }
 
