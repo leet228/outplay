@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { adminGetSlotStats, adminUpdateSlotSettings } from '../lib/supabase'
+import {
+  adminGetSlotStats,
+  adminUpdateSlotSettings,
+  adminRecomputeSlotStats,
+  adminResetSlotStats,
+} from '../lib/supabase'
 import { haptic } from '../lib/telegram'
 
 function fmtNum(n) {
@@ -126,7 +131,9 @@ export default function AdminSlots() {
                 </div>
               </div>
               {!isEditing && (
-                <button className="admin-btn-sm" onClick={() => startEdit(slot)}>Edit</button>
+                <div className="admin-slot-header-actions">
+                  <button className="admin-btn-sm" onClick={() => startEdit(slot)}>Edit</button>
+                </div>
               )}
             </div>
 
@@ -229,6 +236,35 @@ export default function AdminSlots() {
                     {saving ? 'Saving…' : 'Save'}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Maintenance actions */}
+            {!isEditing && (
+              <div className="admin-slot-maintenance">
+                <button
+                  className="admin-btn-sm"
+                  onClick={async () => {
+                    haptic('light')
+                    const r = await adminRecomputeSlotStats(slot.slot_id)
+                    if (r?.error) alert(`Recompute failed: ${r.error}`)
+                    await load()
+                  }}
+                >
+                  Recompute stats
+                </button>
+                <button
+                  className="admin-btn-sm danger"
+                  onClick={async () => {
+                    if (!confirm(`Wipe ALL rounds for ${slot.slot_id}? This cannot be undone.`)) return
+                    haptic('medium')
+                    const r = await adminResetSlotStats(slot.slot_id)
+                    if (r?.error) alert(`Reset failed: ${r.error}`)
+                    await load()
+                  }}
+                >
+                  Hard reset
+                </button>
               </div>
             )}
           </div>

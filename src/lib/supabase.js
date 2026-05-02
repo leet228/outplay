@@ -1061,3 +1061,23 @@ export async function adminUpdateSlotSettings(slotId, { targetRtp, maxDeficit, e
   if (error) { console.error('adminUpdateSlotSettings error:', error); return { error: error.message } }
   return data
 }
+
+// Recompute slot_stats from raw slot_rounds (fixes drift if the two
+// ever go out of sync, e.g. after manual data tweaks).
+export async function adminRecomputeSlotStats(slotId = null) {
+  const { data, error } = await supabase.rpc('admin_recompute_slot_stats', {
+    p_slot_id: slotId,
+  })
+  if (error) { console.error('adminRecomputeSlotStats error:', error); return { error: error.message } }
+  return data
+}
+
+// Hard reset — wipes ALL rounds for the slot and zeros stats. Use
+// after testing or to start a fresh RTP cycle.
+export async function adminResetSlotStats(slotId) {
+  const { data, error } = await supabase.rpc('admin_reset_slot_stats', {
+    p_slot_id: slotId,
+  })
+  if (error) { console.error('adminResetSlotStats error:', error); return { error: error.message } }
+  return data
+}
