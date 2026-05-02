@@ -2779,3 +2779,257 @@
   display: none;
 }
 
+
+/* ───── Slots tab — sectioned layout ───── */
+.slots-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 28px;
+}
+
+.slots-block {
+  position: relative;
+  padding: 12px 0 10px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.18));
+  overflow: hidden;
+}
+
+.slots-section-title {
+  position: relative;
+  margin: 2px 10px 10px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  z-index: 1;
+}
+
+/* Horizontal scroll row used by both sections */
+.slots-row {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Left/right padding matches the inter-card gap so the first card's
+     spacing from the section border equals the spacing between cards. */
+  padding: 2px 10px 6px;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 10px;
+  scroll-padding-right: 10px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  z-index: 1;
+}
+.slots-row::-webkit-scrollbar { display: none; }
+
+/* Compact vertical card — keeps a clear 4:5 portrait shape but
+   significantly smaller than the original half-screen card. */
+.slot-card--scroll {
+  flex: 0 0 124px;
+  min-width: 124px;
+  min-height: 158px;
+  scroll-snap-align: start;
+  border-radius: 16px;
+}
+
+.slot-card--scroll .slot-card-title {
+  bottom: 8px;
+  font-size: 12px;
+  letter-spacing: -0.3px;
+}
+
+.slot-card--scroll .tower-slot-card-art--large,
+.slot-card--scroll .tower-slot-card-art {
+  border-radius: 16px;
+}
+
+/* ── Tower Stack artwork — compact pixel positions for the
+   small scroll card. Each element repositioned so the whole scene
+   fits a 124x158 card without scaling the bg gradient. ── */
+
+.slot-card--scroll .tower-slot-card-art::before {
+  /* hill */
+  bottom: 22px;
+  height: 50px;
+}
+
+.slot-card--scroll .tower-slot-art-sun {
+  top: 30px;
+  right: 18px;
+  width: 28px;
+  height: 28px;
+}
+
+.slot-card--scroll .tower-slot-art-cloud--one {
+  top: 44px;
+  left: 12px;
+  width: 28px;
+  height: 10px;
+}
+.slot-card--scroll .tower-slot-art-cloud--two {
+  top: 70px;
+  right: 16px;
+  width: 22px;
+  height: 10px;
+}
+.slot-card--scroll .tower-slot-art-cloud--three {
+  top: 86px;
+  left: 12px;
+  width: 18px;
+  height: 10px;
+}
+
+.slot-card--scroll .tower-slot-art-rail {
+  top: 28px;
+  left: 8px;
+  right: 8px;
+  height: 5px;
+}
+
+.slot-card--scroll .tower-slot-art-crane {
+  top: 22px;
+  left: calc(50% - 11px);
+  width: 22px;
+  height: 16px;
+  border-radius: 5px 5px 3px 3px;
+  border-width: 2px;
+}
+.slot-card--scroll .tower-slot-art-crane-window {
+  top: 3px;
+  left: 3px;
+  right: 3px;
+  height: 6px;
+  border-radius: 3px;
+}
+
+.slot-card--scroll .tower-slot-art-cable {
+  top: 36px;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+}
+
+.slot-card--scroll .tower-slot-art-hook {
+  top: 44px;
+  left: calc(50% - 6px);
+  width: 12px;
+  height: 5px;
+  border-radius: 2px 2px 4px 4px;
+  border-width: 1px;
+}
+
+/* Hanging house */
+.slot-card--scroll .tower-slot-art-house--drop {
+  top: 44px;
+  left: calc(50% - 18px);
+  width: 36px;
+  height: 24px;
+}
+
+/* Stack of houses on the foundation */
+.slot-card--scroll .tower-slot-art-stack {
+  bottom: 30px;
+  width: 76px;
+  height: 64px;
+  transform: translateX(-50%);
+}
+
+.slot-card--scroll .tower-slot-art-house--base {
+  width: 42px;
+  height: 26px;
+}
+.slot-card--scroll .tower-slot-art-house--mid {
+  bottom: 24px;
+  width: 36px;
+  height: 26px;
+}
+
+.slot-card--scroll .tower-slot-art-house-body {
+  height: 19px;
+}
+
+.slot-card--scroll .tower-slot-art-roof {
+  height: 6px;
+}
+
+.slot-card--scroll .tower-slot-art-window {
+  top: 4px;
+  width: 32%;
+  height: 9px;
+  border-width: 1px;
+}
+
+.slot-card--scroll .tower-slot-art-window--apt,
+.slot-card--scroll .tower-slot-art-window--tl,
+.slot-card--scroll .tower-slot-art-window--tr,
+.slot-card--scroll .tower-slot-art-window--bl,
+.slot-card--scroll .tower-slot-art-window--br {
+  width: 22%;
+  height: 6px;
+  top: 4px;
+  border-width: 1px;
+}
+
+.slot-card--scroll .tower-slot-art-door {
+  width: 24%;
+  height: 11px;
+  border-width: 1px;
+}
+
+.slot-card--scroll .tower-slot-art-grass {
+  bottom: 22px;
+  height: 11px;
+}
+
+/* Placeholder card style — neutral grey for both sections */
+.slot-card--placeholder {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(11, 13, 27, 0.55) 100%),
+    var(--surface);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  color: rgba(226, 232, 240, 0.5);
+  cursor: default;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+.slot-card--placeholder::after { display: none; }
+
+.slot-card-placeholder-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(226, 232, 240, 0.4);
+}
+
+.slot-card-placeholder-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.slot-card--placeholder .slot-card-title {
+  position: static;
+  bottom: auto;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(226, 232, 240, 0.5);
+  text-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+}

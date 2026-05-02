@@ -1758,19 +1758,52 @@ export default function Home() {
 
           </div>
         ) : (
-          <div className="slots-grid">
-            {SLOTS.map(slot => (
-              <button
-                key={slot.id}
-                type="button"
-                className="slot-card"
-                style={{ '--slot-accent': slot.accent, '--slot-shadow': slot.shadow }}
-                onClick={() => handleSlotTap(slot)}
-              >
-                <TowerSlotArtwork />
-                <span className="slot-card-title">{t[slot.titleKey]}</span>
-              </button>
-            ))}
+          <div className="slots-section">
+            <div className="slots-block slots-block--quick">
+              <h3 className="slots-section-title">{t.slotsQuickHeader}</h3>
+              <div className="slots-row">
+                {SLOTS.map(slot => (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    className="slot-card slot-card--scroll"
+                    style={{ '--slot-accent': slot.accent, '--slot-shadow': slot.shadow }}
+                    onClick={() => handleSlotTap(slot)}
+                  >
+                    <TowerSlotArtwork />
+                    <span className="slot-card-title">{t[slot.titleKey]}</span>
+                  </button>
+                ))}
+                {[1, 2, 3].map(i => (
+                  <div key={`q-soon-${i}`} className="slot-card slot-card--scroll slot-card--placeholder" aria-hidden="true">
+                    <span className="slot-card-placeholder-icon">
+                      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="9"/>
+                        <path d="M12 7v5l3 3"/>
+                      </svg>
+                    </span>
+                    <span className="slot-card-title">{t.slotsPopularEmpty}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="slots-block slots-block--popular">
+              <h3 className="slots-section-title">{t.slotsPopularHeader}</h3>
+              <div className="slots-row">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={`p-soon-${i}`} className="slot-card slot-card--scroll slot-card--placeholder" aria-hidden="true">
+                    <span className="slot-card-placeholder-icon">
+                      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="16" rx="2"/>
+                        <path d="M7 8v8M12 8v8M17 8v8"/>
+                      </svg>
+                    </span>
+                    <span className="slot-card-title">{t.slotsPopularEmpty}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
