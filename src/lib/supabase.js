@@ -1081,3 +1081,13 @@ export async function adminResetSlotStats(slotId) {
   if (error) { console.error('adminResetSlotStats error:', error); return { error: error.message } }
   return data
 }
+
+// ── Online counters per game ───────────────
+// Returns { game_type → real_online_count }. Front-end blends with
+// a time-varying "fake" boost so the displayed number always feels
+// alive even when matchmaking is empty.
+export async function getGameOnlineCounts() {
+  const { data, error } = await supabase.rpc('get_game_online_counts')
+  if (error) { console.error('getGameOnlineCounts error:', error); return {} }
+  return data || {}
+}

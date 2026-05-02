@@ -8,7 +8,7 @@ import { haptic } from '../lib/telegram'
 import sound from '../lib/sounds'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
-import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendsData, sendGameInvite, acceptGameInvite, rejectGameInvite, cancelAllPendingInvites, getPendingInvites } from '../lib/supabase'
+import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendsData, sendGameInvite, acceptGameInvite, rejectGameInvite, cancelAllPendingInvites, getPendingInvites, getGameOnlineCounts } from '../lib/supabase'
 import { GAME_CARD_ART } from '../lib/gameAssets'
 import './Home.css'
 
@@ -1379,6 +1379,45 @@ const GAMES = [
   { id: 'circle', titleKey: 'gameCircleTitle', subKey: 'gameCircleSub', available: true, accent: '#A855F7', shadow: '#581c87', art: GAME_CARD_ART.circle },
 ]
 
+// Per-game ranges for the "fake" online boost so the displayed counter
+// always feels alive even when matchmaking is empty. Quiz tops the list
+// because it's the flagship game; less popular ones get a smaller crowd.
+const FAKE_ONLINE_RANGES = {
+  quiz:      [55, 110],
+  sequence:  [30, 70],
+  blackjack: [35, 75],
+  reaction:  [40, 85],
+  hearing:   [25, 60],
+  gradient:  [25, 55],
+  race:      [30, 65],
+  capitals:  [25, 55],
+  circle:    [20, 50],
+}
+
+function strHash32(s) {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
+// Two layers: a slow base that swaps every ~2 minutes (gives the
+// "+52 → +39 → +64" feel the user described), plus a small ±5
+// jitter that shifts every 30 seconds so the count never feels frozen.
+function fakeOnlineFor(gameId, now = Date.now()) {
+  const range = FAKE_ONLINE_RANGES[gameId] || [20, 50]
+  const span = range[1] - range[0]
+  const slowSlot = Math.floor(now / 120000)
+  const baseSeed = strHash32(`${gameId}|s|${slowSlot}`)
+  const base = range[0] + (baseSeed % span)
+  const jitterSlot = Math.floor(now / 30000)
+  const jitterSeed = strHash32(`${gameId}|j|${jitterSlot}`)
+  const jitter = (jitterSeed % 11) - 5
+  return Math.max(0, base + jitter)
+}
+
 const SLOTS = [
   {
     id: 'tower-stack',
@@ -1518,6 +1557,12 @@ export default function Home() {
   const [friendsOpen, setFriendsOpen] = useState(false)
   const [gameSection, setGameSection] = useState('duels')
 
+  // Real online counts per game type (refreshed every 30s) plus a
+  // monotonic clock tick so fakeOnlineFor recomputes when slow/jitter
+  // slots roll over.
+  const [onlineCounts, setOnlineCounts] = useState({})
+  const [onlineTick, setOnlineTick] = useState(() => Date.now())
+
   const isAdmin = user && (
     ADMIN_IDS.includes(user.id) ||
     ADMIN_IDS.includes(user.telegram_id) ||
@@ -1549,6 +1594,26 @@ export default function Home() {
       navigate(`${route}/${duelId}`)
     }
   }, [pendingGameNav])
+
+  // Real online counts — poll every 30s. Blended with fake jitter to
+  // produce the user-visible badge.
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const counts = await getGameOnlineCounts()
+      if (!cancelled) setOnlineCounts(counts || {})
+    }
+    load()
+    const id = setInterval(load, 30000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [])
+
+  // Tick every 30s so fake jitter recomputes (slow base re-rolls every
+  // 2 minutes naturally). Also re-runs at midnight roll-overs.
+  useEffect(() => {
+    const id = setInterval(() => setOnlineTick(Date.now()), 30000)
+    return () => clearInterval(id)
+  }, [])
 
   function handleGameTap(game) {
     if (!game.available) return
@@ -1625,23 +1690,36 @@ export default function Home() {
         {gameSection === 'duels' ? (
           <div className="games-grid">
 
-            <button
-              className="game-card game-card--main game-card--with-art"
-              style={{ '--card-accent': GAMES[0].accent, '--card-shadow': GAMES[0].shadow }}
-              onClick={() => handleGameTap(GAMES[0])}
-            >
-              <img className="game-card-art" src={GAMES[0].art} alt="" loading="eager" decoding="async" aria-hidden="true" />
-              <div className="game-card-art-overlay" />
-              <div className="game-card-glow" />
-              <span className="game-card-title">{t[GAMES[0].titleKey]}</span>
-            </button>
+            {(() => {
+              const g = GAMES[0]
+              const onlineDisplay = (onlineCounts[g.id] || 0) + fakeOnlineFor(g.id, onlineTick)
+              return (
+                <button
+                  className="game-card game-card--main game-card--with-art"
+                  style={{ '--card-accent': g.accent, '--card-shadow': g.shadow }}
+                  onClick={() => handleGameTap(g)}
+                >
+                  <img className="game-card-art" src={g.art} alt="" loading="eager" decoding="async" aria-hidden="true" />
+                  <div className="game-card-art-overlay" />
+                  <div className="game-card-glow" />
+                  <span className="game-card-title">{t[g.titleKey]}</span>
+                  <span className="game-card-online" aria-label="online">
+                    <span className="game-card-online-dot" />
+                    <span className="game-card-online-count">{onlineDisplay}</span>
+                    <span className="game-card-online-label">{t.online || 'online'}</span>
+                  </span>
+                </button>
+              )
+            })()}
 
             {/* Render secondary games in rows of 2 */}
             {Array.from({ length: Math.ceil((GAMES.length - 1) / 2) }, (_, rowIdx) => {
               const rowGames = GAMES.slice(1 + rowIdx * 2, 1 + rowIdx * 2 + 2)
               return (
                 <div className="games-row" key={rowIdx}>
-                  {rowGames.map(g => (
+                  {rowGames.map(g => {
+                    const onlineDisplay = (onlineCounts[g.id] || 0) + fakeOnlineFor(g.id, onlineTick)
+                    return (
                     <button
                       key={g.id}
                       className={`game-card game-card--small game-card--${g.id} ${g.art ? 'game-card--with-art' : ''} ${!g.available ? 'game-card--soon' : ''}`}
@@ -1666,9 +1744,16 @@ export default function Home() {
                           </div>
                         </>
                       )}
+                      {g.available && (
+                        <span className="game-card-online" aria-label="online">
+                          <span className="game-card-online-dot" />
+                          <span className="game-card-online-count">{onlineDisplay}</span>
+                          <span className="game-card-online-label">{t.online || 'online'}</span>
+                        </span>
+                      )}
                       {!g.available && <div className="game-card-badge">{t.soon}</div>}
                     </button>
-                  ))}
+                  )})}
                   {rowGames.length === 1 && <div className="game-card-placeholder" />}
                 </div>
               )
