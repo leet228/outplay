@@ -196,111 +196,165 @@
 .tower-crane-rail {
   position: absolute;
   top: 0;
-  left: 20px;
-  right: 20px;
-  height: 14px;
+  left: 14px;
+  right: 14px;
+  height: 12px;
   border-radius: 999px;
   background:
-    repeating-linear-gradient(90deg, rgba(126, 52, 9, 0.28) 0 12px, transparent 12px 24px),
-    linear-gradient(180deg, #ffe187 0%, #f59e0b 100%);
-  border: 3px solid #9a4a08;
+    linear-gradient(180deg, #fef3c7 0%, #f59e0b 50%, #c2410c 100%);
+  border: 2px solid #7c2d12;
   box-shadow:
-    0 6px 0 #7c2d12,
-    inset 0 2px 0 rgba(255, 255, 255, 0.44);
+    0 4px 0 #5b1d09,
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
+
+.tower-crane-rail::before,
+.tower-crane-rail::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  width: 8px;
+  height: 14px;
+  border-radius: 4px;
+  background: #7c2d12;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.tower-crane-rail::before { left: -10px; }
+.tower-crane-rail::after  { right: -10px; }
 
 .tower-crane-carriage {
   position: absolute;
-  top: -12px;
+  top: -10px;
   left: 50%;
-  width: 96px;
-  height: 178px;
+  width: 88px;
+  height: 200px;
   transform: translateX(-50%);
   transform-origin: 50% 16px;
 }
 
 .tower-crane.is-swinging .tower-crane-carriage {
-  animation: towerCraneAim 0.98s cubic-bezier(0.2, 0.72, 0.24, 1) both;
+  animation: towerCraneAim 1.05s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 .tower-crane.is-dropping .tower-crane-carriage {
   transform: translateX(calc(-50% + var(--crane-x, 0px)));
+  transition: transform 0.18s ease;
 }
 
 .tower-crane-cabin {
   position: absolute;
-  top: 0;
-  left: 20px;
-  width: 56px;
-  height: 42px;
-  border-radius: 14px 14px 10px 10px;
-  border: 4px solid #8d3a08;
+  top: -2px;
+  left: 18px;
+  width: 52px;
+  height: 38px;
+  border-radius: 12px 12px 8px 8px;
+  border: 3px solid #7c2d12;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.36), transparent 36%),
-    linear-gradient(180deg, #ffbd38 0%, #f97316 100%);
+    linear-gradient(180deg, #fbbf24 0%, #ea580c 100%);
   box-shadow:
-    0 7px 0 #7c2d12,
-    inset 0 2px 0 rgba(255, 255, 255, 0.36);
+    0 5px 0 #7c2d12,
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -2px 0 rgba(124, 45, 18, 0.15);
+}
+
+.tower-crane-cabin::after {
+  /* trolley wheels */
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 6px;
+  right: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: #1f2937;
+  box-shadow:
+    -10px 0 0 -1px #1f2937,
+    10px 0 0 -1px #1f2937;
+}
+
+.tower-crane-cabin-window {
+  position: absolute;
+  top: 7px;
+  left: 9px;
+  right: 9px;
+  height: 16px;
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(126, 211, 255, 0.92), rgba(56, 142, 219, 0.92));
+  border: 1.5px solid rgba(124, 45, 18, 0.65);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .tower-crane-cable {
   position: absolute;
-  top: 40px;
-  left: 46px;
-  width: 4px;
-  height: 86px;
+  top: 42px;
+  left: 50%;
+  width: 3px;
+  height: 90px;
+  margin-left: -1.5px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #263244, #0f172a);
+  background: linear-gradient(180deg, #475569, #0f172a);
   transform-origin: 50% 0;
 }
 
 .tower-crane-hook {
   position: absolute;
-  top: 116px;
-  left: 34px;
-  width: 28px;
-  height: 21px;
-  border: 5px solid #263244;
-  border-top: 0;
-  border-radius: 0 0 17px 17px;
-  transform-origin: 50% -78px;
+  top: 128px;
+  left: 50%;
+  width: 36px;
+  height: 14px;
+  margin-left: -18px;
+  background: linear-gradient(180deg, #475569, #1e293b);
+  border-radius: 4px 4px 8px 8px;
+  border: 1.5px solid #0f172a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 0 rgba(0, 0, 0, 0.18);
+  transform-origin: 50% -88px;
+}
+
+.tower-crane-hook-line {
+  position: absolute;
+  top: 12px;
+  left: 6px;
+  width: 2px;
+  height: 12px;
+  background: linear-gradient(180deg, #334155, #0f172a);
+  border-radius: 999px;
+}
+
+.tower-crane-hook-line--right {
+  left: auto;
+  right: 6px;
 }
 
 .tower-crane-load {
   position: absolute;
-  top: 138px;
+  top: 142px;
   left: 50%;
-  width: var(--load-width, 164px);
-  height: 42px;
-  border-radius: 13px;
-  border: 4px solid #7c2d12;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%),
-    linear-gradient(180deg, #ffbd38 0%, #f97316 100%);
-  box-shadow:
-    0 7px 0 #9a3412,
-    0 13px 18px rgba(78, 34, 10, 0.14),
-    inset 0 2px 0 rgba(255, 255, 255, 0.36);
+  width: var(--load-width, 168px);
   transform: translateX(-50%);
-  transform-origin: 50% -112px;
-  transition: width 0.28s ease;
+  transform-origin: 50% -120px;
+  transition: width 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  z-index: 1;
 }
 
 .tower-crane-load.is-releasing {
-  animation: towerLoadRelease 0.32s ease-in both;
+  animation: towerLoadRelease 0.42s cubic-bezier(0.55, 0, 0.7, 0.25) both;
 }
 
 @keyframes towerCraneAim {
-  0% { transform: translateX(-50%) rotate(0deg); }
-  24% { transform: translateX(calc(-50% + var(--crane-wind-x, 42px))) rotate(-3deg); }
-  54% { transform: translateX(calc(-50% + var(--crane-x, 0px) - 18px)) rotate(3deg); }
-  78% { transform: translateX(calc(-50% + var(--crane-x, 0px) + 7px)) rotate(-1deg); }
+  0%   { transform: translateX(-50%) rotate(0deg); }
+  18%  { transform: translateX(calc(-50% + var(--crane-wind-x, 42px))) rotate(-2.5deg); }
+  46%  { transform: translateX(calc(-50% + var(--crane-x, 0px) - 14px)) rotate(2.4deg); }
+  72%  { transform: translateX(calc(-50% + var(--crane-x, 0px) + 5px)) rotate(-0.9deg); }
   100% { transform: translateX(calc(-50% + var(--crane-x, 0px))) rotate(0deg); }
 }
 
 @keyframes towerLoadRelease {
-  0% { opacity: 1; transform: translateX(-50%) translateY(0); }
-  100% { opacity: 0; transform: translateX(-50%) translateY(30px); }
+  0%   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(46px) scale(0.96); }
 }
 
 .tower-world {
@@ -401,139 +455,328 @@
 .tower-foundation span:first-child { left: 24px; }
 .tower-foundation span:last-child { right: 24px; }
 
-.tower-block {
+/* ── House (replaces blocks) ── */
+.tower-house {
+  /* CSS variables override per color via .tower-house--{color} */
+  --house-base: #fcd34d;
+  --house-deep: #f59e0b;
+  --house-edge: #92400e;
+  --house-shadow: #78350f;
+  --roof-base: #b45309;
+  --roof-deep: #7c2d12;
+
   position: absolute;
   left: 50%;
-  height: var(--block-height);
-  border-radius: 13px;
-  border: 4px solid #7c2d12;
-  transform-origin: 50% 80%;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%),
-    linear-gradient(180deg, #ffbd38 0%, #f97316 100%);
-  box-shadow:
-    0 7px 0 #9a3412,
-    0 13px 18px rgba(78, 34, 10, 0.14),
-    inset 0 2px 0 rgba(255, 255, 255, 0.36);
+  height: calc(var(--body-h, 56px) + var(--roof-h, 14px));
+  transform-origin: 50% 92%;
   transition:
-    width 0.28s ease,
-    bottom 0.62s cubic-bezier(0.2, 0.78, 0.22, 1),
+    width 0.28s cubic-bezier(0.32, 0.72, 0, 1),
+    bottom 0.55s cubic-bezier(0.2, 0.78, 0.22, 1),
     filter 0.2s ease;
+  filter: drop-shadow(0 6px 6px rgba(13, 24, 56, 0.22));
 }
 
-.tower-block.is-falling {
-  animation: towerBlockDrop 1.08s cubic-bezier(0.18, 0.86, 0.28, 1) both;
+.tower-crane-load.tower-house {
+  position: absolute;
+  height: calc(var(--body-h, 56px) + var(--roof-h, 14px));
+  filter: drop-shadow(0 8px 8px rgba(13, 24, 56, 0.28));
 }
 
-.tower-block.is-doomed {
-  filter: saturate(0.9);
-  animation: towerDoomedBlock 0.9s ease-in both;
+.tower-house.is-falling {
+  animation: towerHouseDrop 0.95s cubic-bezier(0.4, 0.04, 0.18, 1.06) both;
 }
 
-@keyframes towerBlockDrop {
-  0% { translate: 0 -248px; }
-  58% { translate: 0 -42px; }
-  82% { translate: 0 7px; }
+.tower-house.is-doomed {
+  animation: towerDoomedHouse 0.9s cubic-bezier(0.5, 0.04, 0.42, 1) both;
+}
+
+@keyframes towerHouseDrop {
+  0%   { translate: 0 -260px; opacity: 0.95; }
+  55%  { translate: 0 -38px; }
+  74%  { translate: 0 8px; }
+  88%  { translate: 0 -3px; }
   100% { translate: 0 0; }
 }
 
-@keyframes towerDoomedBlock {
-  0% { translate: 0 0; }
-  55% { translate: 18px 12px; }
-  100% { translate: 72px 190px; opacity: 0.9; }
+@keyframes towerDoomedHouse {
+  0%   { translate: 0 0; rotate: 0deg; }
+  35%  { translate: 14px 6px; rotate: 8deg; }
+  100% { translate: 84px 220px; rotate: 38deg; opacity: 0.85; }
 }
 
-.tower-block--blue,
-.tower-crane-load.tower-block--blue {
-  border-color: #0e5a8a;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%),
-    linear-gradient(180deg, #5ee7ff 0%, #1684db 100%);
-  box-shadow: 0 7px 0 #075985, 0 13px 18px rgba(6, 82, 130, 0.14), inset 0 2px 0 rgba(255, 255, 255, 0.36);
-}
-
-.tower-block--green,
-.tower-crane-load.tower-block--green {
-  border-color: #176738;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%),
-    linear-gradient(180deg, #8dff74 0%, #22b55f 100%);
-  box-shadow: 0 7px 0 #15803d, 0 13px 18px rgba(17, 112, 55, 0.14), inset 0 2px 0 rgba(255, 255, 255, 0.36);
-}
-
-.tower-block--pink,
-.tower-crane-load.tower-block--pink {
-  border-color: #8a1248;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%),
-    linear-gradient(180deg, #ff85c1 0%, #e11d8f 100%);
-  box-shadow: 0 7px 0 #9d174d, 0 13px 18px rgba(132, 17, 73, 0.14), inset 0 2px 0 rgba(255, 255, 255, 0.36);
-}
-
-.tower-block--amber,
-.tower-crane-load.tower-block--amber {
-  border-color: #8a4c05;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%),
-    linear-gradient(180deg, #fff06c 0%, #f59e0b 100%);
-  box-shadow: 0 7px 0 #b45309, 0 13px 18px rgba(146, 64, 14, 0.14), inset 0 2px 0 rgba(255, 255, 255, 0.36);
-}
-
-.tower-block--mint,
-.tower-crane-load.tower-block--mint {
-  border-color: #0f766e;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%),
-    linear-gradient(180deg, #8fffee 0%, #14b8a6 100%);
-  box-shadow: 0 7px 0 #0f766e, 0 13px 18px rgba(15, 118, 110, 0.14), inset 0 2px 0 rgba(255, 255, 255, 0.36);
-}
-
-.tower-block-shine {
+/* ── House body ── */
+.tower-house-body {
   position: absolute;
-  top: 7px;
-  left: 12px;
-  width: 42%;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.62);
-  transform: rotate(-7deg);
-}
-
-.tower-block-panel {
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 9px;
-  height: 13px;
-  border-radius: 999px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--body-h, 56px);
+  border-radius: 6px 6px 4px 4px;
+  border: 3px solid var(--house-edge);
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08)),
-    rgba(94, 39, 10, 0.14);
+    linear-gradient(180deg, var(--house-base) 0%, var(--house-deep) 100%);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -2px 0 rgba(78, 34, 10, 0.1);
+    0 4px 0 var(--house-shadow),
+    inset 0 2px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.08);
 }
 
-.tower-block::after,
-.tower-crane-load::after {
+/* ── Roof — all flat, modern dark concrete with a slim ledge ── */
+.tower-house-roof {
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  top: 0;
+  height: var(--roof-h, 10px);
+  z-index: 2;
+  background: linear-gradient(180deg, #475569 0%, #1e293b 100%);
+  border: 2.5px solid #0f172a;
+  border-radius: 5px 5px 3px 3px;
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.18),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18);
+}
+
+/* Tiny vent strip on top so the roofline reads at a glance */
+.tower-house-roof::after {
   content: '';
   position: absolute;
-  inset: 9px 12px auto auto;
-  width: 30%;
-  height: 7px;
-  border-radius: 999px;
+  top: 50%;
+  left: 22%;
+  right: 22%;
+  height: 2px;
+  margin-top: -1px;
   background: rgba(255, 255, 255, 0.28);
-  transform: rotate(-7deg);
+  border-radius: 999px;
 }
 
-.tower-window {
+/* ── Windows (cottage / townhouse) ── */
+.tower-house-window {
+  position: absolute;
+  top: 22%;
+  left: 18%;
+  width: 28%;
+  height: 36%;
+  background: linear-gradient(180deg, #bae6fd 0%, #38bdf8 100%);
+  border: 2.5px solid var(--house-edge);
+  border-radius: 4px;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.15);
+}
+
+.tower-house-window::before,
+.tower-house-window::after {
+  content: '';
+  position: absolute;
+  background: var(--house-edge);
+}
+
+.tower-house-window::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+}
+
+.tower-house-window::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+}
+
+.tower-house-window--left  { left: 12%;  width: 26%; }
+.tower-house-window--right { left: auto; right: 12%; width: 26%; }
+
+/* ── Door ── */
+.tower-house-door {
+  position: absolute;
+  bottom: 0;
+  right: 16%;
+  width: 22%;
+  height: 56%;
+  background: linear-gradient(180deg, var(--roof-base) 0%, var(--roof-deep) 100%);
+  border: 2.5px solid var(--house-edge);
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16);
+}
+
+.tower-house-door::after {
+  /* doorknob */
+  content: '';
+  position: absolute;
+  top: 52%;
+  right: 14%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fde68a;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+/* Townhouse door is centered */
+.tower-house--townhouse .tower-house-door {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18%;
+  height: 50%;
+}
+
+/* ── Shop window + door ── */
+.tower-house--shop .tower-house-shop-window {
+  position: absolute;
+  top: 16%;
+  left: 10%;
+  right: 35%;
+  height: 56%;
+  background: linear-gradient(180deg, #bae6fd 0%, #38bdf8 100%);
+  border: 2.5px solid var(--house-edge);
+  border-radius: 5px;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.tower-house--shop .tower-house-shop-window::before {
+  /* shelf line */
+  content: '';
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  top: 60%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.tower-house--shop .tower-house-door--shop {
+  bottom: 0;
+  right: 8%;
+  width: 24%;
+  height: 64%;
+  border-radius: 6px 6px 0 0;
+}
+
+.tower-house--shop .tower-house-awning {
+  display: none; /* striped roof IS the awning */
+}
+
+/* ── Apartment windows (4 small grid) — overrides default tower-house-window ── */
+.tower-house--apartment .tower-house-window--apt {
+  position: absolute;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: 24%;
+  height: 24%;
+  background: linear-gradient(180deg, #bae6fd 0%, #38bdf8 100%);
+  border: 2px solid var(--house-edge);
+  border-radius: 3px;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.tower-house--apartment .tower-house-window--apt::before,
+.tower-house--apartment .tower-house-window--apt::after {
+  content: '';
+  position: absolute;
+  background: var(--house-edge);
+}
+
+.tower-house--apartment .tower-house-window--apt::before {
+  top: 0; bottom: 0; left: 50%; width: 1.5px; margin-left: -0.75px;
+}
+
+.tower-house--apartment .tower-house-window--apt::after {
+  left: 0; right: 0; top: 50%; height: 1.5px; margin-top: -0.75px;
+}
+
+.tower-house--apartment .tower-house-window--apt-tl { top: 14%; left: 14%; }
+.tower-house--apartment .tower-house-window--apt-tr { top: 14%; right: 14%; }
+.tower-house--apartment .tower-house-window--apt-bl { bottom: 16%; left: 14%; }
+.tower-house--apartment .tower-house-window--apt-br { bottom: 16%; right: 14%; }
+
+.tower-house--apartment .tower-house-door {
   display: none;
 }
 
-.tower-window--one { left: 18%; bottom: 8px; }
-.tower-window--two { left: 38%; bottom: 8px; }
-.tower-window--three { right: 18%; bottom: 8px; }
-.tower-window--four { right: 38%; top: 9px; opacity: 0.86; }
+/* ── Color palette: each tints body + door + bricks ── */
+.tower-house--red {
+  --house-base: #fca5a5;
+  --house-deep: #ef4444;
+  --house-edge: #7f1d1d;
+  --house-shadow: #5b0f0f;
+  --roof-base: #b91c1c;
+  --roof-deep: #7f1d1d;
+}
+
+.tower-house--blue {
+  --house-base: #93c5fd;
+  --house-deep: #1d4ed8;
+  --house-edge: #1e3a8a;
+  --house-shadow: #15287f;
+  --roof-base: #1e3a8a;
+  --roof-deep: #0f1d54;
+}
+
+.tower-house--green {
+  --house-base: #86efac;
+  --house-deep: #16a34a;
+  --house-edge: #14532d;
+  --house-shadow: #0c3a1f;
+  --roof-base: #15803d;
+  --roof-deep: #14532d;
+}
+
+.tower-house--pink {
+  --house-base: #f9a8d4;
+  --house-deep: #db2777;
+  --house-edge: #831843;
+  --house-shadow: #5b0f30;
+  --roof-base: #9d174d;
+  --roof-deep: #5b0f30;
+}
+
+.tower-house--amber {
+  --house-base: #fcd34d;
+  --house-deep: #f59e0b;
+  --house-edge: #92400e;
+  --house-shadow: #78350f;
+  --roof-base: #b45309;
+  --roof-deep: #7c2d12;
+}
+
+.tower-house--mint {
+  --house-base: #6ee7b7;
+  --house-deep: #14b8a6;
+  --house-edge: #115e59;
+  --house-shadow: #0d4641;
+  --roof-base: #0d9488;
+  --roof-deep: #115e59;
+}
+
+.tower-house--purple {
+  --house-base: #c4b5fd;
+  --house-deep: #7c3aed;
+  --house-edge: #4c1d95;
+  --house-shadow: #2e1065;
+  --roof-base: #5b21b6;
+  --roof-deep: #2e1065;
+}
+
+.tower-house--sky {
+  --house-base: #7dd3fc;
+  --house-deep: #0284c7;
+  --house-edge: #075985;
+  --house-shadow: #0c4a6e;
+  --roof-base: #0369a1;
+  --roof-deep: #0c4a6e;
+}
 
 .tower-slot-hud {
   position: absolute;

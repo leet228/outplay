@@ -1397,18 +1397,43 @@ function TowerSlotArtwork({ large = false, animated = false }) {
       <span className="tower-slot-art-cloud tower-slot-art-cloud--one" />
       <span className="tower-slot-art-cloud tower-slot-art-cloud--two" />
       <span className="tower-slot-art-cloud tower-slot-art-cloud--three" />
+
       <span className="tower-slot-art-rail" />
+      <span className="tower-slot-art-crane">
+        <span className="tower-slot-art-crane-window" />
+      </span>
       <span className="tower-slot-art-cable" />
       <span className="tower-slot-art-hook" />
-      <span className="tower-slot-art-crane" />
-      <span className="tower-slot-art-block tower-slot-art-block--drop">
-        <span />
-        <span />
+
+      {/* Hanging house (the one the crane is dropping) */}
+      <span className="tower-slot-art-house tower-slot-art-house--drop tower-slot-art-house--cottage tower-slot-art-house--amber">
+        <span className="tower-slot-art-roof tower-slot-art-roof--peaked" />
+        <span className="tower-slot-art-house-body">
+          <span className="tower-slot-art-window" />
+          <span className="tower-slot-art-door" />
+        </span>
       </span>
+
+      {/* Stack of two houses on the ground */}
       <span className="tower-slot-art-stack">
-        <i className="tower-slot-art-block tower-slot-art-block--base"><span /><span /></i>
-        <i className="tower-slot-art-block tower-slot-art-block--mid"><span /><span /></i>
+        <span className="tower-slot-art-house tower-slot-art-house--base tower-slot-art-house--apartment tower-slot-art-house--blue">
+          <span className="tower-slot-art-roof tower-slot-art-roof--flat" />
+          <span className="tower-slot-art-house-body">
+            <span className="tower-slot-art-window tower-slot-art-window--apt tower-slot-art-window--tl" />
+            <span className="tower-slot-art-window tower-slot-art-window--apt tower-slot-art-window--tr" />
+            <span className="tower-slot-art-window tower-slot-art-window--apt tower-slot-art-window--bl" />
+            <span className="tower-slot-art-window tower-slot-art-window--apt tower-slot-art-window--br" />
+          </span>
+        </span>
+        <span className="tower-slot-art-house tower-slot-art-house--mid tower-slot-art-house--cottage tower-slot-art-house--green">
+          <span className="tower-slot-art-roof tower-slot-art-roof--peaked tower-slot-art-roof--green" />
+          <span className="tower-slot-art-house-body">
+            <span className="tower-slot-art-window" />
+            <span className="tower-slot-art-door" />
+          </span>
+        </span>
       </span>
+
       <span className="tower-slot-art-grass" />
     </div>
   )
