@@ -253,13 +253,16 @@ function ReferralSection({ t, currency, rates, user }) {
 
   function handleShare() {
     haptic('medium')
+    // English-only share text — same copy regardless of UI language so
+    // the message reads naturally to anyone the user invites.
+    const SHARE_TEXT = '🔥 Outplay — fast 1v1 skill duels for real cash. Quiz · Reaction · Memory · Slots and more. Bet from 10 ₽, payouts in seconds 💸 Come challenge me 👇'
     const tg = window.Telegram?.WebApp
     if (tg) {
       tg.openTelegramLink(
-        `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(t.refShareText)}`
+        `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(SHARE_TEXT)}`
       )
     } else if (navigator.share) {
-      navigator.share({ title: 'Outplay', text: t.refShareText, url: refLink })
+      navigator.share({ title: 'Outplay', text: SHARE_TEXT, url: refLink })
     }
   }
 

@@ -5,7 +5,7 @@ import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
-import { startSlotRound, finishSlotRound } from '../lib/supabase'
+import { startSlotRound, finishSlotRound, getLeaderboard, getUserProfile } from '../lib/supabase'
 import './TowerStackSlot.css'
 
 // Bets in RUB. Storage layer is RUB; display converts to currency.
@@ -242,6 +242,26 @@ export default function TowerStackSlot() {
     const ro = new ResizeObserver(update)
     ro.observe(stageRef.current)
     return () => ro.disconnect()
+  }, [])
+
+  // Refresh leaderboard + profile PnL on unmount — slot wins/losses change
+  // both rank position and total PnL, and other screens read them from store.
+  useEffect(() => {
+    return () => {
+      const uid = useGameStore.getState().user?.id
+      if (!uid || uid === 'dev') return
+      getLeaderboard(10).then(lb => {
+        if (Array.isArray(lb)) useGameStore.getState().setLeaderboard(lb)
+      }).catch(() => {})
+      getUserProfile(uid).then(profile => {
+        if (profile && !profile.error) {
+          const store = useGameStore.getState()
+          if (typeof profile.rank === 'number') store.setRank(profile.rank)
+          if (Array.isArray(profile.daily_stats)) store.setDailyStats(profile.daily_stats)
+          if (typeof profile.total_pnl === 'number') store.setTotalPnl(profile.total_pnl)
+        }
+      }).catch(() => {})
+    }
   }, [])
 
   // ── Server round start/finish helpers ──

@@ -477,7 +477,9 @@
 .tower-crane-load.tower-house {
   position: absolute;
   height: calc(var(--body-h, 56px) + var(--roof-h, 14px));
-  filter: drop-shadow(0 8px 8px rgba(13, 24, 56, 0.28));
+  /* No drop-shadow on the hanging house — it's mid-air, the cast
+     shadow looked detached from the rest of the scene. */
+  filter: none;
 }
 
 .tower-house.is-falling {
