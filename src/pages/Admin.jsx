@@ -6,6 +6,7 @@ import AdminDashboard from './AdminDashboard'
 import AdminControl from './AdminControl'
 import AdminWallet from './AdminWallet'
 import AdminBugReports from './AdminBugReports'
+import AdminSlots from './AdminSlots'
 import './Admin.css'
 
 // ── Admin Telegram IDs ──
@@ -46,6 +47,16 @@ const TABS = [
     ),
   },
   {
+    id: 'slots',
+    label: 'Slots',
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="16" rx="2"/>
+        <path d="M7 8v8M12 8v8M17 8v8"/>
+      </svg>
+    ),
+  },
+  {
     id: 'reports',
     label: 'Reports',
     icon: (
@@ -60,6 +71,7 @@ const TAB_TITLES = {
   dashboard: 'Dashboard',
   control: 'Control Panel',
   wallet: 'Wallet Monitor',
+  slots: 'Slots — RTP & Stats',
   reports: 'Bug Reports',
 }
 
@@ -103,6 +115,7 @@ export default function Admin() {
         {tab === 'dashboard' && <AdminDashboard />}
         {tab === 'control' && <AdminControl />}
         {tab === 'wallet' && <AdminWallet />}
+        {tab === 'slots' && <AdminSlots />}
         {tab === 'reports' && <AdminBugReports />}
       </div>
 

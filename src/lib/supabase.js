@@ -1015,7 +1015,10 @@ export async function getRecentCryptoDeposits(limit = 10) {
 }
 
 // ── Slots ───────────────────────────────────
-// Списание ставки и создание раунда. Возвращает { ok, round_id, balance } или { error }.
+// Server-controlled RTP: start_slot_round returns the round_id PLUS
+// the predetermined fall_at_level (the floor at which the tower will
+// collapse). Client just animates that outcome — the server is the
+// source of truth.
 export async function startSlotRound(userId, slotId, stakeRub) {
   const { data, error } = await supabase.rpc('start_slot_round', {
     p_user_id: userId,
@@ -1027,7 +1030,8 @@ export async function startSlotRound(userId, slotId, stakeRub) {
 }
 
 // Финализация раунда: outcome = 'cashed' | 'fallen' | 'aborted'
-// Если 'cashed' — payoutRub зачисляется на баланс (capped at 100x stake server-side).
+// Server enforces the predetermined fall level — if you claim 'cashed'
+// at or past fall_at_level, payout is forced to 0.
 export async function finishSlotRound(roundId, outcome, payoutRub, floors, multiplier = 1) {
   const { data, error } = await supabase.rpc('finish_slot_round', {
     p_round_id: roundId,
@@ -1037,5 +1041,23 @@ export async function finishSlotRound(roundId, outcome, payoutRub, floors, multi
     p_multiplier: Number(multiplier) || 1,
   })
   if (error) { console.error('finishSlotRound error:', error); return { error: error.message } }
+  return data
+}
+
+// ── Admin: slot stats ───────────────────────
+export async function adminGetSlotStats() {
+  const { data, error } = await supabase.rpc('admin_get_slot_stats')
+  if (error) { console.error('adminGetSlotStats error:', error); return [] }
+  return data ?? []
+}
+
+export async function adminUpdateSlotSettings(slotId, { targetRtp, maxDeficit, enabled } = {}) {
+  const { data, error } = await supabase.rpc('admin_update_slot_settings', {
+    p_slot_id: slotId,
+    p_target_rtp: targetRtp ?? null,
+    p_max_deficit: maxDeficit ?? null,
+    p_enabled: enabled ?? null,
+  })
+  if (error) { console.error('adminUpdateSlotSettings error:', error); return { error: error.message } }
   return data
 }

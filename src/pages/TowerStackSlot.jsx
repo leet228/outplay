@@ -130,6 +130,7 @@ export default function TowerStackSlot() {
   const [lastWin, setLastWin] = useState(0)
   const [exitConfirm, setExitConfirm] = useState(false)
   const [roundId, setRoundId] = useState(null) // server-side round id (null when no active round)
+  const [fallAtLevel, setFallAtLevel] = useState(99) // server-decided fall floor
   const [serverError, setServerError] = useState(null) // 'start_failed' | 'insufficient' | null
   const [stageHeight, setStageHeight] = useState(510) // measured at runtime
   const stageRef = useRef(null)
@@ -265,23 +266,29 @@ export default function TowerStackSlot() {
   }, [])
 
   // ── Server round start/finish helpers ──
-  // Returns true on success.
+  // Returns the fall_at_level on success, or null on failure.
   async function callStartRound() {
     if (isDev) {
-      // Dev mode: simulate without DB. Just deduct local balance.
-      if (balance < stake) return false
+      // Dev mode: simulate without DB. Geometric distribution
+      // (p=0.73 survival → ~95% RTP for level-1 cash-out).
+      if (balance < stake) return null
       setBalance(balance - stake)
       setRoundId(`dev-${Date.now()}`)
-      return true
+      let level = 1
+      while (Math.random() < 0.73 && level < 50) level++
+      setFallAtLevel(level)
+      return level
     }
     const res = await startSlotRound(user.id, SLOT_ID, stake)
     if (!res || res.error) {
       flashError(res?.error === 'insufficient_balance' ? 'insufficient' : 'start_failed')
-      return false
+      return null
     }
     setRoundId(res.round_id)
     if (typeof res.balance === 'number') setBalance(res.balance)
-    return true
+    const fl = Number(res.fall_at_level) || 99
+    setFallAtLevel(fl)
+    return fl
   }
 
   async function callFinishRound(outcome, payout, floors, mult) {
@@ -330,6 +337,7 @@ export default function TowerStackSlot() {
     setPhase('ready')
     setLastWin(0)
     setRoundId(null)
+    setFallAtLevel(99)
     // Fresh round → fresh first-house preview on the crane.
     setCraneNext(pickNextHouse([], null))
   }
@@ -341,7 +349,8 @@ export default function TowerStackSlot() {
       return
     }
 
-    // Starting a fresh round?
+    // Starting a fresh round? Server pre-decides fall_at_level here.
+    let activeFall = fallAtLevel
     if (!isRoundActive) {
       if (!canStartRound) {
         flashError(canPlay ? 'insufficient' : 'min_balance')
@@ -349,12 +358,12 @@ export default function TowerStackSlot() {
       }
       // Lock UI while RPC runs.
       setPhase('starting')
-      const ok = await callStartRound()
-      if (!ok) {
+      const startedFall = await callStartRound()
+      if (!startedFall) {
         setPhase('ready')
         return
       }
-      // continue with first block placement below
+      activeFall = startedFall
     }
 
     haptic('medium')
@@ -362,8 +371,12 @@ export default function TowerStackSlot() {
     const previousBlock = blocks.at(-1)
     const previousWidth = previousBlock?.width ?? 196
     const previousOffset = previousBlock?.offset ?? 0
-    const fallChance = Math.min(0.07 + level * 0.055, 0.68)
-    const willFall = level > 0 && Math.random() < fallChance
+    // The block being built becomes blocks[level], which after this
+    // build will be at floor (level + 1). Fall when that floor matches
+    // the server's predetermined fall_at_level. First block CAN fall
+    // (fall_at_level === 1).
+    const newFloor = level + 1
+    const willFall = newFloor >= activeFall
 
     // Reuse the house already shown on the crane (variant + width) so the
     // visual doesn't switch when the player taps Play.
