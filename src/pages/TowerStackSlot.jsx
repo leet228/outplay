@@ -104,9 +104,27 @@ export default function TowerStackSlot() {
     return BETS[0]
   }, []) // run once on mount only
 
+  // Builds a fresh "next house" preview for the crane. Pre-computes
+  // variant + width so the crane shows the SAME house from idle through
+  // swing, drop and landing — only after the round completes does it
+  // swap to a new preview.
+  function pickNextHouse(blocksList, prevSeed) {
+    const level = blocksList.length
+    const seed = blocksList[0]?._seed ?? prevSeed ?? Math.floor(Math.random() * HOUSE_VARIANTS.length)
+    const variant = HOUSE_VARIANTS[(level + seed) % HOUSE_VARIANTS.length]
+    const previousWidth = blocksList.at(-1)?.width ?? BASE_HOUSE_WIDTH
+    const widthSwing = rand(-30, 14)
+    const narrowingTrend = level * 1.4
+    const width = level === 0
+      ? Math.round(BASE_HOUSE_WIDTH - rand(0, 18))
+      : clamp(Math.round(previousWidth + widthSwing - narrowingTrend), 72, BASE_HOUSE_WIDTH)
+    return { ...variant, width, _seed: seed }
+  }
+
   const [stake, setStake] = useState(initialStake)
   const [blocks, setBlocks] = useState([])
   const [fallingBlock, setFallingBlock] = useState(null)
+  const [craneNext, setCraneNext] = useState(() => pickNextHouse([], null))
   const [craneTarget, setCraneTarget] = useState(0)
   const [phase, setPhase] = useState('ready')
   const [lastWin, setLastWin] = useState(0)
@@ -139,17 +157,19 @@ export default function TowerStackSlot() {
     return sum
   }, [blocks, fallingBlock, phase])
 
-  // Distance the falling house travels: from the crane's load anchor (at
-  // stage_top + 210) down to where it lands (always stage_height − 166
-  // because the projected lift keeps the topmost story anchored).
-  const fallStartY = -(stageHeight - 376)
+  // Distance the falling house travels: from the crane's load anchor
+  // (stage_top + 160 with the new higher crane) down to its landing
+  // position (always stage_height − 166 because the projected lift
+  // keeps the topmost story anchored).
+  const fallStartY = -(stageHeight - 326)
   const isBusy = phase === 'swinging' || phase === 'dropping' || phase === 'starting'
   const isDropping = phase === 'dropping'
   const isFinished = phase === 'fallen' || phase === 'cashed'
   const visibleBlocks = isDropping && fallingBlock ? [...blocks, fallingBlock] : blocks
   const stakeIndex = BETS.indexOf(stake)
-  const nextHouse = HOUSE_VARIANTS[blocks.length % HOUSE_VARIANTS.length]
-  const craneHouse = fallingBlock ?? blocks.at(-1) ?? { ...nextHouse, width: BASE_HOUSE_WIDTH }
+  // Crane shows the same house from idle through swing/drop. craneNext
+  // is regenerated only after a round ends.
+  const craneHouse = fallingBlock ?? craneNext
   const craneHouseWidth = craneHouse.width ?? BASE_HOUSE_WIDTH
 
   const isRoundActive = roundId !== null
@@ -290,6 +310,8 @@ export default function TowerStackSlot() {
     setPhase('ready')
     setLastWin(0)
     setRoundId(null)
+    // Fresh round → fresh first-house preview on the crane.
+    setCraneNext(pickNextHouse([], null))
   }
 
   async function buildBlock() {
@@ -322,15 +344,12 @@ export default function TowerStackSlot() {
     const previousOffset = previousBlock?.offset ?? 0
     const fallChance = Math.min(0.07 + level * 0.055, 0.68)
     const willFall = level > 0 && Math.random() < fallChance
-    // Widths swing both narrower and slightly wider than the previous house
-    // to give the tower visible variety; gentle narrowing trend keeps the
-    // game challenging as you climb.
-    const widthSwing = rand(-30, 14)
-    const narrowingTrend = level * 1.4
-    const width = level === 0
-      ? Math.round(BASE_HOUSE_WIDTH - rand(0, 18))
-      : clamp(Math.round(previousWidth + widthSwing - narrowingTrend), 72, BASE_HOUSE_WIDTH)
 
+    // Reuse the house already shown on the crane (variant + width) so the
+    // visual doesn't switch when the player taps Play.
+    const preset = craneNext
+
+    const width = preset.width
     // Success: more than half of the new house lands on the previous one.
     const overlapRatio = willFall ? rand(0.04, 0.48) : rand(0.56, 0.98)
     const desiredOverlap = width * overlapRatio
@@ -338,22 +357,21 @@ export default function TowerStackSlot() {
     const direction = Math.random() < 0.5 ? -1 : 1
     const releaseOffset = Math.round(clamp(previousOffset + direction * deltaForOverlap, -108, 108))
     const accuracy = clamp(overlapRatio + rand(-0.03, 0.03), 0.04, 1)
-    // Pick a house variant; cycles through but with a per-round offset so
-    // consecutive plays don't always start with the same house.
-    const variantOffset = blocks[0]?._seed ?? Math.floor(Math.random() * HOUSE_VARIANTS.length)
-    const variant = HOUSE_VARIANTS[(level + variantOffset) % HOUSE_VARIANTS.length]
     const nextBlock = {
       id: `${Date.now()}-${level}`,
       width,
       offset: releaseOffset,
       accuracy: Math.round(accuracy * 100),
-      kind: variant.kind,
-      color: variant.color,
-      bodyH: variant.bodyH,
-      roofH: variant.roofH,
+      kind: preset.kind,
+      color: preset.color,
+      bodyH: preset.bodyH,
+      roofH: preset.roofH,
       tilt: rand(-1.6, 1.6).toFixed(1),
       doomed: willFall,
-      _seed: variantOffset,
+      // Direction the new house overshot the previous floor (-1 left,
+      // +1 right) — drives the doomed-fall side later in CSS.
+      fallDir: direction,
+      _seed: preset._seed,
     }
 
     setCraneTarget(releaseOffset)
@@ -368,7 +386,10 @@ export default function TowerStackSlot() {
         const newBlocks = [...blocks, nextBlock]
         setBlocks(newBlocks)
         setCraneTarget(0)
-        // Animation duration above is 0.85s — wait that long before resolving.
+        // Generate the NEXT preview now that this house has landed —
+        // user sees the new variant pop onto the crane only after a
+        // round outcome, not when they click Play.
+        setCraneNext(pickNextHouse(newBlocks, preset._seed))
 
         if (willFall) {
           haptic('error')
@@ -380,7 +401,7 @@ export default function TowerStackSlot() {
           haptic('success')
           setPhase('ready')
         }
-      }, 880)
+      }, 720)
     }, 980)
   }
 
@@ -426,15 +447,6 @@ export default function TowerStackSlot() {
           <span className="tower-cloud tower-cloud--two" />
           <span className="tower-cloud tower-cloud--three" />
           <span className="tower-cloud tower-cloud--four" />
-        </div>
-
-        <div className="tower-window-topbar">
-          <div className="tower-brand">
-            <span className="tower-brand-mark">T</span>
-            <div>
-              <strong>Tower Stack</strong>
-            </div>
-          </div>
         </div>
 
         <main ref={stageRef} className="tower-slot-stage" aria-label="Tower Stack Bet">
@@ -502,11 +514,12 @@ export default function TowerStackSlot() {
                   style={{
                     width: `${block.width}px`,
                     bottom: `${bottomFor(visibleBlocks, index)}px`,
-                    transform: `translateX(calc(-50% + ${block.offset}px)) rotate(${phase === 'fallen' && index === visibleBlocks.length - 1 ? 17 : block.tilt}deg)`,
+                    transform: `translateX(calc(-50% + ${block.offset}px)) rotate(${phase === 'fallen' && index === visibleBlocks.length - 1 ? (block.fallDir ?? 1) * 17 : block.tilt}deg)`,
                     '--body-h': `${block.bodyH}px`,
                     '--roof-h': `${block.roofH}px`,
                     '--accuracy': `${block.accuracy}%`,
                     '--fall-start-y': fallingBlock?.id === block.id ? `${fallStartY}px` : undefined,
+                    '--fall-dir': block.fallDir ?? 1,
                   }}
                 >
                   <HouseSilhouette kind={block.kind} />

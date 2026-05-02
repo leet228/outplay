@@ -183,7 +183,7 @@
 
 .tower-crane {
   position: absolute;
-  top: 78px;
+  top: 28px;
   left: 0;
   right: 0;
   height: 170px;
@@ -481,7 +481,7 @@
 }
 
 .tower-house.is-falling {
-  animation: towerHouseDrop 0.85s cubic-bezier(0.4, 0.04, 0.18, 1.06) both;
+  animation: towerHouseDrop 0.7s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .tower-house.is-doomed {
@@ -490,18 +490,18 @@
 
 @keyframes towerHouseDrop {
   /* Starts exactly at the crane's hook position (computed in JS via
-     --fall-start-y based on stage height) and lands at the natural
-     stack position with a small landing bounce. */
+     --fall-start-y based on stage height) and lands flat at the natural
+     stack position — no bounce, just a clean ease-in landing. */
   0%   { translate: 0 var(--fall-start-y, -134px); opacity: 1; }
-  72%  { translate: 0 7px; }
-  86%  { translate: 0 -3px; }
   100% { translate: 0 0; }
 }
 
 @keyframes towerDoomedHouse {
+  /* --fall-dir is +1 (right) or -1 (left), set inline based on which
+     side the house overshot the previous floor. */
   0%   { translate: 0 0; rotate: 0deg; }
-  35%  { translate: 14px 6px; rotate: 8deg; }
-  100% { translate: 84px 220px; rotate: 38deg; opacity: 0.85; }
+  35%  { translate: calc(14px * var(--fall-dir, 1)) 6px; rotate: calc(8deg * var(--fall-dir, 1)); }
+  100% { translate: calc(84px * var(--fall-dir, 1)) 220px; rotate: calc(38deg * var(--fall-dir, 1)); opacity: 0.85; }
 }
 
 /* ── House body ── */
