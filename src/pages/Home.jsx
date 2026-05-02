@@ -1403,19 +1403,15 @@ function strHash32(s) {
   return h >>> 0
 }
 
-// Two layers: a slow base that swaps every ~2 minutes (gives the
-// "+52 → +39 → +64" feel the user described), plus a small ±5
-// jitter that shifts every 30 seconds so the count never feels frozen.
+// One slot rolls every 3 minutes — matches the front-end refresh cadence
+// so each refresh shows a fresh number (the "+52 → +39 → +64" feel the
+// user described), without flicker between refreshes.
 function fakeOnlineFor(gameId, now = Date.now()) {
   const range = FAKE_ONLINE_RANGES[gameId] || [20, 50]
   const span = range[1] - range[0]
-  const slowSlot = Math.floor(now / 120000)
-  const baseSeed = strHash32(`${gameId}|s|${slowSlot}`)
-  const base = range[0] + (baseSeed % span)
-  const jitterSlot = Math.floor(now / 30000)
-  const jitterSeed = strHash32(`${gameId}|j|${jitterSlot}`)
-  const jitter = (jitterSeed % 11) - 5
-  return Math.max(0, base + jitter)
+  const slot = Math.floor(now / 180000) // 3 minutes
+  const seed = strHash32(`${gameId}|${slot}`)
+  return range[0] + (seed % span)
 }
 
 const SLOTS = [
@@ -1595,24 +1591,21 @@ export default function Home() {
     }
   }, [pendingGameNav])
 
-  // Real online counts — poll every 30s. Blended with fake jitter to
-  // produce the user-visible badge.
+  // Real online counts + fake-boost tick — both refresh on the same
+  // 3-minute cadence so a single network round-trip drives the visible
+  // badge value.
   useEffect(() => {
     let cancelled = false
     async function load() {
       const counts = await getGameOnlineCounts()
-      if (!cancelled) setOnlineCounts(counts || {})
+      if (!cancelled) {
+        setOnlineCounts(counts || {})
+        setOnlineTick(Date.now())
+      }
     }
     load()
-    const id = setInterval(load, 30000)
+    const id = setInterval(load, 180000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [])
-
-  // Tick every 30s so fake jitter recomputes (slow base re-rolls every
-  // 2 minutes naturally). Also re-runs at midnight roll-overs.
-  useEffect(() => {
-    const id = setInterval(() => setOnlineTick(Date.now()), 30000)
-    return () => clearInterval(id)
   }, [])
 
   function handleGameTap(game) {
