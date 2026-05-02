@@ -9,6 +9,11 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 const MINI_APP_URL = Deno.env.get('MINI_APP_URL') || 'https://t.me/outplaymoneybot/app'
 
+// Welcome image attached to /start. Set to a Telegram file_id (preferred —
+// cached on TG side) or a public https URL. If empty, /start falls back to
+// a plain text message.
+const WELCOME_PHOTO = Deno.env.get('WELCOME_PHOTO_FILE_ID') || ''
+
 // Webhook secret token (set via setWebhook API: secret_token param)
 const WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') || ''
 
@@ -142,20 +147,56 @@ serve(async (req) => {
           '<b>Outplay — choose a game and outplay everyone.</b>',
         ].join('\n')
 
-      await fetch(`${TELEGRAM_API}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text,
-          parse_mode: 'HTML',
-          reply_markup: {
-            inline_keyboard: [[
-              { text: 'Play', url: appUrl }
-            ]]
-          }
-        }),
-      })
+      const replyMarkup = {
+        inline_keyboard: [[
+          { text: 'Play', url: appUrl }
+        ]]
+      }
+
+      if (WELCOME_PHOTO) {
+        // Photo mode — caption limit is 1024 chars, current copy is well under.
+        const photoRes = await fetch(`${TELEGRAM_API}/sendPhoto`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            photo: WELCOME_PHOTO,
+            caption: text,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup,
+          }),
+        })
+
+        // If the photo failed (e.g. invalid file_id after env change), fall
+        // back to plain text so /start never returns nothing.
+        if (!photoRes.ok) {
+          await logToAdmin('warn', 'sendPhoto failed on /start, falling back to text', {
+            status: photoRes.status,
+            body: await photoRes.text(),
+          })
+          await fetch(`${TELEGRAM_API}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text,
+              parse_mode: 'HTML',
+              reply_markup: replyMarkup,
+            }),
+          })
+        }
+      } else {
+        await fetch(`${TELEGRAM_API}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup,
+          }),
+        })
+      }
 
       return new Response('ok')
     }
