@@ -253,9 +253,9 @@ function ReferralSection({ t, currency, rates, user }) {
 
   function handleShare() {
     haptic('medium')
-    // English-only share text — same copy regardless of UI language so
-    // the message reads naturally to anyone the user invites.
-    const SHARE_TEXT = '🔥 Outplay — fast 1v1 skill duels for real cash. Quiz · Reaction · Memory · Slots and more. Bet from 10 ₽, payouts in seconds 💸 Come challenge me 👇'
+    // English-only share text — reads naturally to anyone the user
+    // invites regardless of the inviter's UI language.
+    const SHARE_TEXT = '🎮 Outplay — skill games & slots for real cash 💸 Instant deposits · Lightning-fast payouts · Welcome bonus when you sign up with my link 🎁 Join here 👇'
     const tg = window.Telegram?.WebApp
     if (tg) {
       tg.openTelegramLink(
