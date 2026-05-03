@@ -3033,3 +3033,84 @@
   text-transform: uppercase;
   letter-spacing: 1.1px;
 }
+
+/* ───── Tetris Cascade slot card art ───── */
+.tetris-slot-card-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 22%, rgba(165, 180, 252, 0.22), transparent 40%),
+    linear-gradient(180deg, #0f1132 0%, #1e1b4b 60%, #312e81 100%);
+  border-radius: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tetris-slot-card-art--large {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+}
+
+.tetris-slot-art-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 60%, rgba(99, 102, 241, 0.25), transparent 55%);
+  pointer-events: none;
+}
+
+.tetris-slot-art-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  gap: 1.2px;
+  width: 80%;
+  aspect-ratio: 10 / 6;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1.5px solid rgba(99, 102, 241, 0.45);
+  box-shadow: inset 0 0 12px rgba(99, 102, 241, 0.18);
+}
+
+.tetris-slot-art-cell {
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.tetris-slot-art-cell--cyan   { background: linear-gradient(180deg, #67e8f9, #06b6d4); }
+.tetris-slot-art-cell--yellow { background: linear-gradient(180deg, #fde047, #eab308); }
+.tetris-slot-art-cell--purple { background: linear-gradient(180deg, #d8b4fe, #9333ea); }
+.tetris-slot-art-cell--orange { background: linear-gradient(180deg, #fdba74, #f97316); }
+.tetris-slot-art-cell--blue   { background: linear-gradient(180deg, #93c5fd, #2563eb); }
+.tetris-slot-art-cell--green  { background: linear-gradient(180deg, #86efac, #16a34a); }
+.tetris-slot-art-cell--red    { background: linear-gradient(180deg, #fca5a5, #dc2626); }
+
+/* Animated preview — gentle pulse on the bottom row to suggest a clear */
+.tetris-slot-card-art--animated .tetris-slot-art-cell {
+  animation: tetrisArtPulse 2.4s ease-in-out infinite;
+}
+@keyframes tetrisArtPulse {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.18); }
+}
+
+/* Smaller card variant — match smaller padding/border radius */
+.slot-card--scroll .tetris-slot-card-art {
+  border-radius: 16px;
+}
+
+.slot-card--scroll .tetris-slot-art-grid {
+  width: 86%;
+  padding: 3px;
+  gap: 1px;
+}

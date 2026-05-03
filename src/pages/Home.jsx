@@ -1417,11 +1417,21 @@ function fakeOnlineFor(gameId, now = Date.now()) {
 const SLOTS = [
   {
     id: 'tower-stack',
+    category: 'quick',
     titleKey: 'slotTowerTitle',
     subKey: 'slotTowerSub',
     route: '/slots/tower-stack',
     accent: '#f59e0b',
     shadow: '#7c2d12',
+  },
+  {
+    id: 'tetris-cascade',
+    category: 'popular',
+    titleKey: 'slotTetrisTitle',
+    subKey: 'slotTetrisSub',
+    route: '/slots/tetris-cascade',
+    accent: '#6366f1',
+    shadow: '#312e81',
   },
 ]
 
@@ -1474,6 +1484,51 @@ function TowerSlotArtwork({ large = false, animated = false }) {
   )
 }
 
+function TetrisSlotArtwork({ large = false, animated = false }) {
+  // Static "frozen mid-cascade" snapshot — 10x6 grid with a few tetromino
+  // colors filling the lower half so the card immediately reads as Tetris.
+  // Cells are addressed left-to-right, bottom-to-top via grid-area helpers.
+  const cells = [
+    // bottom row — almost-full line about to clear
+    { c: 'cyan',   x: 0, y: 5, w: 4, h: 1 },     // I horizontal
+    { c: 'orange', x: 4, y: 5, w: 1, h: 1 },
+    { c: 'orange', x: 5, y: 5, w: 1, h: 1 },
+    { c: 'green',  x: 6, y: 5, w: 1, h: 1 },
+    { c: 'green',  x: 7, y: 5, w: 1, h: 1 },
+    { c: 'red',    x: 8, y: 5, w: 1, h: 1 },
+    // 2nd from bottom
+    { c: 'yellow', x: 0, y: 4, w: 2, h: 1 },
+    { c: 'yellow', x: 2, y: 4, w: 2, h: 1 },
+    { c: 'purple', x: 5, y: 4, w: 1, h: 1 },
+    { c: 'purple', x: 6, y: 4, w: 1, h: 1 },
+    { c: 'red',    x: 7, y: 4, w: 1, h: 1 },
+    // 3rd row, scattered
+    { c: 'blue',   x: 1, y: 3, w: 1, h: 1 },
+    { c: 'green',  x: 4, y: 3, w: 1, h: 1 },
+    { c: 'orange', x: 8, y: 3, w: 1, h: 1 },
+    // falling pieces near top
+    { c: 'cyan',   x: 3, y: 1, w: 1, h: 1 },
+    { c: 'purple', x: 7, y: 0, w: 2, h: 1 },
+  ]
+  return (
+    <div className={`tetris-slot-card-art ${large ? 'tetris-slot-card-art--large' : ''} ${animated ? 'tetris-slot-card-art--animated' : ''}`} aria-hidden="true">
+      <span className="tetris-slot-art-glow" />
+      <div className="tetris-slot-art-grid">
+        {cells.map((c, i) => (
+          <span
+            key={i}
+            className={`tetris-slot-art-cell tetris-slot-art-cell--${c.c}`}
+            style={{
+              gridColumn: `${c.x + 1} / span ${c.w}`,
+              gridRow: `${c.y + 1} / span ${c.h}`,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function SlotPreview({ slot, t, onClose }) {
   const navigate = useNavigate()
 
@@ -1519,12 +1574,16 @@ function SlotPreview({ slot, t, onClose }) {
           </svg>
         </button>
         <div className="slot-preview-visual">
-          <TowerSlotArtwork large animated />
+          {slot.id === 'tetris-cascade'
+            ? <TetrisSlotArtwork large animated />
+            : <TowerSlotArtwork large animated />}
         </div>
         <div className="slot-preview-copy">
-          <span className="slot-preview-kicker">{t.slotTowerKicker}</span>
+          <span className="slot-preview-kicker">
+            {slot.id === 'tetris-cascade' ? t.slotTetrisKicker : t.slotTowerKicker}
+          </span>
           <h3>{t[slot.titleKey]}</h3>
-          <p>{t.slotTowerPreview}</p>
+          <p>{slot.id === 'tetris-cascade' ? t.slotTetrisPreview : t.slotTowerPreview}</p>
         </div>
         <button className="slot-preview-play" type="button" onClick={handlePlay}>
           {t.slotPlay}
@@ -1762,7 +1821,7 @@ export default function Home() {
             <div className="slots-block slots-block--quick">
               <h3 className="slots-section-title">{t.slotsQuickHeader}</h3>
               <div className="slots-row">
-                {SLOTS.map(slot => (
+                {SLOTS.filter(s => s.category === 'quick').map(slot => (
                   <button
                     key={slot.id}
                     type="button"
@@ -1791,7 +1850,19 @@ export default function Home() {
             <div className="slots-block slots-block--popular">
               <h3 className="slots-section-title">{t.slotsPopularHeader}</h3>
               <div className="slots-row">
-                {[1, 2, 3, 4].map(i => (
+                {SLOTS.filter(s => s.category === 'popular').map(slot => (
+                  <button
+                    key={slot.id}
+                    type="button"
+                    className="slot-card slot-card--scroll"
+                    style={{ '--slot-accent': slot.accent, '--slot-shadow': slot.shadow }}
+                    onClick={() => handleSlotTap(slot)}
+                  >
+                    {slot.id === 'tetris-cascade' ? <TetrisSlotArtwork /> : <TowerSlotArtwork />}
+                    <span className="slot-card-title">{t[slot.titleKey]}</span>
+                  </button>
+                ))}
+                {[1, 2, 3].map(i => (
                   <div key={`p-soon-${i}`} className="slot-card slot-card--scroll slot-card--placeholder" aria-hidden="true">
                     <span className="slot-card-placeholder-icon">
                       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
