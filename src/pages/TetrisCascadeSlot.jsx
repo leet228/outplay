@@ -582,10 +582,8 @@ export default function TetrisCascadeSlot() {
     g = await dropInitialPieces(g, bonusThisSpin)
     if (cancelRef.current) return
 
-    // Detect coin scatters BEFORE any cascading (so they aren't lost).
-    const coinsLanded = bonusThisSpin ? 0 : countCoins(g)
-
     // Detonate bombs first (they create gaps for the cascade phase).
+    // Coins survive bomb blasts so they still count later.
     g = await explodeBombsIfAny(g)
     if (cancelRef.current) return
 
@@ -679,10 +677,12 @@ export default function TetrisCascadeSlot() {
     }
     setPhase('done')
 
-    // Bonus trigger from coin scatters (only outside bonus). Coins are
-    // inert all spin long; only here, when 5+ have triggered the bonus,
-    // do they finally pop with a flash + collapse — as part of the
-    // celebration animation.
+    // Bonus trigger from coin scatters (only outside bonus). Counted at
+    // the END of the spin so coins from cascade refills count too. Coins
+    // are inert all spin long; only here, when 5+ have triggered the
+    // bonus, do they finally pop with a flash + collapse — as part of
+    // the celebration animation.
+    const coinsLanded = bonusThisSpin ? 0 : countCoins(g)
     if (!bonusThisSpin && coinsLanded >= COINS_TO_TRIGGER) {
       const coinCellSet = new Set()
       for (let r = 0; r < ROWS; r++) {
