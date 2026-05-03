@@ -664,9 +664,31 @@ export default function TetrisCascadeSlot() {
 
     // Bonus trigger from coin scatters (only outside bonus).
     if (!bonusThisSpin && coinsLanded >= COINS_TO_TRIGGER) {
-      setBigText({ kind: 'bonus', label: t.slotTetrisBonusTrigger, mul: BONUS_FREE_SPINS })
+      // 1) Sweep the scatter coins off the grid with a flash + collapse,
+      //    so they don't just sit there waiting for the next spin.
+      const coinCellSet = new Set()
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (isCellCoin(g[r][c])) coinCellSet.add(`${c},${r}`)
+        }
+      }
+      if (coinCellSet.size > 0) {
+        setGrid(markClearing(g, coinCellSet))
+        haptic('success')
+        await sleep(520)
+        g = applyGravity(g, coinCellSet)
+        setGrid(g.map(row => [...row]))
+        await sleep(280)
+      }
+      // 2) Show the celebration banner: "БОНУС РАУНД!" + "10 ФРИСПИНОВ"
+      setBigText({
+        kind: 'bonus',
+        label: t.slotTetrisBonusTrigger,
+        subLabel: `${BONUS_FREE_SPINS} ${t.slotTetrisFreeSpinsWord}`,
+        mul: 0,
+      })
       haptic('success')
-      await sleep(1700)
+      await sleep(2000)
       setBigText(null)
       setIsBonus(true)
       isBonusRef.current = true
@@ -677,7 +699,7 @@ export default function TetrisCascadeSlot() {
       setForceNextI(false)
       forceNextIRef.current = false
       // Auto-start the first free spin
-      await sleep(400)
+      await sleep(450)
       runSpin(true)
       return
     }
@@ -820,6 +842,9 @@ export default function TetrisCascadeSlot() {
           {bigText && (
             <div className={`tetris-big-text tetris-big-text--${bigText.kind}`}>
               <span className="tetris-big-label">{bigText.label}</span>
+              {bigText.subLabel && (
+                <span className="tetris-big-sublabel">{bigText.subLabel}</span>
+              )}
               {bigText.mul > 0 && (
                 <span className="tetris-big-mul">
                   ×{bigText.mul}{cascadeStep > 1 && bigText.kind !== 'bonus' && bigText.kind !== 'perfect' ? ` × c${cascadeStep}` : ''}
