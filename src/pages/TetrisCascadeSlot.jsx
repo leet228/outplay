@@ -769,12 +769,6 @@ export default function TetrisCascadeSlot() {
 
     const willTriggerBonus = !inBonus && round?.outcome_kind === 'bonus'
     const isDud           = !inBonus && round?.outcome_kind === 'dud'
-    // Dud rounds: STRICT no-match placement (negative weight + filter).
-    // Non-dud paid spins: aggressive cascade preference so cascades
-    // actually fire (pure target=0 case is handled separately).
-    // Bonus / trigger: standard 12 (cascades happen naturally given
-    // the bonus piece multipliers).
-    const clearWeight     = isDud ? -50 : (inBonus || willTriggerBonus ? 12 : 30)
 
     // Decide this spin's exact target payout (RTP-driven).
     let spinTarget = 0
@@ -788,10 +782,22 @@ export default function TetrisCascadeSlot() {
     const isJackpotSpin = inBonus && round?.bonus_kind === 'jackpot'
                             && spinTarget >= currentStake * PERFECT_CLEAR_WIN_MUL
                             && spinTarget > 0
-    // For non-dud paid spins where target > 0, we MUST have cascades —
-    // otherwise the "150 ₽ from nowhere" effect happens. Bonus free
-    // spins with their own slice > 0 also need cascades.
-    const needCascades = (spinTarget > 0) && !willTriggerBonus
+    // ANY spin where the win bar will display 0 — be it a dud, a bonus
+    // trigger (bonus carries the payout), or a bonus free spin assigned
+    // a 0-slice — must NOT fire any cascades. Without this, an "empty"
+    // bonus would still flash line clears that contributed nothing to
+    // the running total, which the user reads as buggy.
+    const isZeroPaySpin = spinTarget === 0
+    const needCascades  = !isZeroPaySpin
+    // clearWeight: -50 (anti-match) for any zero-pay spin; 12 inside
+    // a paid bonus spin (where bonus piece multipliers naturally make
+    // cascades worth a lot); 30 for paid wins so cascades are likely
+    // to fire and the RTP target is hit.
+    const clearWeight = isZeroPaySpin ? -50 : (inBonus ? 12 : 30)
+    // Suppress bombs / coins / wilds on zero-pay paid-side spins so a
+    // bomb explosion + gravity can't accidentally form a row match.
+    // (In bonus rounds pickRandomPiece already excludes specials.)
+    const noSpecialThisSpin = !inBonus && isZeroPaySpin
 
     // Capture rage-buff state once; consumed after we commit to a script.
     const rageBuffActive = inBonus && forceNextIRef.current
@@ -810,7 +816,7 @@ export default function TetrisCascadeSlot() {
       for (let i = 0; i < INITIAL_PIECES; i++) {
         let forceI = false
         if (simBuff && i === 0) { forceI = true; simBuff = false }
-        const piece = pickRandomPiece({ bonus: inBonus, forceI, noSpecial: isDud })
+        const piece = pickRandomPiece({ bonus: inBonus, forceI, noSpecial: noSpecialThisSpin })
         const x = pickColumn(sg, piece, { clearWeight })
         if (x < 0) continue
         const mulProvider = inBonus
@@ -883,7 +889,7 @@ export default function TetrisCascadeSlot() {
         // Refill
         const refillCount = 3 + Math.ceil(matches.length * 1.5)
         for (let i = 0; i < refillCount; i++) {
-          const piece = pickRandomPiece({ bonus: inBonus, noSpecial: isDud })
+          const piece = pickRandomPiece({ bonus: inBonus, noSpecial: noSpecialThisSpin })
           const x = pickColumn(sg, piece, { clearWeight })
           if (x < 0) break
           const mulProvider = inBonus
