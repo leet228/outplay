@@ -171,6 +171,7 @@ $$;
 CREATE OR REPLACE FUNCTION rocket_create_round()
 RETURNS rocket_rounds
 LANGUAGE plpgsql VOLATILE
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -215,6 +216,7 @@ $$;
 CREATE OR REPLACE FUNCTION get_or_create_current_rocket_round()
 RETURNS rocket_rounds
 LANGUAGE plpgsql VOLATILE
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -269,6 +271,7 @@ $$;
 CREATE OR REPLACE FUNCTION rocket_settle_round_losses(p_round_id BIGINT)
 RETURNS VOID
 LANGUAGE plpgsql VOLATILE
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
