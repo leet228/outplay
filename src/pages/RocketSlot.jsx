@@ -15,7 +15,7 @@ import {
 import './RocketSlot.css'
 
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
-const HISTORY_SIZE = 24
+const HISTORY_SIZE = 5
 // Preset auto-cash multipliers — toggle pills below the controls.
 // One can be active at a time; clicking the active one again clears it.
 const AUTO_CASH_OPTIONS = [1.5, 2, 2.5, 3, 5, 10]
