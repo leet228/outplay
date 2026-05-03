@@ -3107,10 +3107,45 @@
 /* Smaller card variant — match smaller padding/border radius */
 .slot-card--scroll .tetris-slot-card-art {
   border-radius: 16px;
+  /* Stack the grid above and leave a slim strip below for the title. */
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 6px;
 }
 
+/* Tetris compact card: artwork fills nearly the entire card; only the
+   bottom ~28px is reserved for the "TETRIS CASCADE" title. */
 .slot-card--scroll .tetris-slot-art-grid {
-  width: 86%;
-  padding: 3px;
-  gap: 1px;
+  width: calc(100% - 12px);
+  height: calc(100% - 36px);
+  aspect-ratio: auto;
+  padding: 4px;
+  gap: 1.4px;
+  border-radius: 10px;
+  margin: 0 6px;
+}
+
+/* Dark gradient strip behind the title so it stays readable on top
+   of the bright cells. */
+.slot-card--scroll .tetris-slot-card-art::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 36px;
+  background: linear-gradient(180deg, rgba(11, 14, 42, 0) 0%, rgba(7, 9, 26, 0.92) 60%, rgba(7, 9, 26, 1) 100%);
+  pointer-events: none;
+  z-index: 3;
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+
+.slot-card--scroll .tetris-slot-card-art + .slot-card-title,
+.slot-card--scroll:has(.tetris-slot-card-art) .slot-card-title {
+  bottom: 9px;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.4px;
+  z-index: 4;
 }
