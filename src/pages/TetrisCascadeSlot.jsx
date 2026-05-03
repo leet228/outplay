@@ -754,162 +754,275 @@ export default function TetrisCascadeSlot() {
 
     const willTriggerBonus = !inBonus && round?.outcome_kind === 'bonus'
     const isDud           = !inBonus && round?.outcome_kind === 'dud'
-    // For dud rounds, tell the AI to AVOID clears. For bonus trigger
-    // we still want some visual cascading before scatters appear.
     const clearWeight     = isDud ? -50 : 12
 
-    let g = makeEmptyGrid()
-    setGrid(g)
-    setPhase('dropping')
+    // Decide this spin's exact target payout (RTP-driven).
+    let spinTarget = 0
+    if (inBonus) {
+      spinTarget = bonusSlicesRef.current[bonusSliceIdxRef.current] || 0
+    } else if (willTriggerBonus) {
+      spinTarget = 0 // trigger spin pays nothing — bonus carries payout
+    } else if (round) {
+      spinTarget = Number(round.target_payout_rub) || 0
+    }
+    const isJackpotSpin = inBonus && round?.bonus_kind === 'jackpot'
+                            && spinTarget >= currentStake * PERFECT_CLEAR_WIN_MUL
+                            && spinTarget > 0
 
-    g = await dropInitialPieces(g, inBonus, clearWeight)
-    if (cancelRef.current) return
+    // ── Phase 1: simulate the spin in pure JS (no animation) ──
+    // This builds a deterministic script: every piece placement, bomb
+    // explosion, and cascade. We tally the "natural" win each cascade
+    // would have produced under the standard formula. We then SCALE
+    // those wins so they sum exactly to spinTarget — that way each
+    // cascade pays a real amount and the running total ticks up to
+    // spinTarget honestly, with no end-of-spin snap.
+    if (inBonus && forceNextIRef.current) {
+      // Consume the rage buff once for the first piece of this spin.
+      // (kept in sync with what the script will use)
+    }
+    const script = []
+    let simBonusForceFirstI = inBonus && forceNextIRef.current
+    if (simBonusForceFirstI) {
+      forceNextIRef.current = false
+      setForceNextI(false)
+    }
+    let sg = makeEmptyGrid()
 
-    g = await explodeBombsIfAny(g)
-    if (cancelRef.current) return
-
-    // Cascade loop — natural matching for visual feedback. The displayed
-    // running win during the loop is just for the cascade animations;
-    // it gets snapped to the server-decided slice at the end.
-    let cascade = 0
-    let safety = 0
-    while (safety++ < MAX_CASCADES) {
-      const matches = findMatches(g)
-      if (matches.length === 0) break
-
-      cascade++
-      setCascadeStep(cascade)
-      setPhase('clearing')
-
-      const cellSet = new Set()
-      let stepWin = 0
-      for (const m of matches) {
-        for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
+    // Initial drop
+    for (let i = 0; i < INITIAL_PIECES; i++) {
+      let forceI = false
+      if (simBonusForceFirstI && i === 0) {
+        forceI = true
+        simBonusForceFirstI = false
       }
+      const piece = pickRandomPiece({ bonus: inBonus, forceI })
+      const x = pickColumn(sg, piece, { clearWeight })
+      if (x < 0) continue
+      const mulProvider = inBonus
+        ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
+        : null
+      const { grid: ng } = dropPiece(sg, piece, x, mulProvider)
+      script.push({ kind: 'place', gap: 110, gridAfter: ng })
+      sg = ng
+    }
+
+    // Initial bombs
+    {
+      const bombs = []
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (isCellBomb(sg[r][c])) bombs.push([c, r])
+        }
+      }
+      if (bombs.length > 0) {
+        const cellSet = new Set()
+        for (const [bx, by] of bombs) {
+          for (const k of bombExplosionCells(bx, by)) {
+            const [x, y] = k.split(',').map(Number)
+            if (isCellCoin(sg[y][x])) continue
+            cellSet.add(k)
+          }
+        }
+        if (cellSet.size > 0) {
+          const after = applyGravity(sg, cellSet)
+          script.push({ kind: 'bomb', cellSet, gridAfter: after })
+          sg = after
+        }
+      }
+    }
+
+    // Cascades
+    let totalNatural = 0
+    let cascadeNum = 0
+    while (cascadeNum < MAX_CASCADES) {
+      const matches = findMatches(sg)
+      if (matches.length === 0) break
+      cascadeNum++
+      const cellSet = new Set()
+      for (const m of matches) for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
+
+      let stepWin = 0
       if (inBonus) {
         let mulSum = 0
         for (const k of cellSet) {
           const [x, y] = k.split(',').map(Number)
-          mulSum += cellMul(g[y][x])
+          mulSum += cellMul(sg[y][x])
         }
         stepWin = currentStake * mulSum
       } else {
         stepWin = matches.reduce((s, m) => s + currentStake * m.mul, 0)
       }
+      totalNatural += stepWin
 
-      setBigText(buildBigText(matches))
-      setGrid(markClearing(g, cellSet))
-      haptic(matches.some(m => m.type === 'col' || m.cells.length >= 9) ? 'success' : 'medium')
-      await sleep(420)
-      if (cancelRef.current) return
+      const after = applyGravity(sg, cellSet)
+      script.push({
+        kind: 'cascade',
+        cascadeNum,
+        matches,
+        cellSet,
+        stepWin,
+        gridAfter: after,
+      })
+      sg = after
 
-      g = applyGravity(g, cellSet)
-      setGrid(g.map(row => [...row]))
-      await sleep(360)
-
-      // The cascade animations and the big-text overlay still fire,
-      // but the win-bar counter is NOT incremented here. The displayed
-      // total is whatever the server pre-decided — set once at the end
-      // of the spin (paid spin → target_payout, bonus free spin →
-      // accrued + slice). This avoids a visible "snap down" when the
-      // natural cascade wins outpace the RTP-controlled outcome.
-      // (stepWin is computed for legacy reasons — kept in case we want
-      //  per-cascade animations later.)
-      void stepWin
-      setBigText(null)
-
-      if (inBonus) {
-        const linesContribution = matches.length
-        const newRage = Math.min(RAGE_MAX, rageRef.current + linesContribution)
-        rageRef.current = newRage
-        setRage(newRage)
-        if (newRage >= RAGE_MAX) {
-          forceNextIRef.current = true
-          setForceNextI(true)
-          rageRef.current = 0
-          setRage(0)
-        }
+      // Refill
+      const refillCount = 3 + Math.ceil(matches.length * 1.5)
+      for (let i = 0; i < refillCount; i++) {
+        const piece = pickRandomPiece({ bonus: inBonus })
+        const x = pickColumn(sg, piece, { clearWeight })
+        if (x < 0) break
+        const mulProvider = inBonus
+          ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
+          : null
+        const { grid: ng } = dropPiece(sg, piece, x, mulProvider)
+        script.push({ kind: 'place', gap: 120, gridAfter: ng })
+        sg = ng
       }
 
-      const refillCount = 3 + Math.ceil(matches.length * 1.5)
-      g = await dropFillerPieces(g, refillCount, inBonus, clearWeight)
-      if (cancelRef.current) return
-      g = await explodeBombsIfAny(g)
-      if (cancelRef.current) return
-      setPhase('dropping')
+      // Bombs after refill
+      const bombs2 = []
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (isCellBomb(sg[r][c])) bombs2.push([c, r])
+        }
+      }
+      if (bombs2.length > 0) {
+        const cellSet2 = new Set()
+        for (const [bx, by] of bombs2) {
+          for (const k of bombExplosionCells(bx, by)) {
+            const [x, y] = k.split(',').map(Number)
+            if (isCellCoin(sg[y][x])) continue
+            cellSet2.add(k)
+          }
+        }
+        if (cellSet2.size > 0) {
+          const after2 = applyGravity(sg, cellSet2)
+          script.push({ kind: 'bomb', cellSet: cellSet2, gridAfter: after2 })
+          sg = after2
+        }
+      }
     }
 
-    // For bonus-trigger spins: drop 5 scatter coins now, AFTER the
-    // natural cascade phase. They remain on the grid for the celebration.
+    // Compute the scale factor so cascade wins sum exactly to the target.
+    // If natural=0 (e.g. dud round with no clears), we'll just credit the
+    // target as a single end-of-spin reveal (rare).
+    const scale = totalNatural > 0 ? spinTarget / totalNatural : 0
+
+    // ── Phase 2: replay the script with animation + scaled wins ──
+    let g = makeEmptyGrid()
+    setGrid(g)
+    setPhase('dropping')
+
+    const baseDisplayWin = inBonus ? bonusAccruedRef.current : 0
+    let accumulatedScaled = 0
+
+    for (const step of script) {
+      if (cancelRef.current) return
+      if (step.kind === 'place') {
+        g = step.gridAfter
+        setGrid(g.map(row => [...row]))
+        await sleep(step.gap || 110)
+      } else if (step.kind === 'bomb') {
+        setBigText({ kind: 'boom', label: t.slotTetrisBoom, mul: 0 })
+        setGrid(markClearing(g, step.cellSet))
+        haptic('error')
+        await sleep(420)
+        if (cancelRef.current) return
+        g = step.gridAfter
+        setGrid(g.map(row => [...row]))
+        await sleep(360)
+        setBigText(null)
+      } else if (step.kind === 'cascade') {
+        setCascadeStep(step.cascadeNum)
+        setPhase('clearing')
+        setBigText(buildBigText(step.matches))
+        setGrid(markClearing(g, step.cellSet))
+        haptic(step.matches.some(m => m.type === 'col' || m.cells.length >= 9) ? 'success' : 'medium')
+        await sleep(420)
+        if (cancelRef.current) return
+        g = step.gridAfter
+        setGrid(g.map(row => [...row]))
+        await sleep(360)
+
+        // Scaled win contribution from this cascade.
+        const scaled = Math.round(step.stepWin * scale)
+        if (scaled > 0) {
+          accumulatedScaled += scaled
+          setTotalWin(baseDisplayWin + accumulatedScaled)
+        }
+        setBigText(null)
+
+        // Rage meter (bonus only)
+        if (inBonus) {
+          const linesContribution = step.matches.length
+          const newRage = Math.min(RAGE_MAX, rageRef.current + linesContribution)
+          rageRef.current = newRage
+          setRage(newRage)
+          if (newRage >= RAGE_MAX) {
+            forceNextIRef.current = true
+            setForceNextI(true)
+            rageRef.current = 0
+            setRage(0)
+          }
+        }
+        setPhase('dropping')
+      }
+    }
+
+    // Reconcile any rounding error so the displayed total equals exactly
+    // baseDisplayWin + spinTarget.
+    if (accumulatedScaled !== spinTarget) {
+      setTotalWin(baseDisplayWin + spinTarget)
+    }
+
+    // For bonus-trigger spins drop the 5 scatter coins now (after cascade).
     if (willTriggerBonus) {
       g = await forceScatterDrop(g, COINS_TO_TRIGGER)
       if (cancelRef.current) return
     }
 
-    // ── Determine this spin's actual payout from the server-decided round ──
-    let spinPayout = 0
-    let isJackpotSpin = false
-    if (inBonus) {
-      // Pull the next pre-allocated slice for this free spin.
-      spinPayout = bonusSlicesRef.current[bonusSliceIdxRef.current] || 0
-      bonusSliceIdxRef.current++
-      // If this slice is the full jackpot (Perfect Clear), force the
-      // grid to clear and show the celebration.
-      if (spinPayout >= currentStake * PERFECT_CLEAR_WIN_MUL && spinPayout > 0) {
-        isJackpotSpin = true
-        const allCells = new Set()
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            if (g[r][c] !== null && g[r][c] !== 'CLEARING') allCells.add(`${c},${r}`)
-          }
+    // Jackpot bonus spin → force-clear remaining cells with the Perfect
+    // Clear celebration so the visuals match the x5000 payout.
+    if (isJackpotSpin) {
+      const allCells = new Set()
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (g[r][c] !== null && g[r][c] !== 'CLEARING') allCells.add(`${c},${r}`)
         }
-        if (allCells.size > 0) {
-          setGrid(markClearing(g, allCells))
-          haptic('success')
-          await sleep(420)
-          g = applyGravity(g, allCells)
-          setGrid(g.map(row => [...row]))
-          await sleep(280)
-        }
-        setBigText({
-          kind: 'perfect',
-          label: t.slotTetrisPerfectClear,
-          mul: PERFECT_CLEAR_WIN_MUL,
-        })
-        haptic('success')
-        await sleep(1700)
-        setBigText(null)
       }
-    } else if (willTriggerBonus) {
-      // Trigger spin pays nothing — payout is carried by the bonus.
-      spinPayout = 0
-    } else if (round) {
-      spinPayout = Number(round.target_payout_rub) || 0
+      if (allCells.size > 0) {
+        setGrid(markClearing(g, allCells))
+        haptic('success')
+        await sleep(420)
+        g = applyGravity(g, allCells)
+        setGrid(g.map(row => [...row]))
+        await sleep(280)
+      }
+      setBigText({
+        kind: 'perfect',
+        label: t.slotTetrisPerfectClear,
+        mul: PERFECT_CLEAR_WIN_MUL,
+      })
+      haptic('success')
+      await sleep(1700)
+      setBigText(null)
     }
 
-    // Snap the win bar to the server-driven amount, credit balance.
+    // Track accrued + advance bonus slice index, credit balance.
     if (inBonus) {
-      // Cumulative bonus total: replace running display with accrued + slice.
-      const newAccrued = bonusAccruedRef.current + spinPayout
-      bonusAccruedRef.current = newAccrued
-      setTotalWin(newAccrued)
-      if (spinPayout > 0) {
-        setBalance(balanceRef.current + spinPayout)
-        balanceRef.current = balanceRef.current + spinPayout
-        setBalanceBounce(true)
-        setTimeout(() => setBalanceBounce(false), 700)
-      }
-    } else {
-      // Paid spin: snap to target.
-      setTotalWin(spinPayout)
-      if (spinPayout > 0) {
-        setBalance(balanceRef.current + spinPayout)
-        balanceRef.current = balanceRef.current + spinPayout
-        setBalanceBounce(true)
-        setTimeout(() => setBalanceBounce(false), 700)
-      }
+      bonusAccruedRef.current += spinTarget
+      bonusSliceIdxRef.current++
+    }
+    if (spinTarget > 0) {
+      setBalance(balanceRef.current + spinTarget)
+      balanceRef.current = balanceRef.current + spinTarget
+      setBalanceBounce(true)
+      setTimeout(() => setBalanceBounce(false), 700)
     }
     setPhase('done')
+
+    // Variable kept for parity with later code paths.
+    const spinPayout = spinTarget; void spinPayout
 
     // ── Bonus trigger: animate scatter sweep + celebration, then chain ──
     if (willTriggerBonus) {
