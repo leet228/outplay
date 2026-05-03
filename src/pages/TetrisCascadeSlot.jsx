@@ -15,9 +15,9 @@ const SLOT_ID = 'tetris-cascade'
 const COLS = 10
 const ROWS = 8
 
-const INITIAL_PIECES = 14
+const INITIAL_PIECES = 12
 const COLOR_LINE_MIN = 7
-const MAX_CASCADES = 10
+const MAX_CASCADES = 6
 
 // Special piece spawn rates.
 const WILD_RATE = 0.08         // colour wildcard cells
@@ -44,8 +44,11 @@ const PIECES = {
 }
 const PIECE_KEYS = Object.keys(PIECES)
 
-// Match payouts.
-const COLOR_RUN_MUL = { 7: 3, 8: 5, 9: 8, 10: 15 }
+// Match payouts (non-bonus). Tuned so a typical lucky spin lands in
+// the 3-15× stake band. A really hot multi-cascade can creep into
+// 30-50× territory but no further — no compounding cascade multiplier
+// is applied, long chains just sum up.
+const COLOR_RUN_MUL = { 7: 1, 8: 1, 9: 2, 10: 3 }
 
 // ── Helpers ──
 function makeEmptyGrid() {
@@ -205,7 +208,7 @@ function findMatches(grid) {
     if (grid[r].every(isLineFiller)) {
       const cells = []
       for (let c = 0; c < COLS; c++) cells.push([c, r])
-      matches.push({ type: 'row', cells, mul: 2 })
+      matches.push({ type: 'row', cells, mul: 1 })
     }
   }
 
@@ -217,7 +220,7 @@ function findMatches(grid) {
     if (full) {
       const cells = []
       for (let r = 0; r < ROWS; r++) cells.push([c, r])
-      matches.push({ type: 'col', cells, mul: 3 })
+      matches.push({ type: 'col', cells, mul: 2 })
     }
   }
 
@@ -628,7 +631,10 @@ export default function TetrisCascadeSlot() {
         }
         stepWin = currentStake * mulSum
       } else {
-        stepWin = matches.reduce((s, m) => s + currentStake * m.mul * cascade, 0)
+        // Non-bonus payout: each cascade contributes its own wins, but
+        // there is no extra cascade multiplier on top — long chains
+        // simply sum up.
+        stepWin = matches.reduce((s, m) => s + currentStake * m.mul, 0)
       }
 
       setBigText(buildBigText(matches))
