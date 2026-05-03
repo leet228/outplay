@@ -38,6 +38,7 @@ function timeAgo(ts) {
 const SLOT_LABELS = {
   'tower-stack': 'Tower Stack',
   'tetris-cascade': 'Tetris Cascade',
+  'rocket': 'Rocket',
 }
 
 export default function AdminSlots() {

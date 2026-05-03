@@ -1,0 +1,747 @@
+/* ─────────────────────────────────────────────────────────────
+ * Rocket Slot — Aviator-style crash game.
+ * Layout: history strip | stage (sky + curve + rocket) | controls.
+ * ───────────────────────────────────────────────────────────── */
+
+.rocket-slot-page {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding:
+    calc(var(--safe-top, 0px) + 64px)
+    14px
+    calc(var(--safe-bottom, 0px) + 18px);
+  overflow: hidden;
+  color: #fff;
+  background:
+    radial-gradient(ellipse at 70% 0%, #2d1259 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 90%, #6b1a3d 0%, transparent 60%),
+    linear-gradient(180deg, #0a0420 0%, #190735 50%, #2c0a40 100%);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Slot is housed in a single rounded panel — same envelope idea as
+ * Tower / Tetris so all three slots feel like siblings. */
+.rocket-game-window {
+  position: relative;
+  width: min(100%, 560px);
+  height: min(754px, calc(100svh - var(--safe-top, 0px) - var(--safe-bottom, 0px) - 86px));
+  min-height: 610px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 32px;
+  background:
+    radial-gradient(ellipse at 70% 0%, #2d1259 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 90%, #4a1432 0%, transparent 60%),
+    linear-gradient(180deg, #160438 0%, #2a0a45 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.58),
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  isolation: isolate;
+}
+
+.rocket-slot-page--crashed {
+  animation: rocket-bg-flash 0.45s ease-out;
+}
+
+@keyframes rocket-bg-flash {
+  0%   { background-color: rgba(255, 91, 138, 0); }
+  35%  { background-color: rgba(255, 91, 138, 0.18); }
+  100% { background-color: rgba(255, 91, 138, 0); }
+}
+
+/* ── History strip ─────────────────────────────────────────── */
+/* Newest chip is always at the right end. justify-content: flex-end
+ * keeps it pinned to the right when the row isn't full; once it
+ * overflows, the JS auto-scrolls scrollLeft to scrollWidth on every
+ * new chip so the right edge stays in view. */
+.rocket-history {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 12px 14px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0) 100%);
+}
+.rocket-history::-webkit-scrollbar { display: none; }
+
+.rocket-history-empty {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 4px 0;
+}
+
+.rocket-chip {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  animation: rocket-chip-in 0.32s ease-out;
+}
+
+@keyframes rocket-chip-in {
+  from { transform: translateX(-12px) scale(0.85); opacity: 0; }
+  to   { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+.rocket-chip--low {
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.14);
+  border-color: rgba(251, 113, 133, 0.35);
+}
+.rocket-chip--mid {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+.rocket-chip--high {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.35);
+}
+
+/* ── Stage ─────────────────────────────────────────────────── */
+.rocket-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rocket-sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rocket-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 12% 14%;
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0));
+}
+
+.rocket-star {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+  animation: rocket-star-twinkle 3.2s ease-in-out infinite;
+}
+.rocket-star--a { top: 8%;  left: 12%; animation-delay: 0s;    }
+.rocket-star--b { top: 18%; left: 78%; animation-delay: 0.6s;  }
+.rocket-star--c { top: 30%; left: 32%; animation-delay: 1.1s;  width: 2px; height: 2px; }
+.rocket-star--d { top: 48%; left: 88%; animation-delay: 1.4s;  width: 4px; height: 4px; }
+.rocket-star--e { top: 60%; left: 22%; animation-delay: 0.3s;  }
+.rocket-star--f { top: 72%; left: 64%; animation-delay: 1.8s;  width: 2px; height: 2px; }
+.rocket-star--g { top: 22%; left: 50%; animation-delay: 2.2s;  width: 2px; height: 2px; }
+.rocket-star--h { top: 80%; left: 42%; animation-delay: 0.9s;  }
+
+@keyframes rocket-star-twinkle {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50%      { opacity: 0.25; transform: scale(0.6); }
+}
+
+.rocket-cloud {
+  position: absolute;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0));
+  border-radius: 50%;
+  pointer-events: none;
+  animation: rocket-cloud-drift linear infinite;
+}
+.rocket-cloud--one   { top: 10%; left: -10%; width: 220px; height: 220px; animation-duration: 38s; animation-delay: -6s; }
+.rocket-cloud--two   { top: 55%; left: -20%; width: 280px; height: 280px; animation-duration: 52s; }
+.rocket-cloud--three { top: 30%; left: -25%; width: 180px; height: 180px; animation-duration: 30s; animation-delay: -18s; }
+
+@keyframes rocket-cloud-drift {
+  from { transform: translateX(0); }
+  to   { transform: translateX(140vw); }
+}
+
+/* Curve drawing — full-stage SVG, 0..100 viewport units. */
+.rocket-curve {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  filter: drop-shadow(0 0 8px rgba(251, 113, 133, 0.4));
+}
+.rocket-slot-page--betting .rocket-curve { opacity: 0; }
+
+/* Rocket icon — anchored to (left%, top%) computed from multiplier
+ * every frame via rAF. NO position transition: the curve under it
+ * also re-renders every frame, and any easing here makes the rocket
+ * lag behind the curve's tip. */
+.rocket-icon {
+  position: absolute;
+  width: 44px;
+  height: 62px;
+  transform: translate(-50%, -50%) rotate(35deg);
+  transform-origin: center;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.45));
+}
+/* Betting phase: rocket sits motionless on the launchpad — no idle bob,
+ * no rotation. Player should see it ready to launch. */
+.rocket-slot-page--betting .rocket-icon {
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+.rocket-slot-page--crashed .rocket-icon {
+  animation: rocket-spin-out 0.6s ease-in forwards;
+}
+
+@keyframes rocket-spin-out {
+  0%   { transform: translate(-50%, -50%) rotate(35deg); opacity: 1; }
+  60%  { transform: translate(-30%, -10%) rotate(120deg); opacity: 0.8; }
+  100% { transform: translate(60%, 80%) rotate(280deg); opacity: 0; }
+}
+
+.rocket-icon svg {
+  position: relative;
+  z-index: 2;
+}
+
+.rocket-flame {
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 30px;
+  background: radial-gradient(ellipse at center top, #fef3c7 0%, #fb923c 35%, #ef4444 70%, transparent 100%);
+  border-radius: 50% 50% 40% 40% / 30% 30% 70% 70%;
+  filter: blur(1.2px);
+  animation: rocket-flame-flicker 0.18s ease-in-out infinite alternate;
+  z-index: 1;
+}
+.rocket-flame--inner {
+  bottom: -16px;
+  width: 10px;
+  height: 18px;
+  background: radial-gradient(ellipse at center top, #fff 0%, #fde68a 60%, transparent 100%);
+  filter: blur(0.4px);
+  opacity: 0.95;
+  animation-duration: 0.12s;
+}
+
+@keyframes rocket-flame-flicker {
+  from { transform: translateX(-50%) scale(1, 1);     opacity: 0.95; }
+  to   { transform: translateX(-50%) scale(1.05, 1.18); opacity: 1; }
+}
+
+.rocket-slot-page--crashed .rocket-flame,
+.rocket-slot-page--betting .rocket-flame {
+  opacity: 0.4;
+}
+
+/* ── Centre HUD ────────────────────────────────────────────── */
+.rocket-hud {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 4;
+  text-align: center;
+}
+
+.rocket-hud-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.rocket-hud-label--crashed {
+  color: #fda4af;
+}
+
+.rocket-hud-time {
+  font-size: 56px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -2px;
+  color: #fff;
+  text-shadow: 0 4px 18px rgba(168, 85, 247, 0.55);
+}
+
+.rocket-hud-bar {
+  display: block;
+  width: 140px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.rocket-hud-bar-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #a855f7, #ec4899);
+  transition: width 80ms linear;
+}
+
+.rocket-hud-mul {
+  font-size: 72px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -3px;
+  line-height: 1;
+  background: linear-gradient(180deg, #fff 0%, #fbcfe8 50%, #f472b6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 6px 30px rgba(244, 114, 182, 0.5);
+  animation: rocket-mul-pulse 0.55s ease-out;
+}
+.rocket-hud-mul--crashed {
+  background: linear-gradient(180deg, #ffe4e6 0%, #fb7185 50%, #be123c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: rocket-mul-shake 0.45s ease-out;
+}
+
+@keyframes rocket-mul-pulse {
+  from { transform: scale(0.92); opacity: 0.5; }
+  to   { transform: scale(1);    opacity: 1;   }
+}
+@keyframes rocket-mul-shake {
+  0%   { transform: translateX(0); }
+  20%  { transform: translateX(-6px); }
+  40%  { transform: translateX(6px); }
+  60%  { transform: translateX(-3px); }
+  80%  { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}
+
+.rocket-hud-cashed {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 4px 12px;
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  border-radius: 999px;
+  box-shadow: 0 0 18px rgba(52, 211, 153, 0.35);
+  animation: rocket-cashed-in 0.35s ease-out;
+}
+
+@keyframes rocket-cashed-in {
+  from { transform: scale(0.5); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+/* ── Controls (bottom panel) ───────────────────────────────── */
+.rocket-controls {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px calc(14px + var(--safe-bottom, 0px));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.55) 30%, rgba(0, 0, 0, 0.85) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  z-index: 5;
+}
+
+.rocket-controls-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Stake + balance share one card style and a 1fr 1fr grid → identical
+ * width and height regardless of label / value length. */
+.rocket-info-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  height: 64px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+.rocket-info-card--stake {
+  padding-right: 44px;  /* room for stepper buttons */
+}
+
+.rocket-info-label {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 700;
+}
+.rocket-info-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rocket-stake-buttons {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rocket-stake-buttons button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 22px;
+  border: none;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+}
+.rocket-stake-buttons button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Main CTA — fills the full row */
+.rocket-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 16px;
+  font-family: inherit;
+  cursor: pointer;
+  color: #fff;
+  transition: transform 0.12s, opacity 0.15s, box-shadow 0.2s;
+}
+.rocket-cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.rocket-cta:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.rocket-cta-title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+.rocket-cta-sub {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.rocket-cta--bet {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.45);
+}
+.rocket-cta--bet:disabled {
+  background: linear-gradient(135deg, #4b5563, #374151);
+  box-shadow: none;
+}
+
+.rocket-cta--cancel {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.4);
+}
+
+/* Bet locked in, waiting for flight to start. */
+.rocket-cta--placed {
+  background: linear-gradient(135deg, #6366f1, #4338ca);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  color: #e0e7ff;
+}
+
+.rocket-cta--cash {
+  background: linear-gradient(135deg, #f43f5e, #e11d48);
+  box-shadow: 0 8px 28px rgba(244, 63, 94, 0.55);
+  animation: rocket-cta-cash-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes rocket-cta-cash-pulse {
+  0%, 100% { box-shadow: 0 8px 28px rgba(244, 63, 94, 0.55); }
+  50%      { box-shadow: 0 8px 36px rgba(244, 63, 94, 0.85); }
+}
+
+.rocket-cta--cashed {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+.rocket-cta--idle {
+  background: linear-gradient(135deg, #4b5563, #374151);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Auto cash-out chips — pick at most one preset multiplier. */
+.rocket-auto {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 4px 0;
+}
+.rocket-auto-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.rocket-auto-chips {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.rocket-auto-chip {
+  padding: 8px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.85);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+.rocket-auto-chip:not(.is-active):active {
+  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.08);
+}
+.rocket-auto-chip.is-active {
+  background: linear-gradient(135deg, #ec4899, #be185d);
+  border-color: rgba(244, 114, 182, 0.6);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.45);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Home page artwork — small card thumbnail + large preview-modal
+ * variant. Mirrors the layout density of Tower / Tetris cards:
+ * background fills the card, decorations layer on top, optional
+ * --large modifier scales hero elements for the preview modal.
+ * ───────────────────────────────────────────────────────────── */
+.rocket-slot-card-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 75% 18%, #6b21a8 0%, transparent 55%),
+    radial-gradient(ellipse at 18% 95%, #be185d 0%, transparent 50%),
+    linear-gradient(180deg, #07021a 0%, #1d0640 55%, #2e0a45 100%);
+}
+
+/* Soft nebula glow behind the moon */
+.rocket-slot-art-nebula {
+  position: absolute;
+  top: -10%;
+  right: -10%;
+  width: 70%;
+  height: 70%;
+  background: radial-gradient(closest-side, rgba(236, 72, 153, 0.35) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Moon — top right */
+.rocket-slot-art-moon {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fffbeb 0%, #fde68a 55%, #ca8a04 100%);
+  box-shadow:
+    0 0 22px rgba(253, 230, 138, 0.55),
+    inset -3px -4px 6px rgba(120, 53, 15, 0.45);
+}
+.rocket-slot-art-moon-crater {
+  position: absolute;
+  background: rgba(120, 53, 15, 0.35);
+  border-radius: 50%;
+}
+.rocket-slot-art-moon-crater--a { top: 30%; left: 22%; width: 6px; height: 6px; }
+.rocket-slot-art-moon-crater--b { top: 55%; left: 50%; width: 4px; height: 4px; }
+.rocket-slot-art-moon-crater--c { top: 22%; left: 60%; width: 3px; height: 3px; }
+
+/* Star field */
+.rocket-slot-art-star {
+  position: absolute;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.75);
+}
+.rocket-slot-art-star--1 { top: 8%;  left: 10%; width: 2px; height: 2px; }
+.rocket-slot-art-star--2 { top: 18%; left: 32%; width: 3px; height: 3px; }
+.rocket-slot-art-star--3 { top: 30%; left: 18%; width: 2px; height: 2px; }
+.rocket-slot-art-star--4 { top: 12%; left: 56%; width: 2px; height: 2px; }
+.rocket-slot-art-star--5 { top: 42%; left: 44%; width: 3px; height: 3px; }
+.rocket-slot-art-star--6 { top: 50%; left: 12%; width: 2px; height: 2px; }
+.rocket-slot-art-star--7 { top: 60%; left: 70%; width: 2px; height: 2px; }
+.rocket-slot-art-star--8 { top: 38%; left: 86%; width: 3px; height: 3px; }
+.rocket-slot-art-star--9 { top: 70%; left: 50%; width: 2px; height: 2px; }
+
+/* Planet at bottom-left. */
+.rocket-slot-art-planet {
+  position: absolute;
+  left: -16%;
+  bottom: -18%;
+  width: 60%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 32%, #c4b5fd 0%, #7c3aed 50%, #4c1d95 100%);
+  box-shadow:
+    inset -10px -14px 18px rgba(30, 8, 60, 0.65),
+    0 -2px 18px rgba(167, 139, 250, 0.3);
+  overflow: hidden;
+  z-index: 1;
+}
+.rocket-slot-art-planet-stripe {
+  position: absolute;
+  top: 38%;
+  left: -10%;
+  right: -10%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  transform: rotate(-12deg);
+}
+
+/* Rocket — sits between the planet (bottom-left) and moon (top-right),
+ * tilted so its nose points up-right toward the moon. Sizes in % so
+ * the layout is identical for small and large cards. */
+.rocket-slot-art-rocket {
+  position: absolute;
+  top: 32%;
+  left: 38%;
+  width: 22%;
+  height: 28%;
+  transform: rotate(35deg);
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55));
+  z-index: 2;
+}
+
+/* Flame attached to the back of the rocket, inside the rocket group
+ * so it inherits the rocket's rotation and points away from the moon. */
+.rocket-slot-art-flame {
+  position: absolute;
+  bottom: -28%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36%;
+  height: 50%;
+  background: radial-gradient(ellipse at center top, #fef3c7 0%, #fb923c 35%, #ef4444 70%, transparent 100%);
+  border-radius: 50% 50% 40% 40% / 30% 30% 70% 70%;
+  filter: blur(0.8px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ── Large variant — used in the slot preview modal ─────────── */
+.rocket-slot-card-art--large {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+}
+.rocket-slot-card-art--large .rocket-slot-art-moon {
+  top: 22px;
+  right: 22px;
+  width: 60px;
+  height: 60px;
+}
+/* Rocket and flame use percentage units → no large overrides needed.
+ * The single layout works for both small (~140px) and large (~330px)
+ * cards, and the trail's path end stays glued to the flame. */
+.rocket-slot-card-art--large .rocket-slot-art-planet {
+  width: 70%;
+  left: -18%;
+  bottom: -22%;
+}
+.rocket-slot-card-art--large .rocket-slot-art-star {
+  transform: scale(1.4);
+}
+
+/* ── Animated variant (slot preview modal only) ──────────────── */
+.rocket-slot-card-art--animated .rocket-slot-art-rocket {
+  animation: rocket-art-fly 4.2s ease-in-out infinite;
+}
+.rocket-slot-card-art--animated .rocket-slot-art-flame {
+  animation: rocket-art-flame-flicker 0.18s ease-in-out infinite alternate;
+}
+.rocket-slot-card-art--animated .rocket-slot-art-star {
+  animation: rocket-art-twinkle 2.6s ease-in-out infinite;
+}
+.rocket-slot-card-art--animated .rocket-slot-art-star--2 { animation-delay: 0.6s; }
+.rocket-slot-card-art--animated .rocket-slot-art-star--3 { animation-delay: 1.1s; }
+.rocket-slot-card-art--animated .rocket-slot-art-star--4 { animation-delay: 1.5s; }
+.rocket-slot-card-art--animated .rocket-slot-art-star--5 { animation-delay: 0.3s; }
+.rocket-slot-card-art--animated .rocket-slot-art-star--6 { animation-delay: 1.8s; }
+.rocket-slot-card-art--animated .rocket-slot-art-star--7 { animation-delay: 0.9s; }
+.rocket-slot-card-art--animated .rocket-slot-art-star--8 { animation-delay: 2.0s; }
+.rocket-slot-card-art--animated .rocket-slot-art-star--9 { animation-delay: 0.4s; }
+
+/* Slow bob along the flight axis (down-left ↔ up-right) while keeping
+ * the rocket's rotation toward the moon constant. */
+@keyframes rocket-art-fly {
+  0%   { transform: rotate(35deg) translate(0, 4px); }
+  50%  { transform: rotate(35deg) translate(0, -6px); }
+  100% { transform: rotate(35deg) translate(0, 4px); }
+}
+@keyframes rocket-art-flame-flicker {
+  from { transform: translateX(-50%) scale(1, 1);     opacity: 0.95; }
+  to   { transform: translateX(-50%) scale(1.1, 1.2); opacity: 1; }
+}
+@keyframes rocket-art-twinkle {
+  0%, 100% { opacity: 0.9; transform: scale(1); }
+  50%      { opacity: 0.25; transform: scale(0.6); }
+}

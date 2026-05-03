@@ -1109,6 +1109,69 @@ export async function adminResetSlotStats(slotId) {
   return data
 }
 
+// ── Rocket Slot — shared crash rounds ────────────────
+// Architecture: Aviator-style. All players see the SAME round at the
+// same wall-clock moment. Rounds are created lazily by RPC; clients
+// poll get_or_create_current_rocket_round() and also subscribe to the
+// rocket_rounds Realtime channel for live new-round broadcasts.
+
+export async function getOrCreateCurrentRocketRound() {
+  const { data, error } = await supabase.rpc('get_or_create_current_rocket_round')
+  if (error) { console.error('getOrCreateCurrentRocketRound error:', error); return { error: error.message } }
+  return data
+}
+
+export async function getRocketHistory(limit = 24) {
+  const { data, error } = await supabase.rpc('get_rocket_history', { p_limit: limit })
+  if (error) { console.error('getRocketHistory error:', error); return [] }
+  return data ?? []
+}
+
+export async function placeRocketBet(userId, roundId, stakeRub, autoCashMul = null) {
+  const { data, error } = await supabase.rpc('place_rocket_bet', {
+    p_user_id: userId,
+    p_round_id: roundId,
+    p_stake_rub: stakeRub,
+    p_auto_cash_mul: autoCashMul,
+  })
+  if (error) { console.error('placeRocketBet error:', error); return { error: error.message } }
+  return data
+}
+
+// Server computes the live multiplier from its own clock; pass the
+// client's claimed multiplier (auto-cash hits) so the server can clamp
+// payout at that value rather than rewarding network jitter.
+export async function cashoutRocketBet(betId, atMul = null) {
+  const { data, error } = await supabase.rpc('cashout_rocket_bet', {
+    p_bet_id: betId,
+    p_at_mul: atMul,
+  })
+  if (error) { console.error('cashoutRocketBet error:', error); return { error: error.message } }
+  return data
+}
+
+export async function getMyRocketBet(userId, roundId) {
+  const { data, error } = await supabase.rpc('get_my_rocket_bet', {
+    p_user_id: userId,
+    p_round_id: roundId,
+  })
+  if (error) { console.error('getMyRocketBet error:', error); return null }
+  return data
+}
+
+// Subscribe to new rocket rounds. Callback fires with the freshly
+// inserted round row. Returns the channel — caller must channel.unsubscribe()
+// on cleanup.
+export function subscribeRocketRounds(onNewRound) {
+  const channel = supabase
+    .channel('rocket_rounds_inserts')
+    .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'rocket_rounds' },
+        (payload) => onNewRound(payload.new))
+    .subscribe()
+  return channel
+}
+
 // ── Online counters per game ───────────────
 // Returns { game_type → real_online_count }. Front-end blends with
 // a time-varying "fake" boost so the displayed number always feels

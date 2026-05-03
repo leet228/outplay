@@ -11,6 +11,9 @@ import { formatCurrency } from '../lib/currency'
 import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendsData, sendGameInvite, acceptGameInvite, rejectGameInvite, cancelAllPendingInvites, getPendingInvites, getGameOnlineCounts } from '../lib/supabase'
 import { GAME_CARD_ART } from '../lib/gameAssets'
 import './Home.css'
+// Imported here so the home-page rocket card art styles ship with Home,
+// not just when the player opens the slot itself.
+import './RocketSlot.css'
 
 /* ── Icons ── */
 function QuizIcon() {
@@ -1425,6 +1428,15 @@ const SLOTS = [
     shadow: '#7c2d12',
   },
   {
+    id: 'rocket',
+    category: 'quick',
+    titleKey: 'slotRocketTitle',
+    subKey: 'slotRocketSub',
+    route: '/slots/rocket',
+    accent: '#ec4899',
+    shadow: '#581c87',
+  },
+  {
     id: 'tetris-cascade',
     category: 'popular',
     titleKey: 'slotTetrisTitle',
@@ -1544,6 +1556,85 @@ function TetrisSlotArtwork({ large = false, animated = false }) {
   )
 }
 
+// Rocket Slot — Aviator-style crash card art. Static "frozen mid-flight"
+// scene: night sky with moon and planet, dense star field, curved exhaust
+// trail rising from the planet to the rocket in the upper-right corner.
+// Animated variant adds slow rocket bob + flame flicker + trail pulse
+// for the preview modal.
+function RocketSlotArtwork({ large = false, animated = false }) {
+  return (
+    <div className={`rocket-slot-card-art ${large ? 'rocket-slot-card-art--large' : ''} ${animated ? 'rocket-slot-card-art--animated' : ''}`} aria-hidden="true">
+      {/* Sky / nebula glow */}
+      <span className="rocket-slot-art-nebula" />
+
+      {/* Moon top-right */}
+      <span className="rocket-slot-art-moon">
+        <span className="rocket-slot-art-moon-crater rocket-slot-art-moon-crater--a" />
+        <span className="rocket-slot-art-moon-crater rocket-slot-art-moon-crater--b" />
+        <span className="rocket-slot-art-moon-crater rocket-slot-art-moon-crater--c" />
+      </span>
+
+      {/* Star field — mix of sizes for depth */}
+      <span className="rocket-slot-art-stars">
+        <span className="rocket-slot-art-star rocket-slot-art-star--1" />
+        <span className="rocket-slot-art-star rocket-slot-art-star--2" />
+        <span className="rocket-slot-art-star rocket-slot-art-star--3" />
+        <span className="rocket-slot-art-star rocket-slot-art-star--4" />
+        <span className="rocket-slot-art-star rocket-slot-art-star--5" />
+        <span className="rocket-slot-art-star rocket-slot-art-star--6" />
+        <span className="rocket-slot-art-star rocket-slot-art-star--7" />
+        <span className="rocket-slot-art-star rocket-slot-art-star--8" />
+        <span className="rocket-slot-art-star rocket-slot-art-star--9" />
+      </span>
+
+      {/* Planet at bottom-left — the world the rocket is leaving behind. */}
+      <span className="rocket-slot-art-planet">
+        <span className="rocket-slot-art-planet-stripe" />
+      </span>
+
+      {/* Rocket — sits between the planet (bottom-left) and the moon
+          (top-right), tilted so its nose points up-right toward the
+          moon. Animated bob in the preview modal keeps the rotation. */}
+      <span className="rocket-slot-art-rocket">
+        <span className="rocket-slot-art-flame" />
+        <svg viewBox="0 0 28 40" width="100%" height="100%" aria-hidden="true">
+          <defs>
+            <linearGradient id="rkt-art-body" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"  stopColor="#fef3c7" />
+              <stop offset="100%" stopColor="#fb7185" />
+            </linearGradient>
+          </defs>
+          <path d="M14 1.5 C20 7 22 14 22 22 L22 30 L6 30 L6 22 C6 14 8 7 14 1.5 Z"
+                fill="url(#rkt-art-body)" stroke="#9f1239" strokeWidth="1.1" />
+          <circle cx="14" cy="14.5" r="3.4" fill="#0ea5e9" stroke="#082f49" strokeWidth="1" />
+          <circle cx="13" cy="13.5" r="0.9" fill="#bae6fd" />
+          <path d="M6 24 L1 33 L6 31 Z" fill="#fb7185" stroke="#9f1239" strokeWidth="0.7" />
+          <path d="M22 24 L27 33 L22 31 Z" fill="#fb7185" stroke="#9f1239" strokeWidth="0.7" />
+          <rect x="6" y="28" width="16" height="2" fill="#9f1239" />
+        </svg>
+      </span>
+    </div>
+  )
+}
+
+function renderSlotArtwork(slot, opts = {}) {
+  if (slot.id === 'tetris-cascade') return <TetrisSlotArtwork {...opts} />
+  if (slot.id === 'rocket')         return <RocketSlotArtwork {...opts} />
+  return <TowerSlotArtwork {...opts} />
+}
+
+function slotKickerKey(id) {
+  if (id === 'tetris-cascade') return 'slotTetrisKicker'
+  if (id === 'rocket')         return 'slotRocketKicker'
+  return 'slotTowerKicker'
+}
+
+function slotPreviewKey(id) {
+  if (id === 'tetris-cascade') return 'slotTetrisPreview'
+  if (id === 'rocket')         return 'slotRocketPreview'
+  return 'slotTowerPreview'
+}
+
 function SlotPreview({ slot, t, onClose }) {
   const navigate = useNavigate()
 
@@ -1589,16 +1680,12 @@ function SlotPreview({ slot, t, onClose }) {
           </svg>
         </button>
         <div className="slot-preview-visual">
-          {slot.id === 'tetris-cascade'
-            ? <TetrisSlotArtwork large animated />
-            : <TowerSlotArtwork large animated />}
+          {renderSlotArtwork(slot, { large: true, animated: true })}
         </div>
         <div className="slot-preview-copy">
-          <span className="slot-preview-kicker">
-            {slot.id === 'tetris-cascade' ? t.slotTetrisKicker : t.slotTowerKicker}
-          </span>
+          <span className="slot-preview-kicker">{t[slotKickerKey(slot.id)]}</span>
           <h3>{t[slot.titleKey]}</h3>
-          <p>{slot.id === 'tetris-cascade' ? t.slotTetrisPreview : t.slotTowerPreview}</p>
+          <p>{t[slotPreviewKey(slot.id)]}</p>
         </div>
         <button className="slot-preview-play" type="button" onClick={handlePlay}>
           {t.slotPlay}
@@ -1844,7 +1931,7 @@ export default function Home() {
                     style={{ '--slot-accent': slot.accent, '--slot-shadow': slot.shadow }}
                     onClick={() => handleSlotTap(slot)}
                   >
-                    <TowerSlotArtwork />
+                    {renderSlotArtwork(slot)}
                     <span className="slot-card-title">{t[slot.titleKey]}</span>
                   </button>
                 ))}
@@ -1873,7 +1960,7 @@ export default function Home() {
                     style={{ '--slot-accent': slot.accent, '--slot-shadow': slot.shadow }}
                     onClick={() => handleSlotTap(slot)}
                   >
-                    {slot.id === 'tetris-cascade' ? <TetrisSlotArtwork /> : <TowerSlotArtwork />}
+                    {renderSlotArtwork(slot)}
                     <span className="slot-card-title">{t[slot.titleKey]}</span>
                   </button>
                 ))}
