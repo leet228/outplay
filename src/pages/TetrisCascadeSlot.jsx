@@ -30,6 +30,7 @@ const BONUS_FREE_SPINS = 10
 const BONUS_PIECE_MULS = [2, 3, 5, 10] // each cell carries one of these in bonus
 const RAGE_MAX = 6              // line clears in bonus to fill the rage meter
 const PERFECT_CLEAR_WIN_MUL = 5000
+const BUY_BONUS_COST_MUL = 100  // buy-in price = stake × this
 
 // Tetromino shapes (single rotation each).
 const PIECES = {
@@ -380,6 +381,7 @@ export default function TetrisCascadeSlot() {
   const [bigText, setBigText] = useState(null)
   const [autoSpin, setAutoSpin] = useState(false)
   const [exitConfirm, setExitConfirm] = useState(false)
+  const [buyBonusOpen, setBuyBonusOpen] = useState(false)
 
   // ── Bonus state ──
   const [isBonus, setIsBonus] = useState(false)
@@ -780,9 +782,100 @@ export default function TetrisCascadeSlot() {
     navigate('/')
   }
 
+  // ── Buy bonus ──
+  function onBuyBonusClick() {
+    if (isBusy || isBonus || autoSpin) return
+    if (balance < stake * BUY_BONUS_COST_MUL) return
+    haptic('light')
+    setBuyBonusOpen(true)
+  }
+
+  async function confirmBuyBonus() {
+    const cost = stakeRef.current * BUY_BONUS_COST_MUL
+    if (balanceRef.current < cost) return
+    haptic('success')
+    setBuyBonusOpen(false)
+    setBalance(balanceRef.current - cost)
+    balanceRef.current = balanceRef.current - cost
+    await runBoughtBonus()
+  }
+
+  // Special "spin" played after buying — no real round, just plops 5
+  // scatters onto an empty grid, then runs the standard bonus trigger
+  // (sweep + celebration banner + auto-start the free-spin chain).
+  async function runBoughtBonus() {
+    if (cancelRef.current) return
+    haptic('medium')
+    setTotalWin(0)
+    setCascadeStep(0)
+    setBigText(null)
+
+    let g = makeEmptyGrid()
+    setGrid(g)
+    setPhase('dropping')
+
+    // Drop 5 coin scatters into 5 evenly spaced columns.
+    const cols = [1, 3, 5, 7, 9]
+    for (const c of cols) {
+      if (cancelRef.current) return
+      const piece = { kind: 'coin', cells: [[0, 0]], color: 'coin' }
+      const { grid: ng } = dropPiece(g, piece, c)
+      g = ng
+      setGrid(g.map(row => [...row]))
+      await sleep(200)
+    }
+    await sleep(380)
+    if (cancelRef.current) return
+
+    // Sweep them with a flash + collapse — same animation as a natural trigger.
+    const coinCellSet = new Set()
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (isCellCoin(g[r][c])) coinCellSet.add(`${c},${r}`)
+      }
+    }
+    if (coinCellSet.size > 0) {
+      setGrid(markClearing(g, coinCellSet))
+      haptic('success')
+      await sleep(520)
+      if (cancelRef.current) return
+      g = applyGravity(g, coinCellSet)
+      setGrid(g.map(row => [...row]))
+      await sleep(280)
+    }
+
+    // Celebration banner.
+    setBigText({
+      kind: 'bonus',
+      label: t.slotTetrisBonusTrigger,
+      subLabel: `${BONUS_FREE_SPINS} ${t.slotTetrisFreeSpinsWord}`,
+      mul: 0,
+    })
+    haptic('success')
+    await sleep(2000)
+    setBigText(null)
+
+    // Activate bonus and chain the first free spin.
+    setIsBonus(true)
+    isBonusRef.current = true
+    setFreeSpinsLeft(BONUS_FREE_SPINS)
+    freeSpinsLeftRef.current = BONUS_FREE_SPINS
+    setRage(0)
+    rageRef.current = 0
+    setForceNextI(false)
+    forceNextIRef.current = false
+    setPhase('done')
+
+    await sleep(450)
+    if (cancelRef.current) return
+    runSpin(true)
+  }
+
   const stakeUpDisabled = isBusy || isBonus || stakeIndex >= BETS.length - 1 || (BETS[stakeIndex + 1] !== undefined && BETS[stakeIndex + 1] > balance)
   const stakeDownDisabled = isBusy || isBonus || stakeIndex <= 0
   const winLabel = totalWin > 0 ? `+${formatCurrency(totalWin, currency, rates)}` : null
+  const buyBonusCost = stake * BUY_BONUS_COST_MUL
+  const canBuyBonus = !isBusy && !isBonus && !autoSpin && balance >= buyBonusCost
 
   return (
     <div className={`tetris-slot-page tetris-slot-page--${phase} ${isBonus ? 'tetris-slot-page--bonus' : ''}`}>
@@ -871,6 +964,26 @@ export default function TetrisCascadeSlot() {
             </div>
           )}
         </main>
+
+        {!isBonus && (
+          <button
+            type="button"
+            className="tetris-buy-bonus"
+            onClick={onBuyBonusClick}
+            disabled={!canBuyBonus}
+          >
+            <span className="tetris-buy-bonus-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 2.6 L14.4 8.7 L20.9 9.2 L15.9 13.4 L17.5 19.7 L12 16 L6.5 19.7 L8.1 13.4 L3.1 9.2 L9.6 8.7 Z" fill="currentColor" />
+              </svg>
+            </span>
+            <span className="tetris-buy-bonus-label">
+              <span className="tetris-buy-bonus-title">{t.slotTetrisBuyBonus}</span>
+              <span className="tetris-buy-bonus-sub">{BONUS_FREE_SPINS} {t.slotTetrisFreeSpinsWord}</span>
+            </span>
+            <span className="tetris-buy-bonus-price">{formatCurrency(buyBonusCost, currency, rates)}</span>
+          </button>
+        )}
 
         <div className={`tetris-winbar ${totalWin > 0 ? 'is-win' : ''}`}>
           <span className="tetris-winbar-label">{t.slotPotential}</span>
@@ -961,6 +1074,45 @@ export default function TetrisCascadeSlot() {
             <div className="tetris-exit-actions">
               <button type="button" onClick={() => { haptic('light'); setExitConfirm(false) }}>{t.slotExitStay}</button>
               <button type="button" onClick={confirmExit}>{t.slotExitLeave}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {buyBonusOpen && (
+        <div className="tetris-buy-backdrop" onClick={() => { haptic('light'); setBuyBonusOpen(false) }}>
+          <div className="tetris-buy-card" onClick={e => e.stopPropagation()}>
+            <div className="tetris-buy-card-glow" aria-hidden="true" />
+            <div className="tetris-buy-card-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 2.6 L14.4 8.7 L20.9 9.2 L15.9 13.4 L17.5 19.7 L12 16 L6.5 19.7 L8.1 13.4 L3.1 9.2 L9.6 8.7 Z" fill="currentColor" />
+              </svg>
+            </div>
+            <h3 className="tetris-buy-card-title">{t.slotTetrisBuyBonusTitle}</h3>
+            <p className="tetris-buy-card-headline">{BONUS_FREE_SPINS} {t.slotTetrisFreeSpinsWord}</p>
+            <ul className="tetris-buy-card-features">
+              <li>{t.slotTetrisBuyBonusFeatureMul}</li>
+              <li>{t.slotTetrisBuyBonusFeatureRage}</li>
+              <li>{t.slotTetrisBuyBonusFeaturePerfect}</li>
+            </ul>
+            <div className="tetris-buy-card-price">
+              <span>{t.slotTetrisBuyBonusPriceLabel}</span>
+              <strong>{formatCurrency(buyBonusCost, currency, rates)}</strong>
+            </div>
+            <div className="tetris-buy-card-actions">
+              <button type="button" className="tetris-buy-cancel" onClick={() => { haptic('light'); setBuyBonusOpen(false) }}>
+                {t.slotTetrisBuyBonusCancel}
+              </button>
+              <button
+                type="button"
+                className="tetris-buy-confirm"
+                onClick={confirmBuyBonus}
+                disabled={balance < buyBonusCost}
+              >
+                {balance < buyBonusCost
+                  ? t.slotTetrisBuyBonusInsufficient
+                  : t.slotTetrisBuyBonusConfirm}
+              </button>
             </div>
           </div>
         </div>
