@@ -182,18 +182,26 @@ DECLARE
   v_crashed_at      TIMESTAMPTZ;
   v_hold_until      TIMESTAMPTZ;
   v_round           rocket_rounds;
+  v_prev_id         BIGINT;
 BEGIN
+  -- Settle the previous round's leftover pending bets and mark it
+  -- finished, all in this same transaction.
+  SELECT id INTO v_prev_id
+    FROM rocket_rounds
+   WHERE status <> 'finished'
+   ORDER BY id DESC
+   LIMIT 1;
+  IF v_prev_id IS NOT NULL THEN
+    PERFORM rocket_settle_round_losses(v_prev_id);
+    UPDATE rocket_rounds SET status = 'finished' WHERE id = v_prev_id;
+  END IF;
+
   v_bias := rocket_decide_bias();
   v_crash := rocket_pick_crash(v_bias);
   v_flight_seconds := rocket_flight_seconds(v_crash);
   v_betting_until := NOW() + INTERVAL '5 seconds';
   v_crashed_at    := v_betting_until + (v_flight_seconds || ' seconds')::INTERVAL;
   v_hold_until    := v_crashed_at + INTERVAL '3 seconds';
-
-  -- Mark every previous still-open round as 'finished' BEFORE inserting
-  -- the new one, so the lobby always has exactly one active round.
-  UPDATE rocket_rounds SET status = 'finished'
-   WHERE status <> 'finished';
 
   INSERT INTO rocket_rounds (
     crash_at_mul, rtp_bias, betting_until, flying_started_at,
@@ -211,8 +219,11 @@ $$;
 
 
 -- get_or_create_current_rocket_round() — main read endpoint.
--- Reads the most recent round; if it has already passed hold_until,
--- closes any still-pending bets on it as 'lost' and creates a new one.
+-- Reads the most recent round and returns it if still within
+-- hold_until. Otherwise lazily creates the next round (which also
+-- settles the previous round's pending bets in the same transaction).
+-- NEVER writes on the hot path — phase is computed by the caller from
+-- timestamps, so we don't need to bump status row-by-row.
 CREATE OR REPLACE FUNCTION get_or_create_current_rocket_round()
 RETURNS rocket_rounds
 LANGUAGE plpgsql VOLATILE
@@ -222,42 +233,33 @@ AS $$
 DECLARE
   v_round rocket_rounds;
 BEGIN
-  -- Lock the latest row briefly to avoid two clients racing to create
-  -- two new rounds. Postgres advisory lock keeps it cheap.
-  PERFORM pg_advisory_xact_lock(72321);
-
   SELECT * INTO v_round
     FROM rocket_rounds
    ORDER BY id DESC
    LIMIT 1;
 
-  -- No rounds yet → create the very first one.
+  -- No rounds at all → create the first under an advisory lock so two
+  -- concurrent first-callers don't both INSERT.
   IF v_round.id IS NULL THEN
-    v_round := rocket_create_round();
+    PERFORM pg_advisory_xact_lock(72321);
+    SELECT * INTO v_round FROM rocket_rounds ORDER BY id DESC LIMIT 1;
+    IF v_round.id IS NULL THEN
+      v_round := rocket_create_round();
+    END IF;
     RETURN v_round;
   END IF;
 
-  -- Current round still active (anywhere in betting / flying / crash hold).
+  -- Current round still within its visible window → no writes.
   IF NOW() < v_round.hold_until THEN
-    -- Sync status if time has rolled past a phase boundary but the row
-    -- wasn't updated yet (no client called us at the boundary).
-    IF v_round.status = 'betting' AND NOW() >= v_round.betting_until THEN
-      UPDATE rocket_rounds SET status = 'flying' WHERE id = v_round.id;
-      v_round.status := 'flying';
-    END IF;
-    IF v_round.status = 'flying' AND NOW() >= v_round.crashed_at THEN
-      UPDATE rocket_rounds SET status = 'crashed' WHERE id = v_round.id;
-      v_round.status := 'crashed';
-      -- All pending bets on a finished flight are losses.
-      PERFORM rocket_settle_round_losses(v_round.id);
-    END IF;
     RETURN v_round;
   END IF;
 
-  -- Hold is over → settle losses, mark finished, spawn next round.
-  IF v_round.status <> 'finished' THEN
-    PERFORM rocket_settle_round_losses(v_round.id);
-    UPDATE rocket_rounds SET status = 'finished' WHERE id = v_round.id;
+  -- Hold expired → spawn next round (under advisory lock, with a
+  -- second peek inside the lock in case another client beat us to it).
+  PERFORM pg_advisory_xact_lock(72321);
+  SELECT * INTO v_round FROM rocket_rounds ORDER BY id DESC LIMIT 1;
+  IF NOW() < v_round.hold_until THEN
+    RETURN v_round;
   END IF;
 
   v_round := rocket_create_round();

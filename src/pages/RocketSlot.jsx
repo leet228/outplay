@@ -21,10 +21,14 @@ const HISTORY_SIZE = 24
 const AUTO_CASH_OPTIONS = [1.5, 2, 2.5, 3, 5, 10]
 
 const GROWTH_BASE = 1.06          // multiplier(t) = 1.06^t (t in seconds)
-// Polling cadence for the shared round — Realtime broadcasts new rounds
-// instantly, but we re-poll every 2s as a backstop and to drive the
-// lazy-creation RPC when the previous round's hold window expires.
-const ROUND_POLL_MS = 2000
+// Frame interval for the multiplier readout / auto-cash check. 10fps
+// is plenty for digit changes — going higher just burns React renders.
+const FRAME_INTERVAL_MS = 100
+// Backstop poll — fires only if no Realtime INSERT has been seen for a
+// long while AND the current round is well past its hold window. This
+// is purely defensive; the normal flow is event-driven (Realtime +
+// per-round setTimeout to fetch the next round once the hold expires).
+const BACKSTOP_POLL_MS = 30_000
 // Visual reference for the betting progress bar — server's window is
 // also 5s, kept in sync with migration_rocket_slot.sql.
 const BETTING_DURATION_MS = 5000
@@ -240,25 +244,47 @@ export default function RocketSlot() {
     }
 
     // ── SERVER mode ────────────────────────────────────────────────
-    let pollTimer = null
+    // Event-driven loop:
+    //   * Realtime channel listens for INSERTs on rocket_rounds — every
+    //     client learns about new rounds the moment one is created.
+    //   * On mount we pull the current round once.
+    //   * After that, a single setTimeout wakes us right at hold_until
+    //     to pull / lazy-create the next round. ONE RPC per round, not
+    //     30 per minute.
+    //   * A 30s backstop interval covers the unlikely case of both the
+    //     Realtime broadcast AND our scheduled wake-up missing.
+    //   * 10fps frame ticker drives the multiplier readout + auto-cash.
     let frameTimer = null
+    let nextRoundTimer = null
+    let backstopTimer = null
     let channel = null
 
-    async function pullRound() {
-      if (cancelRef.current) return
-      const round = await getOrCreateCurrentRocketRound()
+    function applyRoundUpdate(round) {
       if (!round || round.error) return
-      // New round? → previous round finished; push its crash to history.
       const prev = roundRef.current
       if (prev && prev.id !== round.id && lastHistoryIdRef.current !== prev.id) {
         lastHistoryIdRef.current = prev.id
         setHistory(h => [...h, Number(prev.crash_at_mul)].slice(-HISTORY_SIZE))
-        // Reset the bet block — bet only lives within one round.
+        // Bets only live within one round — reset on the boundary.
         setBet(null); betRef.current = null
         setCashedAt(null); cashedAtRef.current = null
         setCashedWin(0)
       }
       roundRef.current = round
+      scheduleNextRoundWakeup(round)
+    }
+
+    function scheduleNextRoundWakeup(round) {
+      if (nextRoundTimer) clearTimeout(nextRoundTimer)
+      const holdUntil = new Date(round.hold_until).getTime()
+      // +120ms buffer so server clock has definitely crossed hold_until
+      // by the time we ask it for the next round.
+      const delay = Math.max(50, holdUntil - Date.now() + 120)
+      nextRoundTimer = setTimeout(async () => {
+        if (cancelRef.current) return
+        const next = await getOrCreateCurrentRocketRound()
+        applyRoundUpdate(next)
+      }, delay)
     }
 
     function frameTick() {
@@ -271,8 +297,7 @@ export default function RocketSlot() {
           setMultiplier(snap.multiplier)
           setBettingTimeLeft(snap.bettingTimeLeft)
           if (snap.phase === 'crashed') setCrashedAt(snap.crashAt)
-          else if (snap.phase !== 'crashed') setCrashedAt(null)
-          // Auto cash-out — server gets the claimed multiplier.
+          else setCrashedAt(null)
           const auto = autoCashRef.current
           if (snap.phase === 'flying' && betRef.current
               && cashedAtRef.current === null
@@ -280,44 +305,44 @@ export default function RocketSlot() {
               && snap.multiplier >= auto) {
             performCashOutServer(auto)
           }
-          // Hold expired → ping for the next round immediately.
-          if (snap.phase === 'idle') pullRound()
         }
       }
-      frameTimer = requestAnimationFrame(frameTick)
     }
 
-    // Initial load
+    // Initial load — history + first round pull.
     Promise.all([
       getRocketHistory(HISTORY_SIZE).then(rows => {
         if (Array.isArray(rows)) {
-          // Server returns DESC; reverse so newest sits at the right of the row.
           setHistory(rows.slice().reverse().map(r => Number(r.crash_at_mul)))
         }
       }),
-      pullRound(),
+      getOrCreateCurrentRocketRound().then(applyRoundUpdate),
     ]).catch(() => {})
 
-    // Realtime — instant new-round broadcast.
-    channel = subscribeRocketRounds((newRound) => {
-      const prev = roundRef.current
-      if (prev && prev.id !== newRound.id && lastHistoryIdRef.current !== prev.id) {
-        lastHistoryIdRef.current = prev.id
-        setHistory(h => [...h, Number(prev.crash_at_mul)].slice(-HISTORY_SIZE))
-        setBet(null); betRef.current = null
-        setCashedAt(null); cashedAtRef.current = null
-        setCashedWin(0)
-      }
-      roundRef.current = newRound
-    })
+    // Realtime — instant new-round broadcast (no client even needs to
+    // ask the server when a new round comes in).
+    channel = subscribeRocketRounds(applyRoundUpdate)
 
-    pollTimer = setInterval(pullRound, ROUND_POLL_MS)
-    frameTimer = requestAnimationFrame(frameTick)
+    frameTimer = setInterval(frameTick, FRAME_INTERVAL_MS)
+
+    // Backstop: if for some reason Realtime AND our setTimeout both
+    // missed an event and the visible round is stale by 5+ seconds,
+    // pull a fresh one. Interval is sparse so it's basically free.
+    backstopTimer = setInterval(async () => {
+      const round = roundRef.current
+      if (!round) return
+      const holdUntil = new Date(round.hold_until).getTime()
+      if (Date.now() > holdUntil + 5000) {
+        const next = await getOrCreateCurrentRocketRound()
+        applyRoundUpdate(next)
+      }
+    }, BACKSTOP_POLL_MS)
 
     return () => {
-      if (pollTimer) clearInterval(pollTimer)
-      if (frameTimer) cancelAnimationFrame(frameTimer)
-      if (channel) channel.unsubscribe()
+      if (frameTimer)     clearInterval(frameTimer)
+      if (nextRoundTimer) clearTimeout(nextRoundTimer)
+      if (backstopTimer)  clearInterval(backstopTimer)
+      if (channel)        channel.unsubscribe()
     }
   }, [isDev])
 
