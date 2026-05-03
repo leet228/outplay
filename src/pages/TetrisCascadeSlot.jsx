@@ -30,8 +30,13 @@ const COINS_TO_TRIGGER = 5     // coins on grid after initial drop → bonus
 const BONUS_FREE_SPINS = 10
 const BONUS_PIECE_MULS = [2, 3, 5, 10] // each cell carries one of these in bonus
 const RAGE_MAX = 6              // line clears in bonus to fill the rage meter
-const PERFECT_CLEAR_WIN_MUL = 5000
+// Lowered from 5000 → 1000 to match v2 SQL — RTP-balanced jackpot.
+// The spin-time absolute cap (LEAST(stake × 1000, 200_000)) further
+// limits the visual reveal at very high stakes.
+const PERFECT_CLEAR_WIN_MUL = 1000
 const BUY_BONUS_COST_MUL = 100  // buy-in price = stake × this
+// Single-spin payout cap mirroring the SQL hard cap.
+const SINGLE_SPIN_PAYOUT_CAP = 200000
 
 // Tetromino shapes (single rotation each).
 const PIECES = {
@@ -194,54 +199,63 @@ function pickColumn(grid, piece, opts = {}) {
 }
 
 // Local dev-mode outcome generator. Mirrors the SQL function in
-// migration_tetris_rtp.sql so the slot is playable without a Supabase
-// connection. Used when user is the mock dev user.
+// migration_tetris_rtp_v2.sql so the slot is playable without a
+// Supabase connection. Used when user is the mock dev user.
 function decideTetrisOutcomeDev(stake, isBought) {
   const roll = Math.random()
   let outcome_kind, bonus_kind = null
   if (isBought) {
     outcome_kind = 'bonus'
-    if      (roll < 0.20) bonus_kind = 'empty'
-    else if (roll < 0.55) bonus_kind = 'small'
-    else if (roll < 0.85) bonus_kind = 'medium'
+    if      (roll < 0.35)  bonus_kind = 'empty'
+    else if (roll < 0.70)  bonus_kind = 'small'
+    else if (roll < 0.90)  bonus_kind = 'medium'
     else if (roll < 0.985) bonus_kind = 'big'
-    else                  bonus_kind = 'jackpot'
+    else                   bonus_kind = 'jackpot'
   } else {
-    if      (roll < 0.55) outcome_kind = 'dud'
-    else if (roll < 0.80) outcome_kind = 'small'
-    else if (roll < 0.93) outcome_kind = 'medium'
-    else if (roll < 0.985) outcome_kind = 'big'
-    else if (roll < 0.997) outcome_kind = 'huge'
+    if      (roll < 0.700)  outcome_kind = 'dud'
+    else if (roll < 0.920)  outcome_kind = 'small'
+    else if (roll < 0.980)  outcome_kind = 'medium'
+    else if (roll < 0.995)  outcome_kind = 'big'
+    else if (roll < 0.9993) outcome_kind = 'huge'
     else {
       outcome_kind = 'bonus'
       const r2 = Math.random()
-      if      (r2 < 0.30) bonus_kind = 'small'
-      else if (r2 < 0.75) bonus_kind = 'medium'
-      else if (r2 < 0.95) bonus_kind = 'big'
+      if      (r2 < 0.35) bonus_kind = 'small'
+      else if (r2 < 0.80) bonus_kind = 'medium'
+      else if (r2 < 0.97) bonus_kind = 'big'
       else                bonus_kind = 'jackpot'
     }
   }
   let mul = 0
   if (outcome_kind === 'dud') mul = 0
-  else if (outcome_kind === 'small')  mul = Math.floor(Math.random() * 3) + 1
-  else if (outcome_kind === 'medium') mul = Math.floor(Math.random() * 10) + 5
-  else if (outcome_kind === 'big')    mul = Math.floor(Math.random() * 20) + 20
-  else if (outcome_kind === 'huge')   mul = Math.floor(Math.random() * 50) + 50
+  else if (outcome_kind === 'small')  mul = 1 + Math.floor(Math.random() * 2)         // 1-2
+  else if (outcome_kind === 'medium') mul = 3 + Math.floor(Math.random() * 4)         // 3-6
+  else if (outcome_kind === 'big')    mul = 7 + Math.floor(Math.random() * 7)         // 7-13
+  else if (outcome_kind === 'huge')   mul = 20 + Math.floor(Math.random() * 13)       // 20-32
   else if (outcome_kind === 'bonus') {
-    if      (bonus_kind === 'empty')   mul = Math.floor(Math.random() * 30) + 1
-    else if (bonus_kind === 'small')   mul = Math.floor(Math.random() * 100) + 50
-    else if (bonus_kind === 'medium')  mul = Math.floor(Math.random() * 300) + 200
-    else if (bonus_kind === 'big')     mul = Math.floor(Math.random() * 1500) + 500
-    else if (bonus_kind === 'jackpot') mul = 5000
+    if      (bonus_kind === 'empty')   mul = 1 + Math.floor(Math.random() * 15)       // 1-15
+    else if (bonus_kind === 'small')   mul = 25 + Math.floor(Math.random() * 36)      // 25-60
+    else if (bonus_kind === 'medium')  mul = 75 + Math.floor(Math.random() * 76)      // 75-150
+    else if (bonus_kind === 'big')     mul = 200 + Math.floor(Math.random() * 201)    // 200-400
+    else if (bonus_kind === 'jackpot') mul = 1000
   }
+  // Mirror the SQL hard cap: LEAST(stake × mul, stake × 1000, 200_000)
+  const target = Math.min(stake * mul, stake * 1000, SINGLE_SPIN_PAYOUT_CAP)
   return {
     ok: true,
     round_id: `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     outcome_kind,
-    target_payout_rub: stake * mul,
+    target_payout_rub: target,
     bonus_kind,
     is_bought: isBought,
   }
+}
+
+// Clamp a single-spin payout to the same cap the SQL applies. Used as
+// a defensive filter on bonus slices so a "big bonus on a high stake"
+// can never produce a single free spin paying more than the cap.
+function clampSpinPayout(value, stake) {
+  return Math.min(value, stake * 1000, SINGLE_SPIN_PAYOUT_CAP)
 }
 
 // Slice a bonus round's total payout across N free spins. Used when the
