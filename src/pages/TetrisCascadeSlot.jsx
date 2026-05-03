@@ -170,18 +170,24 @@ function pickColumn(grid, piece) {
 }
 
 // ── Match detection ──
-// Bombs / coins do NOT participate in colour matches, but they DO count
-// as filled for full row / column matches.
+// Bombs / coins block placement (isFilled === true) but neither participates
+// in colour matches, and coins never count towards full row / column
+// completions either — they are inert obstacles.
 function isFilled(cell) {
   return cell !== null && cell !== 'CLEARING'
 }
 
+// A cell that can be part of a full row / column match. Excludes scatter
+// coins so a row containing a coin never clears via line completion.
+function isLineFiller(cell) {
+  return isFilled(cell) && !isCellCoin(cell)
+}
+
 function colourOf(cell) {
   if (!isFilled(cell)) return null
-  if (isCellBomb(cell)) return null
-  // Coins act as wilds for colour runs — they slot into any line, get
-  // cleared with it, and never sit dead on the grid.
-  if (isCellCoin(cell)) return 'wild'
+  // Bombs and scatter coins are inert — they break colour runs and never
+  // participate in colour matches.
+  if (isCellBomb(cell) || isCellCoin(cell)) return null
   return cell.color
 }
 
@@ -195,7 +201,7 @@ function findMatches(grid) {
   const matches = []
 
   for (let r = 0; r < ROWS; r++) {
-    if (grid[r].every(isFilled)) {
+    if (grid[r].every(isLineFiller)) {
       const cells = []
       for (let c = 0; c < COLS; c++) cells.push([c, r])
       matches.push({ type: 'row', cells, mul: 2 })
@@ -205,7 +211,7 @@ function findMatches(grid) {
   for (let c = 0; c < COLS; c++) {
     let full = true
     for (let r = 0; r < ROWS; r++) {
-      if (!isFilled(grid[r][c])) { full = false; break }
+      if (!isLineFiller(grid[r][c])) { full = false; break }
     }
     if (full) {
       const cells = []
@@ -521,10 +527,18 @@ export default function TetrisCascadeSlot() {
     }
     if (bombs.length === 0) return g
 
+    // Build the explosion cellSet, but SKIP any scatter coins — coins are
+    // inert and survive bomb blasts that hit them.
     const cellSet = new Set()
     for (const [bx, by] of bombs) {
-      for (const k of bombExplosionCells(bx, by)) cellSet.add(k)
+      for (const k of bombExplosionCells(bx, by)) {
+        const [x, y] = k.split(',').map(Number)
+        if (isCellCoin(g[y][x])) continue
+        cellSet.add(k)
+      }
     }
+    if (cellSet.size === 0) return g
+
     setBigText({ kind: 'boom', label: t.slotTetrisBoom, mul: 0 })
     setGrid(markClearing(g, cellSet))
     haptic('error')
@@ -645,28 +659,6 @@ export default function TetrisCascadeSlot() {
       setPhase('dropping')
     }
 
-    // ── Sweep any coins still on the grid ──
-    // Coins also act as wilds (so most get cleared by colour runs / row clears
-    // already), but any stragglers get a flash + collapse here so scatters
-    // never just sit there until the next spin.
-    {
-      const trailingCoins = new Set()
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          if (isCellCoin(g[r][c])) trailingCoins.add(`${c},${r}`)
-        }
-      }
-      if (trailingCoins.size > 0) {
-        setGrid(markClearing(g, trailingCoins))
-        haptic(trailingCoins.size >= COINS_TO_TRIGGER ? 'success' : 'medium')
-        await sleep(460)
-        if (cancelRef.current) return
-        g = applyGravity(g, trailingCoins)
-        setGrid(g.map(row => [...row]))
-        await sleep(260)
-      }
-    }
-
     // Perfect Clear (only when bonus active)
     if (bonusThisSpin && isGridEmpty(g)) {
       const perfectWin = currentStake * PERFECT_CLEAR_WIN_MUL
@@ -688,8 +680,25 @@ export default function TetrisCascadeSlot() {
     setPhase('done')
 
     // Bonus trigger from coin scatters (only outside bonus). Coins are
-    // already swept above, so the celebration shows on a clean grid.
+    // inert all spin long; only here, when 5+ have triggered the bonus,
+    // do they finally pop with a flash + collapse — as part of the
+    // celebration animation.
     if (!bonusThisSpin && coinsLanded >= COINS_TO_TRIGGER) {
+      const coinCellSet = new Set()
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (isCellCoin(g[r][c])) coinCellSet.add(`${c},${r}`)
+        }
+      }
+      if (coinCellSet.size > 0) {
+        setGrid(markClearing(g, coinCellSet))
+        haptic('success')
+        await sleep(520)
+        if (cancelRef.current) return
+        g = applyGravity(g, coinCellSet)
+        setGrid(g.map(row => [...row]))
+        await sleep(280)
+      }
       setBigText({
         kind: 'bonus',
         label: t.slotTetrisBonusTrigger,
