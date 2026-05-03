@@ -1514,6 +1514,20 @@ function TetrisSlotArtwork({ large = false, animated = false }) {
     <div className={`tetris-slot-card-art ${large ? 'tetris-slot-card-art--large' : ''} ${animated ? 'tetris-slot-card-art--animated' : ''}`} aria-hidden="true">
       <span className="tetris-slot-art-glow" />
       <div className="tetris-slot-art-grid">
+        {/* Empty grid background — 60 faint cells showing the playfield. */}
+        {Array.from({ length: 60 }).map((_, i) => (
+          <span
+            key={`bg-${i}`}
+            className="tetris-slot-art-bg-cell"
+            style={{
+              gridColumn: (i % 10) + 1,
+              gridRow: Math.floor(i / 10) + 1,
+            }}
+          />
+        ))}
+        {/* Colored tetromino cells. In animated mode each one gets a
+            staggered delay so the playfield slowly fills, holds, then
+            flashes a clear and starts over. */}
         {cells.map((c, i) => (
           <span
             key={i}
@@ -1521,6 +1535,7 @@ function TetrisSlotArtwork({ large = false, animated = false }) {
             style={{
               gridColumn: `${c.x + 1} / span ${c.w}`,
               gridRow: `${c.y + 1} / span ${c.h}`,
+              ...(animated ? { animationDelay: `${i * 0.22}s` } : {}),
             }}
           />
         ))}

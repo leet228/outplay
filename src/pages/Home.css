@@ -3056,6 +3056,13 @@
   border-radius: 26px;
 }
 
+/* Large preview variant — wider grid (no inner frame) so the artwork
+   fills the preview card the same way the home card does. */
+.tetris-slot-card-art--large .tetris-slot-art-grid {
+  width: 90%;
+  gap: 2px;
+}
+
 .tetris-slot-art-glow {
   position: absolute;
   inset: 0;
@@ -3070,17 +3077,28 @@
   display: grid;
   grid-template-columns: repeat(10, 1fr);
   grid-template-rows: repeat(6, 1fr);
-  gap: 1.2px;
-  width: 80%;
+  gap: 1.6px;
+  width: 92%;
   aspect-ratio: 10 / 6;
-  padding: 4px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.55);
-  border: 1.5px solid rgba(99, 102, 241, 0.45);
-  box-shadow: inset 0 0 12px rgba(99, 102, 241, 0.18);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+/* Faint, always-visible cell slots showing the empty playfield. */
+.tetris-slot-art-bg-cell {
+  position: relative;
+  z-index: 1;
+  border-radius: 2px;
+  background: rgba(99, 102, 241, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.06);
 }
 
 .tetris-slot-art-cell {
+  position: relative;
+  z-index: 2;
   border-radius: 2px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.45),
@@ -3095,13 +3113,33 @@
 .tetris-slot-art-cell--green  { background: linear-gradient(180deg, #86efac, #16a34a); }
 .tetris-slot-art-cell--red    { background: linear-gradient(180deg, #fca5a5, #dc2626); }
 
-/* Animated preview — gentle pulse on the bottom row to suggest a clear */
+/* Animated preview — pieces drop in one-by-one (staggered delay), the
+   playfield fills up, holds, then everyone flashes white and clears. 6s
+   loop so the whole thing reads as a slow, calm round of Tetris. */
 .tetris-slot-card-art--animated .tetris-slot-art-cell {
-  animation: tetrisArtPulse 2.4s ease-in-out infinite;
+  animation: tetrisArtFill 6s ease-in-out infinite;
+  opacity: 0;
+  transform-origin: center center;
 }
-@keyframes tetrisArtPulse {
-  0%, 100% { filter: brightness(1); }
-  50%      { filter: brightness(1.18); }
+
+@keyframes tetrisArtFill {
+  0%   { opacity: 0; transform: translateY(-10px) scale(0.7); filter: brightness(1); }
+  6%   { opacity: 0; transform: translateY(-10px) scale(0.7); }
+  14%  { opacity: 1; transform: translateY(0)    scale(1);   filter: brightness(1); }
+  78%  { opacity: 1; transform: translateY(0)    scale(1);   filter: brightness(1); }
+  84%  { opacity: 1; transform: scale(1.12);                  filter: brightness(1.85); }
+  92%  { opacity: 0; transform: scale(0.45);                  filter: brightness(2.4); }
+  100% { opacity: 0; transform: scale(0.45);                  filter: brightness(2.4); }
+}
+
+/* Subtle pulse on the empty grid as the round resets. */
+.tetris-slot-card-art--animated .tetris-slot-art-bg-cell {
+  animation: tetrisArtBgPulse 6s ease-in-out infinite;
+}
+
+@keyframes tetrisArtBgPulse {
+  0%, 92%, 100% { background: rgba(99, 102, 241, 0.10); }
+  88%           { background: rgba(165, 180, 252, 0.20); }
 }
 
 /* Smaller card variant — match smaller padding/border radius */
