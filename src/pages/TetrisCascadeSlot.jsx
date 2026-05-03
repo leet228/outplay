@@ -178,7 +178,10 @@ function isFilled(cell) {
 
 function colourOf(cell) {
   if (!isFilled(cell)) return null
-  if (isCellBomb(cell) || isCellCoin(cell)) return null
+  if (isCellBomb(cell)) return null
+  // Coins act as wilds for colour runs — they slot into any line, get
+  // cleared with it, and never sit dead on the grid.
+  if (isCellCoin(cell)) return 'wild'
   return cell.color
 }
 
@@ -642,6 +645,28 @@ export default function TetrisCascadeSlot() {
       setPhase('dropping')
     }
 
+    // ── Sweep any coins still on the grid ──
+    // Coins also act as wilds (so most get cleared by colour runs / row clears
+    // already), but any stragglers get a flash + collapse here so scatters
+    // never just sit there until the next spin.
+    {
+      const trailingCoins = new Set()
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (isCellCoin(g[r][c])) trailingCoins.add(`${c},${r}`)
+        }
+      }
+      if (trailingCoins.size > 0) {
+        setGrid(markClearing(g, trailingCoins))
+        haptic(trailingCoins.size >= COINS_TO_TRIGGER ? 'success' : 'medium')
+        await sleep(460)
+        if (cancelRef.current) return
+        g = applyGravity(g, trailingCoins)
+        setGrid(g.map(row => [...row]))
+        await sleep(260)
+      }
+    }
+
     // Perfect Clear (only when bonus active)
     if (bonusThisSpin && isGridEmpty(g)) {
       const perfectWin = currentStake * PERFECT_CLEAR_WIN_MUL
@@ -662,25 +687,9 @@ export default function TetrisCascadeSlot() {
     }
     setPhase('done')
 
-    // Bonus trigger from coin scatters (only outside bonus).
+    // Bonus trigger from coin scatters (only outside bonus). Coins are
+    // already swept above, so the celebration shows on a clean grid.
     if (!bonusThisSpin && coinsLanded >= COINS_TO_TRIGGER) {
-      // 1) Sweep the scatter coins off the grid with a flash + collapse,
-      //    so they don't just sit there waiting for the next spin.
-      const coinCellSet = new Set()
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          if (isCellCoin(g[r][c])) coinCellSet.add(`${c},${r}`)
-        }
-      }
-      if (coinCellSet.size > 0) {
-        setGrid(markClearing(g, coinCellSet))
-        haptic('success')
-        await sleep(520)
-        g = applyGravity(g, coinCellSet)
-        setGrid(g.map(row => [...row]))
-        await sleep(280)
-      }
-      // 2) Show the celebration banner: "БОНУС РАУНД!" + "10 ФРИСПИНОВ"
       setBigText({
         kind: 'bonus',
         label: t.slotTetrisBonusTrigger,
