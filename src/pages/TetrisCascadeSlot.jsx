@@ -7,22 +7,31 @@ import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
 import './TetrisCascadeSlot.css'
 
-// Bets ladder (RUB) — same as other slots.
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
 const MIN_BALANCE_RUB = 10
 const SLOT_ID = 'tetris-cascade'
 
-// Playfield 10 wide × 8 tall — larger than v1.
+// Playfield 10 wide × 8 tall.
 const COLS = 10
 const ROWS = 8
 
-// Initial drop fills ~70% of grid; refill on each cascade injects more.
 const INITIAL_PIECES = 14
-const WILD_RATE = 0.08              // chance any spawned piece is wild
-const COLOR_LINE_MIN = 7            // min run length for a colour match
-const MAX_CASCADES = 10              // safety cap on cascade loop
+const COLOR_LINE_MIN = 7
+const MAX_CASCADES = 10
 
-// Tetromino shapes — single rotation each, [x,y] from top-left of bbox.
+// Special piece spawn rates.
+const WILD_RATE = 0.08         // colour wildcard cells
+const BOMB_RATE = 0.04         // 1×1 bombs that explode 3×3 on landing
+const COIN_RATE = 0.045        // 1×1 scatter coins
+const COINS_TO_TRIGGER = 5     // coins on grid after initial drop → bonus
+
+// Bonus configuration.
+const BONUS_FREE_SPINS = 10
+const BONUS_PIECE_MULS = [2, 3, 5, 10] // each cell carries one of these in bonus
+const RAGE_MAX = 6              // line clears in bonus to fill the rage meter
+const PERFECT_CLEAR_WIN_MUL = 5000
+
+// Tetromino shapes (single rotation each).
 const PIECES = {
   I: { color: 'cyan',   cells: [[0,0],[1,0],[2,0],[3,0]] },
   O: { color: 'yellow', cells: [[0,0],[1,0],[0,1],[1,1]] },
@@ -34,10 +43,7 @@ const PIECES = {
 }
 const PIECE_KEYS = Object.keys(PIECES)
 
-// Reward table.
-// Full row:    × 2
-// Full column: × 3 (harder — 8 cells)
-// Colour run length 7→×3, 8→×5, 9→×8, 10→×15
+// Match payouts.
 const COLOR_RUN_MUL = { 7: 3, 8: 5, 9: 8, 10: 15 }
 
 // ── Helpers ──
@@ -49,14 +55,43 @@ function pieceWidth(cells) {
   return Math.max(...cells.map(c => c[0])) + 1
 }
 
-function pickRandomPiece(forceWild) {
-  const k = PIECE_KEYS[Math.floor(Math.random() * PIECE_KEYS.length)]
-  const isWild = forceWild ?? (Math.random() < WILD_RATE)
+// Cells now store an OBJECT { color, mul, kind } instead of a string. null
+// for empty, 'CLEARING' string for the flash phase.
+function cellColor(cell) {
+  if (!cell || cell === 'CLEARING') return null
+  return cell.color
+}
+function isCellWild(cell)   { return cell && cell.kind === 'wild' }
+function isCellBomb(cell)   { return cell && cell.kind === 'bomb' }
+function isCellCoin(cell)   { return cell && cell.kind === 'coin' }
+function cellMul(cell)      { return cell?.mul || 1 }
+
+function pickRandomPiece(opts = {}) {
+  const { forceI, bonus } = opts
+  // Specials only spawn outside the bonus round (kept simple — bonus uses
+  // multipliers instead).
+  if (!bonus && !forceI) {
+    const r = Math.random()
+    if (r < BOMB_RATE) {
+      return { kind: 'bomb', cells: [[0,0]], color: 'bomb' }
+    }
+    if (r < BOMB_RATE + COIN_RATE) {
+      return { kind: 'coin', cells: [[0,0]], color: 'coin' }
+    }
+  }
+  const k = forceI ? 'I' : PIECE_KEYS[Math.floor(Math.random() * PIECE_KEYS.length)]
+  const wild = !bonus && Math.random() < WILD_RATE
   return {
+    kind: wild ? 'wild' : 'tetromino',
     type: k,
     cells: PIECES[k].cells,
-    color: isWild ? 'wild' : PIECES[k].color,
+    color: wild ? 'wild' : PIECES[k].color,
   }
+}
+
+function makeCell(piece) {
+  const base = { kind: piece.kind, color: piece.color, mul: 1 }
+  return base
 }
 
 function canPlace(grid, cells, x, y) {
@@ -68,17 +103,19 @@ function canPlace(grid, cells, x, y) {
   })
 }
 
-function dropPiece(grid, piece, x) {
+function dropPiece(grid, piece, x, mulProvider) {
   let y = 0
   while (canPlace(grid, piece.cells, x, y + 1)) y++
   const newGrid = grid.map(row => [...row])
   for (const [cx, cy] of piece.cells) {
     const gx = x + cx, gy = y + cy
     if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) {
-      newGrid[gy][gx] = piece.color
+      const cell = makeCell(piece)
+      if (mulProvider) cell.mul = mulProvider()
+      newGrid[gy][gx] = cell
     }
   }
-  return { grid: newGrid, y }
+  return { grid: newGrid, landY: y }
 }
 
 function columnHeights(grid) {
@@ -98,14 +135,14 @@ function countHoles(grid) {
   for (let c = 0; c < COLS; c++) {
     let seen = false
     for (let r = 0; r < ROWS; r++) {
-      if (grid[r][c] !== null && grid[r][c] !== 'CLEARING') seen = true
-      else if (seen && grid[r][c] === null) holes++
+      const cell = grid[r][c]
+      if (cell !== null && cell !== 'CLEARING') seen = true
+      else if (seen && cell === null) holes++
     }
   }
   return holes
 }
 
-// Smart-ish column pick — favours line clears, low stacks, no holes.
 function pickColumn(grid, piece) {
   const w = pieceWidth(piece.cells)
   const candidates = []
@@ -133,30 +170,39 @@ function pickColumn(grid, piece) {
 }
 
 // ── Match detection ──
-// A "wild" cell counts as ANY colour for colour runs. Lines / columns
-// just need every cell filled, regardless of colour.
-function colorMatches(a, b) {
-  if (a == null || b == null) return false
-  return a === b || a === 'wild' || b === 'wild'
+// Bombs / coins do NOT participate in colour matches, but they DO count
+// as filled for full row / column matches.
+function isFilled(cell) {
+  return cell !== null && cell !== 'CLEARING'
+}
+
+function colourOf(cell) {
+  if (!isFilled(cell)) return null
+  if (isCellBomb(cell) || isCellCoin(cell)) return null
+  return cell.color
+}
+
+function colourMatchesRun(runColor, cellColorVal) {
+  if (cellColorVal === null) return false
+  if (cellColorVal === 'wild') return true
+  return runColor === 'wild' || runColor === cellColorVal
 }
 
 function findMatches(grid) {
   const matches = []
 
-  // Full horizontal rows
   for (let r = 0; r < ROWS; r++) {
-    if (grid[r].every(cell => cell !== null && cell !== 'CLEARING')) {
+    if (grid[r].every(isFilled)) {
       const cells = []
       for (let c = 0; c < COLS; c++) cells.push([c, r])
       matches.push({ type: 'row', cells, mul: 2 })
     }
   }
 
-  // Full vertical columns
   for (let c = 0; c < COLS; c++) {
     let full = true
     for (let r = 0; r < ROWS; r++) {
-      if (grid[r][c] === null || grid[r][c] === 'CLEARING') { full = false; break }
+      if (!isFilled(grid[r][c])) { full = false; break }
     }
     if (full) {
       const cells = []
@@ -168,88 +214,75 @@ function findMatches(grid) {
   // Horizontal colour runs ≥ COLOR_LINE_MIN
   for (let r = 0; r < ROWS; r++) {
     let runStart = 0
-    let runColor = null    // canonical (non-wild) colour of the run
+    let runColor = null
     let allWild = true
+    const closeRun = (endC) => {
+      const len = endC - runStart
+      if (len >= COLOR_LINE_MIN && runColor !== null && runColor !== 'wild' || (len >= COLOR_LINE_MIN && !allWild)) {
+        // Only emit if we have a real (non-all-wild) colour.
+        if (allWild) return
+        const cells = []
+        for (let i = runStart; i < endC; i++) cells.push([i, r])
+        const mul = COLOR_RUN_MUL[Math.min(len, 10)] || COLOR_RUN_MUL[10]
+        matches.push({ type: 'color-h', cells, mul, color: runColor, len })
+      }
+    }
     for (let c = 0; c <= COLS; c++) {
       const cell = c < COLS ? grid[r][c] : null
-      if (cell == null || cell === 'CLEARING') {
-        // run ends
-        const len = c - runStart
-        if (len >= COLOR_LINE_MIN && runColor !== null && !allWild) {
-          const cells = []
-          for (let i = runStart; i < c; i++) cells.push([i, r])
-          const mul = COLOR_RUN_MUL[Math.min(len, 10)] || COLOR_RUN_MUL[10]
-          matches.push({ type: 'color-h', cells, mul, color: runColor, len })
-        }
+      const cv = colourOf(cell)
+      if (cv === null) {
+        closeRun(c)
         runStart = c + 1
         runColor = null
         allWild = true
       } else if (runColor === null) {
-        // start of a run
         runStart = c
-        if (cell !== 'wild') { runColor = cell; allWild = false }
-        else { runColor = 'wild'; /* allWild stays true until non-wild seen */ }
-      } else if (cell === 'wild') {
-        // wild extends any run
-        // (don't change runColor unless we've never seen real colour)
-        if (runColor === 'wild') { /* still all wild */ }
-      } else if (runColor === 'wild' || runColor === cell) {
-        runColor = cell
-        allWild = false
+        runColor = cv
+        allWild = (cv === 'wild')
+      } else if (colourMatchesRun(runColor, cv)) {
+        if (cv !== 'wild') { runColor = cv; allWild = false }
       } else {
-        // colour mismatch — close run, start new at this cell
-        const len = c - runStart
-        if (len >= COLOR_LINE_MIN && runColor !== null && !allWild) {
-          const cells = []
-          for (let i = runStart; i < c; i++) cells.push([i, r])
-          const mul = COLOR_RUN_MUL[Math.min(len, 10)] || COLOR_RUN_MUL[10]
-          matches.push({ type: 'color-h', cells, mul, color: runColor, len })
-        }
+        closeRun(c)
         runStart = c
-        runColor = cell
-        allWild = (cell === 'wild')
+        runColor = cv
+        allWild = (cv === 'wild')
       }
     }
   }
 
-  // Vertical colour runs ≥ COLOR_LINE_MIN
+  // Vertical colour runs
   for (let c = 0; c < COLS; c++) {
     let runStart = 0
     let runColor = null
     let allWild = true
+    const closeRun = (endR) => {
+      const len = endR - runStart
+      if (len >= COLOR_LINE_MIN && !allWild && runColor !== null && runColor !== 'wild') {
+        const cells = []
+        for (let i = runStart; i < endR; i++) cells.push([c, i])
+        const mul = COLOR_RUN_MUL[Math.min(len, 10)] || COLOR_RUN_MUL[10]
+        matches.push({ type: 'color-v', cells, mul, color: runColor, len })
+      }
+    }
     for (let r = 0; r <= ROWS; r++) {
       const cell = r < ROWS ? grid[r][c] : null
-      if (cell == null || cell === 'CLEARING') {
-        const len = r - runStart
-        if (len >= COLOR_LINE_MIN && runColor !== null && !allWild) {
-          const cells = []
-          for (let i = runStart; i < r; i++) cells.push([c, i])
-          const mul = COLOR_RUN_MUL[Math.min(len, 10)] || COLOR_RUN_MUL[10]
-          matches.push({ type: 'color-v', cells, mul, color: runColor, len })
-        }
+      const cv = colourOf(cell)
+      if (cv === null) {
+        closeRun(r)
         runStart = r + 1
         runColor = null
         allWild = true
       } else if (runColor === null) {
         runStart = r
-        if (cell !== 'wild') { runColor = cell; allWild = false }
-        else { runColor = 'wild' }
-      } else if (cell === 'wild') {
-        // wild extends
-      } else if (runColor === 'wild' || runColor === cell) {
-        runColor = cell
-        allWild = false
+        runColor = cv
+        allWild = (cv === 'wild')
+      } else if (colourMatchesRun(runColor, cv)) {
+        if (cv !== 'wild') { runColor = cv; allWild = false }
       } else {
-        const len = r - runStart
-        if (len >= COLOR_LINE_MIN && runColor !== null && !allWild) {
-          const cells = []
-          for (let i = runStart; i < r; i++) cells.push([c, i])
-          const mul = COLOR_RUN_MUL[Math.min(len, 10)] || COLOR_RUN_MUL[10]
-          matches.push({ type: 'color-v', cells, mul, color: runColor, len })
-        }
+        closeRun(r)
         runStart = r
-        runColor = cell
-        allWild = (cell === 'wild')
+        runColor = cv
+        allWild = (cv === 'wild')
       }
     }
   }
@@ -257,18 +290,15 @@ function findMatches(grid) {
   return matches
 }
 
-// Mark cells as 'CLEARING' in-place for the flash animation.
 function markClearing(grid, cellSet) {
   return grid.map((row, r) =>
     row.map((cell, c) => cellSet.has(`${c},${r}`) ? 'CLEARING' : cell)
   )
 }
 
-// Remove cleared cells AND apply gravity (cells above fall to fill gaps).
 function applyGravity(grid, cellSet) {
   const newGrid = makeEmptyGrid()
   for (let c = 0; c < COLS; c++) {
-    // Collect remaining cells from this column (top→bottom)
     const remaining = []
     for (let r = 0; r < ROWS; r++) {
       const cell = grid[r][c]
@@ -276,12 +306,44 @@ function applyGravity(grid, cellSet) {
         remaining.push(cell)
       }
     }
-    // Drop them to the bottom of the column
     for (let i = 0; i < remaining.length; i++) {
       newGrid[ROWS - 1 - (remaining.length - 1 - i)][c] = remaining[i]
     }
   }
   return newGrid
+}
+
+function isGridEmpty(grid) {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (grid[r][c] !== null && grid[r][c] !== 'CLEARING') return false
+    }
+  }
+  return true
+}
+
+function countCoins(grid) {
+  let n = 0
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (isCellCoin(grid[r][c])) n++
+    }
+  }
+  return n
+}
+
+// 3×3 explosion centred on a bomb at (bx, by). Returns the cell-key set
+// to clear (excluding the bomb itself, which is always cleared too).
+function bombExplosionCells(bx, by) {
+  const set = new Set()
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = bx + dx, y = by + dy
+      if (x < 0 || x >= COLS || y < 0 || y >= ROWS) continue
+      set.add(`${x},${y}`)
+    }
+  }
+  return set
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
@@ -300,15 +362,21 @@ export default function TetrisCascadeSlot() {
     return BETS[0]
   }, [])
 
-  // ── State ──
+  // ── Core state ──
   const [stake, setStake] = useState(initialStake)
   const [grid, setGrid] = useState(makeEmptyGrid())
-  const [phase, setPhase] = useState('ready') // ready | dropping | clearing | done
+  const [phase, setPhase] = useState('ready')
   const [totalWin, setTotalWin] = useState(0)
   const [cascadeStep, setCascadeStep] = useState(0)
   const [bigText, setBigText] = useState(null)
   const [autoSpin, setAutoSpin] = useState(false)
   const [exitConfirm, setExitConfirm] = useState(false)
+
+  // ── Bonus state ──
+  const [isBonus, setIsBonus] = useState(false)
+  const [freeSpinsLeft, setFreeSpinsLeft] = useState(0)
+  const [rage, setRage] = useState(0) // 0..RAGE_MAX
+  const [forceNextI, setForceNextI] = useState(false)
 
   const stakeIndex = BETS.indexOf(stake)
   const isBusy = phase === 'dropping' || phase === 'clearing'
@@ -318,18 +386,26 @@ export default function TetrisCascadeSlot() {
   const balanceRef = useRef(balance)
   const stakeRef = useRef(stake)
   const autoRef = useRef(autoSpin)
+  const isBonusRef = useRef(isBonus)
+  const freeSpinsLeftRef = useRef(freeSpinsLeft)
+  const rageRef = useRef(rage)
+  const forceNextIRef = useRef(forceNextI)
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current = stake }, [stake])
   useEffect(() => { autoRef.current = autoSpin }, [autoSpin])
+  useEffect(() => { isBonusRef.current = isBonus }, [isBonus])
+  useEffect(() => { freeSpinsLeftRef.current = freeSpinsLeft }, [freeSpinsLeft])
+  useEffect(() => { rageRef.current = rage }, [rage])
+  useEffect(() => { forceNextIRef.current = forceNextI }, [forceNextI])
 
-  // ── Telegram BackButton ──
+  // BackButton
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return
     tg.BackButton.show()
     const back = () => {
       haptic('light')
-      if (isBusy || autoSpin) setExitConfirm(true)
+      if (isBusy || autoSpin || isBonus) setExitConfirm(true)
       else navigate('/')
     }
     tg.BackButton.onClick(back)
@@ -337,11 +413,10 @@ export default function TetrisCascadeSlot() {
       tg.BackButton.offClick(back)
       tg.BackButton.hide()
     }
-  }, [navigate, isBusy, autoSpin])
+  }, [navigate, isBusy, autoSpin, isBonus])
 
   useEffect(() => () => { cancelRef.current = true }, [])
 
-  // Auto-clamp stake when balance drops below current.
   useEffect(() => {
     if (isBusy) return
     if (stake <= balance) return
@@ -351,7 +426,7 @@ export default function TetrisCascadeSlot() {
   }, [balance])
 
   function changeStake(direction) {
-    if (isBusy) return
+    if (isBusy || isBonus) return
     const nextIndex = Math.max(0, Math.min(BETS.length - 1, stakeIndex + direction))
     if (nextIndex === stakeIndex) return
     if (direction > 0 && BETS[nextIndex] > balance) return
@@ -359,15 +434,42 @@ export default function TetrisCascadeSlot() {
     setStake(BETS[nextIndex])
   }
 
+  // ── Bomb explosions (run AFTER all initial drops, before match check) ──
+  function handleBombExplosions(g) {
+    // Find all bombs on the grid
+    const explosions = []
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (isCellBomb(g[r][c])) explosions.push([c, r])
+      }
+    }
+    if (explosions.length === 0) return { grid: g, exploded: false }
+    const cellSet = new Set()
+    for (const [bx, by] of explosions) {
+      for (const k of bombExplosionCells(bx, by)) cellSet.add(k)
+    }
+    return { grid: g, cellSet, exploded: true }
+  }
+
   // ── Drop initial pieces ──
-  async function dropInitialPieces(initial) {
+  async function dropInitialPieces(initial, bonus) {
     let g = initial
     for (let i = 0; i < INITIAL_PIECES; i++) {
       if (cancelRef.current) return g
-      const piece = pickRandomPiece()
+      // In bonus, force I-piece if rage was full (consume the buff once).
+      let forceI = false
+      if (bonus && forceNextIRef.current && i === 0) {
+        forceI = true
+        forceNextIRef.current = false
+        setForceNextI(false)
+      }
+      const piece = pickRandomPiece({ bonus, forceI })
       const x = pickColumn(g, piece)
       if (x < 0) continue
-      const { grid: ng } = dropPiece(g, piece, x)
+      const mulProvider = bonus
+        ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
+        : null
+      const { grid: ng } = dropPiece(g, piece, x, mulProvider)
       g = ng
       setGrid(g.map(row => [...row]))
       await sleep(110)
@@ -375,14 +477,16 @@ export default function TetrisCascadeSlot() {
     return g
   }
 
-  // Drop a few new pieces (for refill after cascade).
-  async function dropFillerPieces(g, count) {
+  async function dropFillerPieces(g, count, bonus) {
     for (let i = 0; i < count; i++) {
       if (cancelRef.current) return g
-      const piece = pickRandomPiece()
+      const piece = pickRandomPiece({ bonus })
       const x = pickColumn(g, piece)
       if (x < 0) break
-      const { grid: ng } = dropPiece(g, piece, x)
+      const mulProvider = bonus
+        ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
+        : null
+      const { grid: ng } = dropPiece(g, piece, x, mulProvider)
       g = ng
       setGrid(g.map(row => [...row]))
       await sleep(120)
@@ -390,38 +494,66 @@ export default function TetrisCascadeSlot() {
     return g
   }
 
-  function buildBigText(matches, cascade) {
-    // Pick the most impressive match for the headline.
+  function buildBigText(matches) {
     const sorted = [...matches].sort((a, b) => (b.mul * b.cells.length) - (a.mul * a.cells.length))
     const top = sorted[0]
     if (!top) return null
-    if (top.type === 'row' && matches.filter(m => m.type === 'row').length === 4) {
-      return { kind: 'tetris', mul: top.mul, label: t.slotTetrisTetris }
-    }
-    if (top.type === 'col') {
-      return { kind: 'col', mul: top.mul, label: t.slotTetrisVerticalLine }
-    }
+    const rowCount = matches.filter(m => m.type === 'row').length
+    if (rowCount === 4) return { kind: 'tetris', mul: top.mul, label: t.slotTetrisTetris }
+    if (top.type === 'col') return { kind: 'col', mul: top.mul, label: t.slotTetrisVerticalLine }
     if (top.type === 'color-h' || top.type === 'color-v') {
       return { kind: 'color', mul: top.mul, label: `${t.slotTetrisColorRun} ×${top.len}` }
     }
-    const rowCount = matches.filter(m => m.type === 'row').length
     if (rowCount === 3) return { kind: 'triple', mul: top.mul, label: t.slotTetrisTriple }
     if (rowCount === 2) return { kind: 'double', mul: top.mul, label: t.slotTetrisDouble }
     return { kind: 'line', mul: top.mul, label: t.slotTetrisLineWin }
   }
 
+  async function explodeBombsIfAny(g) {
+    const bombs = []
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (isCellBomb(g[r][c])) bombs.push([c, r])
+      }
+    }
+    if (bombs.length === 0) return g
+
+    const cellSet = new Set()
+    for (const [bx, by] of bombs) {
+      for (const k of bombExplosionCells(bx, by)) cellSet.add(k)
+    }
+    setBigText({ kind: 'boom', label: t.slotTetrisBoom, mul: 0 })
+    setGrid(markClearing(g, cellSet))
+    haptic('error')
+    await sleep(420)
+    g = applyGravity(g, cellSet)
+    setGrid(g.map(row => [...row]))
+    await sleep(360)
+    setBigText(null)
+    return g
+  }
+
   // ── Main spin ──
-  async function runSpin() {
+  async function runSpin(bonusOverride = null) {
     if (cancelRef.current) return
-    if (balanceRef.current < stakeRef.current) {
-      setAutoSpin(false)
-      autoRef.current = false
-      return
+
+    // Are we in a bonus round on this spin?
+    const bonusThisSpin = bonusOverride ?? isBonusRef.current
+
+    if (!bonusThisSpin) {
+      if (balanceRef.current < stakeRef.current) {
+        setAutoSpin(false); autoRef.current = false
+        return
+      }
+      setBalance(balanceRef.current - stakeRef.current)
+    } else {
+      // Free spin — decrement freeSpinsLeft
+      setFreeSpinsLeft(prev => Math.max(0, prev - 1))
+      freeSpinsLeftRef.current = Math.max(0, freeSpinsLeftRef.current - 1)
     }
 
     haptic('medium')
     const currentStake = stakeRef.current
-    setBalance(balanceRef.current - currentStake)
     setTotalWin(0)
     setCascadeStep(0)
     setBigText(null)
@@ -430,7 +562,14 @@ export default function TetrisCascadeSlot() {
     setGrid(g)
     setPhase('dropping')
 
-    g = await dropInitialPieces(g)
+    g = await dropInitialPieces(g, bonusThisSpin)
+    if (cancelRef.current) return
+
+    // Detect coin scatters BEFORE any cascading (so they aren't lost).
+    const coinsLanded = bonusThisSpin ? 0 : countCoins(g)
+
+    // Detonate bombs first (they create gaps for the cascade phase).
+    g = await explodeBombsIfAny(g)
     if (cancelRef.current) return
 
     // Cascade loop
@@ -445,24 +584,33 @@ export default function TetrisCascadeSlot() {
       setCascadeStep(cascade)
       setPhase('clearing')
 
-      // Aggregate cells from all matches.
       const cellSet = new Set()
       let stepWin = 0
       for (const m of matches) {
         for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
-        stepWin += currentStake * m.mul * cascade
+      }
+      // Compute payout — in bonus, sum cell multipliers over all cleared
+      // cells; otherwise fall back to standard match.mul × cascade.
+      if (bonusThisSpin) {
+        let mulSum = 0
+        for (const k of cellSet) {
+          const [x, y] = k.split(',').map(Number)
+          mulSum += cellMul(g[y][x])
+        }
+        const baseLineMul = matches.reduce((s, m) => s + m.mul, 0)
+        stepWin = currentStake * (mulSum + baseLineMul) * cascade
+      } else {
+        stepWin = matches.reduce((s, m) => s + currentStake * m.mul * cascade, 0)
       }
 
-      setBigText(buildBigText(matches, cascade))
+      setBigText(buildBigText(matches))
 
-      // Flash
       const flashGrid = markClearing(g, cellSet)
       setGrid(flashGrid)
       haptic(matches.some(m => m.type === 'col' || m.cells.length >= 9) ? 'success' : 'medium')
       await sleep(420)
       if (cancelRef.current) return
 
-      // Remove + gravity
       g = applyGravity(g, cellSet)
       setGrid(g.map(row => [...row]))
       await sleep(360)
@@ -471,14 +619,42 @@ export default function TetrisCascadeSlot() {
       setTotalWin(win)
       setBigText(null)
 
-      // Refill — drop more pieces from top so the spin can keep cascading.
+      // Rage meter (bonus only)
+      if (bonusThisSpin) {
+        const linesContribution = matches.length
+        const newRage = Math.min(RAGE_MAX, rageRef.current + linesContribution)
+        rageRef.current = newRage
+        setRage(newRage)
+        if (newRage >= RAGE_MAX) {
+          forceNextIRef.current = true
+          setForceNextI(true)
+          rageRef.current = 0
+          setRage(0)
+        }
+      }
+
       const refillCount = 3 + Math.ceil(matches.length * 1.5)
-      g = await dropFillerPieces(g, refillCount)
+      g = await dropFillerPieces(g, refillCount, bonusThisSpin)
+      if (cancelRef.current) return
+      // After refill, more bombs might exist — chain explosions too.
+      g = await explodeBombsIfAny(g)
       if (cancelRef.current) return
       setPhase('dropping')
     }
 
-    // Settle
+    // Perfect Clear (only when bonus active)
+    if (bonusThisSpin && isGridEmpty(g)) {
+      const perfectWin = currentStake * PERFECT_CLEAR_WIN_MUL
+      win += perfectWin
+      setTotalWin(win)
+      setBigText({ kind: 'perfect', label: t.slotTetrisPerfectClear, mul: PERFECT_CLEAR_WIN_MUL })
+      setFreeSpinsLeft(prev => prev + 5)
+      freeSpinsLeftRef.current = freeSpinsLeftRef.current + 5
+      haptic('success')
+      await sleep(1500)
+      setBigText(null)
+    }
+
     if (win > 0) {
       setBalance(balanceRef.current + win)
       setBalanceBounce(true)
@@ -486,24 +662,59 @@ export default function TetrisCascadeSlot() {
     }
     setPhase('done')
 
-    // Auto-spin chain: schedule next spin after a short pause.
-    if (autoRef.current && balanceRef.current >= stakeRef.current && !cancelRef.current) {
+    // Bonus trigger from coin scatters (only outside bonus).
+    if (!bonusThisSpin && coinsLanded >= COINS_TO_TRIGGER) {
+      setBigText({ kind: 'bonus', label: t.slotTetrisBonusTrigger, mul: BONUS_FREE_SPINS })
+      haptic('success')
+      await sleep(1700)
+      setBigText(null)
+      setIsBonus(true)
+      isBonusRef.current = true
+      setFreeSpinsLeft(BONUS_FREE_SPINS)
+      freeSpinsLeftRef.current = BONUS_FREE_SPINS
+      setRage(0)
+      rageRef.current = 0
+      setForceNextI(false)
+      forceNextIRef.current = false
+      // Auto-start the first free spin
+      await sleep(400)
+      runSpin(true)
+      return
+    }
+
+    // Continue bonus round
+    if (bonusThisSpin && freeSpinsLeftRef.current > 0 && !cancelRef.current) {
+      await sleep(900)
+      runSpin(true)
+      return
+    }
+
+    // Bonus complete
+    if (bonusThisSpin && freeSpinsLeftRef.current <= 0) {
+      setIsBonus(false)
+      isBonusRef.current = false
+      setRage(0)
+      rageRef.current = 0
+      setForceNextI(false)
+      forceNextIRef.current = false
+    }
+
+    // Auto-spin chain (paid spins only)
+    if (autoRef.current && !isBonusRef.current && balanceRef.current >= stakeRef.current && !cancelRef.current) {
       await sleep(900)
       if (autoRef.current && !cancelRef.current && balanceRef.current >= stakeRef.current) {
         runSpin()
       } else {
-        setAutoSpin(false)
-        autoRef.current = false
+        setAutoSpin(false); autoRef.current = false
       }
     }
   }
 
   function onSpinClick() {
     if (isBusy) return
+    if (isBonus) return // Bonus drives itself
     if (autoSpin) {
-      // Cancel auto-spin
-      setAutoSpin(false)
-      autoRef.current = false
+      setAutoSpin(false); autoRef.current = false
       return
     }
     if (!canPlay) return
@@ -511,35 +722,47 @@ export default function TetrisCascadeSlot() {
   }
 
   function onAutoSpinClick() {
-    if (isBusy) return
+    if (isBusy || isBonus) return
     if (autoSpin) {
-      setAutoSpin(false)
-      autoRef.current = false
+      setAutoSpin(false); autoRef.current = false
       return
     }
     if (!canPlay) return
-    setAutoSpin(true)
-    autoRef.current = true
+    setAutoSpin(true); autoRef.current = true
     runSpin()
   }
 
   function confirmExit() {
     haptic('medium')
     cancelRef.current = true
-    setAutoSpin(false)
-    autoRef.current = false
+    setAutoSpin(false); autoRef.current = false
     setExitConfirm(false)
     navigate('/')
   }
 
-  const stakeUpDisabled = isBusy || stakeIndex >= BETS.length - 1 || (BETS[stakeIndex + 1] !== undefined && BETS[stakeIndex + 1] > balance)
-  const stakeDownDisabled = isBusy || stakeIndex <= 0
+  const stakeUpDisabled = isBusy || isBonus || stakeIndex >= BETS.length - 1 || (BETS[stakeIndex + 1] !== undefined && BETS[stakeIndex + 1] > balance)
+  const stakeDownDisabled = isBusy || isBonus || stakeIndex <= 0
   const winLabel = totalWin > 0 ? `+${formatCurrency(totalWin, currency, rates)}` : null
 
   return (
-    <div className={`tetris-slot-page tetris-slot-page--${phase}`}>
+    <div className={`tetris-slot-page tetris-slot-page--${phase} ${isBonus ? 'tetris-slot-page--bonus' : ''}`}>
       <div className="tetris-game-window">
-        {/* Playfield — fills most of the screen, no top HUD */}
+        {isBonus && (
+          <div className="tetris-bonus-strip">
+            <div className="tetris-bonus-strip-left">
+              <span className="tetris-bonus-flag">{t.slotTetrisBonusTrigger}</span>
+              <span className="tetris-bonus-spins">{t.slotTetrisFreeSpinsLeft}: <strong>{freeSpinsLeft}</strong></span>
+            </div>
+            <div className="tetris-rage">
+              <span className="tetris-rage-label">{t.slotTetrisRage}</span>
+              <span className="tetris-rage-bar">
+                <span className="tetris-rage-fill" style={{ width: `${(rage / RAGE_MAX) * 100}%` }} />
+              </span>
+              {forceNextI && <span className="tetris-rage-i">I</span>}
+            </div>
+          </div>
+        )}
+
         <main className="tetris-stage" aria-label="Tetris Cascade">
           <div className="tetris-bg" />
           <div className="tetris-grid" style={{ '--cols': COLS, '--rows': ROWS }}>
@@ -548,22 +771,45 @@ export default function TetrisCascadeSlot() {
                 {Array.from({ length: COLS }).map((__, c) => {
                   const cell = grid[r][c]
                   const isClearing = cell === 'CLEARING'
-                  const isWild = cell === 'wild'
-                  const colorClass = !cell || isClearing ? '' :
-                    isWild ? 'tetris-cell--wild' : `tetris-cell--${cell}`
+                  const filled = !isClearing && cell !== null
+                  const wild  = filled && isCellWild(cell)
+                  const bomb  = filled && isCellBomb(cell)
+                  const coin  = filled && isCellCoin(cell)
+                  const colorClass = !filled
+                    ? ''
+                    : bomb ? 'tetris-cell--bomb'
+                    : coin ? 'tetris-cell--coin'
+                    : wild ? 'tetris-cell--wild'
+                    : `tetris-cell--${cell.color}`
+                  const showMul = filled && !bomb && !coin && cell.mul > 1
                   return (
                     <div
                       key={`${r}-${c}`}
-                      className={`tetris-cell ${cell ? 'is-filled' : ''} ${isClearing ? 'is-clearing' : ''} ${colorClass}`}
+                      className={`tetris-cell ${filled ? 'is-filled' : ''} ${isClearing ? 'is-clearing' : ''} ${colorClass}`}
                     >
-                      {cell && !isClearing && !isWild && <span className="tetris-cell-shine" />}
-                      {isWild && (
+                      {filled && !wild && !bomb && !coin && <span className="tetris-cell-shine" />}
+                      {wild && (
                         <span className="tetris-cell-wild-mark">
                           <svg viewBox="0 0 24 24" fill="none">
                             <path d="M12 2l2.4 6.8 7.6.4-5.7 4.6 1.9 7.2-6.2-4.2-6.2 4.2 1.9-7.2L2 9.2l7.6-.4z" fill="#fff" />
                           </svg>
                         </span>
                       )}
+                      {bomb && (
+                        <span className="tetris-cell-bomb-mark">
+                          <span className="tetris-cell-bomb-fuse" />
+                          <span className="tetris-cell-bomb-spark" />
+                        </span>
+                      )}
+                      {coin && (
+                        <span className="tetris-cell-coin-mark">
+                          <svg viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#fbbf24" stroke="#92400e" strokeWidth="1.5" />
+                            <text x="12" y="16" textAnchor="middle" fontSize="11" fontWeight="900" fill="#7c2d12">$</text>
+                          </svg>
+                        </span>
+                      )}
+                      {showMul && <span className="tetris-cell-mul">×{cell.mul}</span>}
                     </div>
                   )
                 })}
@@ -574,12 +820,15 @@ export default function TetrisCascadeSlot() {
           {bigText && (
             <div className={`tetris-big-text tetris-big-text--${bigText.kind}`}>
               <span className="tetris-big-label">{bigText.label}</span>
-              <span className="tetris-big-mul">×{bigText.mul}{cascadeStep > 1 ? ` × c${cascadeStep}` : ''}</span>
+              {bigText.mul > 0 && (
+                <span className="tetris-big-mul">
+                  ×{bigText.mul}{cascadeStep > 1 && bigText.kind !== 'bonus' && bigText.kind !== 'perfect' ? ` × c${cascadeStep}` : ''}
+                </span>
+              )}
             </div>
           )}
         </main>
 
-        {/* Win banner — above the controls panel */}
         <div className={`tetris-winbar ${totalWin > 0 ? 'is-win' : ''}`}>
           <span className="tetris-winbar-label">{t.slotPotential}</span>
           <strong className="tetris-winbar-value">
@@ -590,7 +839,6 @@ export default function TetrisCascadeSlot() {
           )}
         </div>
 
-        {/* Controls — balance, big spin button + auto-spin stacked, stake */}
         <section className="tetris-controls">
           <div className="tetris-balance">
             <span>{t.balance || 'Balance'}</span>
@@ -602,7 +850,7 @@ export default function TetrisCascadeSlot() {
               type="button"
               className={`tetris-spin-btn ${isBusy ? 'is-busy' : ''} ${autoSpin ? 'is-auto' : ''}`}
               onClick={onSpinClick}
-              disabled={!canPlay && !autoSpin}
+              disabled={(!canPlay && !autoSpin) || isBonus}
               aria-label={autoSpin ? t.slotTetrisStop : t.slotTetrisSpin}
             >
               {isBusy ? (
@@ -624,7 +872,7 @@ export default function TetrisCascadeSlot() {
               type="button"
               className={`tetris-auto-btn ${autoSpin ? 'is-auto' : ''}`}
               onClick={onAutoSpinClick}
-              disabled={isBusy && !autoSpin}
+              disabled={(isBusy && !autoSpin) || isBonus}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 {autoSpin ? (
@@ -640,9 +888,8 @@ export default function TetrisCascadeSlot() {
             </button>
           </div>
 
+          {/* Stake column — arrows live in column 1 next to the amount, like Tower Stack. */}
           <div className="tetris-stake">
-            <span>{t.slotTotalBet}</span>
-            <strong>{formatCurrency(stake, currency, rates)}</strong>
             <div className="tetris-stake-buttons">
               <button type="button" onClick={() => changeStake(1)} disabled={stakeUpDisabled} aria-label="Increase">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -654,6 +901,10 @@ export default function TetrisCascadeSlot() {
                   <path d="M7 10l5 5 5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
+            </div>
+            <div className="tetris-stake-info">
+              <span>{t.slotTotalBet}</span>
+              <strong>{formatCurrency(stake, currency, rates)}</strong>
             </div>
           </div>
         </section>

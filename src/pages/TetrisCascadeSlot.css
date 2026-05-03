@@ -306,22 +306,34 @@
   box-shadow: inset 0 1px 0 rgba(165, 180, 252, 0.16);
 }
 
-.tetris-balance,
-.tetris-stake {
+.tetris-balance {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
 }
 
+/* Stake column: arrows in column 1, label + amount stacked in column 2.
+   Mirrors the Tower Stack stepper layout. */
 .tetris-stake {
-  position: relative;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: 26px minmax(0, max-content);
+  column-gap: 8px;
+  align-items: center;
+  justify-content: end;
   text-align: right;
 }
 
+.tetris-stake-info {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
 .tetris-balance > span,
-.tetris-stake > span {
+.tetris-stake-info span {
   font-size: 11px;
   text-transform: uppercase;
   color: rgba(199, 210, 254, 0.5);
@@ -330,18 +342,22 @@
 }
 
 .tetris-balance > strong,
-.tetris-stake > strong {
+.tetris-stake-info strong {
   font-size: 16px;
   color: #fff;
   font-weight: 950;
   white-space: nowrap;
 }
 
+.tetris-stake-info span,
+.tetris-stake-info strong {
+  text-align: right;
+}
+
 .tetris-stake-buttons {
-  position: absolute;
-  left: -34px;
-  top: 50%;
-  transform: translateY(-50%);
+  grid-column: 1;
+  grid-row: 1 / 3;
+  align-self: center;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -356,6 +372,7 @@
   display: grid;
   place-items: center;
   cursor: pointer;
+  transition: transform 0.08s ease, background 0.15s;
 }
 .tetris-stake-buttons button:disabled { opacity: 0.3; }
 .tetris-stake-buttons button:active:not(:disabled) { transform: scale(0.92); }
@@ -496,4 +513,285 @@
 .tetris-exit-actions button:last-child {
   background: linear-gradient(180deg, #6366f1 0%, #4338ca 100%);
   border-color: rgba(165, 180, 252, 0.55);
+}
+
+/* ───────────────────────── BOMB CELL ─────────────────────────
+   Dark fuse-bomb: black sphere with a glowing fuse / spark. */
+.tetris-cell--bomb.is-filled {
+  background:
+    radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.55), transparent 22%),
+    radial-gradient(circle at 50% 55%, #1f2937 0%, #050505 80%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.55),
+    0 0 14px rgba(248, 113, 113, 0.65),
+    0 0 26px rgba(248, 113, 113, 0.35);
+  animation: tetrisCellLand 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+             tetrisBombPulse 0.9s ease-in-out infinite 0.18s;
+}
+
+@keyframes tetrisBombPulse {
+  0%, 100% { box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.55),
+    0 0 14px rgba(248, 113, 113, 0.65),
+    0 0 26px rgba(248, 113, 113, 0.35); }
+  50%      { box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.55),
+    0 0 22px rgba(248, 113, 113, 0.95),
+    0 0 40px rgba(239, 68, 68, 0.55); }
+}
+
+.tetris-cell-bomb-mark {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The fuse — short red line at top-right of the bomb. */
+.tetris-cell-bomb-fuse {
+  position: absolute;
+  top: 6%;
+  right: 24%;
+  width: 12%;
+  height: 26%;
+  background: linear-gradient(180deg, #fb923c, #b45309);
+  border-radius: 2px;
+  transform: rotate(18deg);
+  box-shadow: 0 0 4px rgba(251, 146, 60, 0.7);
+}
+
+/* The spark — yellow/white dot above the fuse, jitters. */
+.tetris-cell-bomb-spark {
+  position: absolute;
+  top: -6%;
+  right: 22%;
+  width: 18%;
+  height: 18%;
+  background: radial-gradient(circle, #fde68a 0%, #f59e0b 50%, transparent 80%);
+  border-radius: 50%;
+  filter: drop-shadow(0 0 4px #fbbf24);
+  animation: tetrisBombSpark 0.45s ease-in-out infinite alternate;
+}
+
+@keyframes tetrisBombSpark {
+  0%   { transform: translate(0, 0) scale(1);     opacity: 0.95; }
+  100% { transform: translate(2px, -2px) scale(1.25); opacity: 0.6; }
+}
+
+/* ───────────────────────── COIN (SCATTER) CELL ───────────────────────── */
+.tetris-cell--coin.is-filled {
+  background:
+    radial-gradient(circle at 50% 45%, #fef3c7 0%, #fbbf24 40%, #b45309 90%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35),
+    0 0 16px rgba(251, 191, 36, 0.7),
+    0 0 30px rgba(251, 191, 36, 0.4);
+  border-radius: 50%;
+  animation: tetrisCellLand 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+             tetrisCoinSpin 2.4s linear infinite 0.18s;
+}
+
+@keyframes tetrisCoinSpin {
+  0%   { filter: brightness(1)   saturate(1); }
+  50%  { filter: brightness(1.25) saturate(1.3); }
+  100% { filter: brightness(1)   saturate(1); }
+}
+
+.tetris-cell-coin-mark {
+  position: absolute;
+  inset: 12%;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+}
+.tetris-cell-coin-mark svg { width: 100%; height: 100%; }
+
+/* ───────────────────────── MULTIPLIER OVERLAY (bonus pieces) ───────────────────────── */
+.tetris-cell-mul {
+  position: absolute;
+  bottom: 1px;
+  right: 2px;
+  z-index: 3;
+  font-size: 10px;
+  font-weight: 950;
+  color: #fff;
+  letter-spacing: -0.4px;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.85),
+    0 0 6px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+/* ───────────────────────── BIG TEXT VARIANTS ───────────────────────── */
+.tetris-big-text--boom .tetris-big-label {
+  font-size: 60px;
+  background: linear-gradient(180deg, #fde047 0%, #f97316 50%, #ef4444 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 22px rgba(248, 113, 113, 0.85));
+  animation: tetrisBoomShake 0.45s ease-in-out;
+}
+
+@keyframes tetrisBoomShake {
+  0%, 100% { transform: scale(1)   rotate(0deg); }
+  20%      { transform: scale(1.1) rotate(-3deg); }
+  40%      { transform: scale(1.04) rotate(3deg); }
+  60%      { transform: scale(1.08) rotate(-2deg); }
+  80%      { transform: scale(1.02) rotate(2deg); }
+}
+
+.tetris-big-text--bonus .tetris-big-label {
+  font-size: 44px;
+  background: linear-gradient(180deg, #fde047 0%, #f97316 60%, #ec4899 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 28px rgba(251, 191, 36, 0.9));
+}
+
+.tetris-big-text--perfect .tetris-big-label {
+  font-size: 50px;
+  background:
+    linear-gradient(90deg, #ec4899, #f97316, #eab308, #22c55e, #06b6d4, #6366f1, #a855f7, #ec4899);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 32px rgba(236, 72, 153, 0.85));
+  animation: tetrisPerfectScroll 1.2s linear infinite;
+}
+
+@keyframes tetrisPerfectScroll {
+  0%   { background-position: 0%   0%; }
+  100% { background-position: 200% 0%; }
+}
+
+/* ───────────────────────── BONUS STRIP (top of game window) ───────────────────────── */
+.tetris-bonus-strip {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 14px 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background:
+    linear-gradient(90deg, rgba(251, 191, 36, 0.18), rgba(236, 72, 153, 0.18));
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 6px 20px rgba(251, 191, 36, 0.18);
+}
+
+.tetris-bonus-strip-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tetris-bonus-flag {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #fde047;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.tetris-bonus-spins {
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.78);
+}
+.tetris-bonus-spins strong {
+  font-size: 16px;
+  font-weight: 950;
+  color: #fff;
+  margin-left: 2px;
+}
+
+/* ── Rage meter on the right side of the bonus strip ── */
+.tetris-rage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.tetris-rage-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tetris-rage-bar {
+  position: relative;
+  display: inline-block;
+  width: 86px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+.tetris-rage-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fbbf24 0%, #f97316 50%, #ef4444 100%);
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.6);
+  transition: width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tetris-rage-i {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 950;
+  color: #082f49;
+  background: linear-gradient(180deg, #67e8f9, #06b6d4);
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.85);
+  animation: tetrisRageIPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes tetrisRageIPulse {
+  0%, 100% { transform: scale(1);    filter: brightness(1); }
+  50%      { transform: scale(1.12); filter: brightness(1.3); }
+}
+
+/* ───────────────────────── PAGE-LEVEL BONUS TINT ───────────────────────── */
+.tetris-slot-page--bonus {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(251, 191, 36, 0.34), transparent 38%),
+    linear-gradient(180deg, #2a1605 0%, #1a0a08 100%);
+}
+
+.tetris-slot-page--bonus .tetris-game-window {
+  border-color: rgba(251, 191, 36, 0.4);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(253, 224, 71, 0.22),
+    0 0 60px rgba(251, 191, 36, 0.18);
+}
+
+.tetris-slot-page--bonus .tetris-grid {
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow:
+    inset 0 0 36px rgba(251, 191, 36, 0.18),
+    0 12px 36px rgba(0, 0, 0, 0.45);
 }
