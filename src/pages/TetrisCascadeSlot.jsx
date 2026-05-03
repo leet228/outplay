@@ -72,10 +72,13 @@ function isCellCoin(cell)   { return cell && cell.kind === 'coin' }
 function cellMul(cell)      { return cell?.mul || 1 }
 
 function pickRandomPiece(opts = {}) {
-  const { forceI, bonus } = opts
+  const { forceI, bonus, noSpecial } = opts
   // Specials only spawn outside the bonus round (kept simple — bonus uses
-  // multipliers instead).
-  if (!bonus && !forceI) {
+  // multipliers instead). Dud rounds also opt out via noSpecial: a bomb
+  // would detonate after placement and gravity could accidentally pull
+  // surviving cells into a row match — i.e. a "phantom" cascade on a
+  // 0-payout spin.
+  if (!bonus && !forceI && !noSpecial) {
     const r = Math.random()
     if (r < BOMB_RATE) {
       return { kind: 'bomb', cells: [[0,0]], color: 'bomb' }
@@ -85,7 +88,7 @@ function pickRandomPiece(opts = {}) {
     }
   }
   const k = forceI ? 'I' : PIECE_KEYS[Math.floor(Math.random() * PIECE_KEYS.length)]
-  const wild = !bonus && Math.random() < WILD_RATE
+  const wild = !bonus && !noSpecial && Math.random() < WILD_RATE
   return {
     kind: wild ? 'wild' : 'tetromino',
     type: k,
@@ -150,8 +153,9 @@ function countHoles(grid) {
 
 function pickColumn(grid, piece, opts = {}) {
   // clearWeight  > 0  → AI loves clears (default smart-drop).
-  // clearWeight <= 0  → AI avoids clears (used for "dud" rounds where
-  //                     the server has decided this spin pays nothing).
+  // clearWeight <= 0  → AI strictly avoids clears (used for "dud" rounds
+  //                     where the server has decided this spin pays
+  //                     nothing — no cascade animations should fire).
   const { clearWeight = 12 } = opts
   const w = pieceWidth(piece.cells)
   const candidates = []
@@ -170,11 +174,22 @@ function pickColumn(grid, piece, opts = {}) {
       - maxHeight * 1.0
       - holes * 30
       + Math.random() * 18
-    candidates.push({ x, score })
+    candidates.push({ x, score, cleared })
   }
   if (candidates.length === 0) return -1
-  candidates.sort((a, b) => b.score - a.score)
-  const top = candidates.slice(0, Math.min(2, candidates.length))
+
+  // Anti-match (dud) mode — ONLY consider placements that produce no
+  // clears. If every available placement would force a match (very
+  // rare on an open board), bail out and skip this piece entirely so
+  // a stray cascade never fires on a dud round.
+  let pool = candidates
+  if (clearWeight < 0) {
+    pool = candidates.filter(c => c.cleared === 0)
+    if (pool.length === 0) return -1
+  }
+
+  pool.sort((a, b) => b.score - a.score)
+  const top = pool.slice(0, Math.min(2, pool.length))
   return top[Math.floor(Math.random() * top.length)].x
 }
 
@@ -754,7 +769,12 @@ export default function TetrisCascadeSlot() {
 
     const willTriggerBonus = !inBonus && round?.outcome_kind === 'bonus'
     const isDud           = !inBonus && round?.outcome_kind === 'dud'
-    const clearWeight     = isDud ? -50 : 12
+    // Dud rounds: STRICT no-match placement (negative weight + filter).
+    // Non-dud paid spins: aggressive cascade preference so cascades
+    // actually fire (pure target=0 case is handled separately).
+    // Bonus / trigger: standard 12 (cascades happen naturally given
+    // the bonus piece multipliers).
+    const clearWeight     = isDud ? -50 : (inBonus || willTriggerBonus ? 12 : 30)
 
     // Decide this spin's exact target payout (RTP-driven).
     let spinTarget = 0
@@ -768,144 +788,162 @@ export default function TetrisCascadeSlot() {
     const isJackpotSpin = inBonus && round?.bonus_kind === 'jackpot'
                             && spinTarget >= currentStake * PERFECT_CLEAR_WIN_MUL
                             && spinTarget > 0
+    // For non-dud paid spins where target > 0, we MUST have cascades —
+    // otherwise the "150 ₽ from nowhere" effect happens. Bonus free
+    // spins with their own slice > 0 also need cascades.
+    const needCascades = (spinTarget > 0) && !willTriggerBonus
+
+    // Capture rage-buff state once; consumed after we commit to a script.
+    const rageBuffActive = inBonus && forceNextIRef.current
 
     // ── Phase 1: simulate the spin in pure JS (no animation) ──
-    // This builds a deterministic script: every piece placement, bomb
-    // explosion, and cascade. We tally the "natural" win each cascade
-    // would have produced under the standard formula. We then SCALE
-    // those wins so they sum exactly to spinTarget — that way each
-    // cascade pays a real amount and the running total ticks up to
-    // spinTarget honestly, with no end-of-spin snap.
-    if (inBonus && forceNextIRef.current) {
-      // Consume the rage buff once for the first piece of this spin.
-      // (kept in sync with what the script will use)
-    }
-    const script = []
-    let simBonusForceFirstI = inBonus && forceNextIRef.current
-    if (simBonusForceFirstI) {
-      forceNextIRef.current = false
-      setForceNextI(false)
-    }
-    let sg = makeEmptyGrid()
+    // Pure function: same bonus/clearWeight inputs, runs the smart-drop
+    // AI through a full spin and returns the script + naturals. Called
+    // once for paid/dud spins; can be retried if non-dud produced no
+    // cascades (super-unlucky AI).
+    const simulateOnce = () => {
+      const script = []
+      let simBuff = rageBuffActive
+      let sg = makeEmptyGrid()
 
-    // Initial drop
-    for (let i = 0; i < INITIAL_PIECES; i++) {
-      let forceI = false
-      if (simBonusForceFirstI && i === 0) {
-        forceI = true
-        simBonusForceFirstI = false
-      }
-      const piece = pickRandomPiece({ bonus: inBonus, forceI })
-      const x = pickColumn(sg, piece, { clearWeight })
-      if (x < 0) continue
-      const mulProvider = inBonus
-        ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
-        : null
-      const { grid: ng } = dropPiece(sg, piece, x, mulProvider)
-      script.push({ kind: 'place', gap: 110, gridAfter: ng })
-      sg = ng
-    }
-
-    // Initial bombs
-    {
-      const bombs = []
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          if (isCellBomb(sg[r][c])) bombs.push([c, r])
-        }
-      }
-      if (bombs.length > 0) {
-        const cellSet = new Set()
-        for (const [bx, by] of bombs) {
-          for (const k of bombExplosionCells(bx, by)) {
-            const [x, y] = k.split(',').map(Number)
-            if (isCellCoin(sg[y][x])) continue
-            cellSet.add(k)
-          }
-        }
-        if (cellSet.size > 0) {
-          const after = applyGravity(sg, cellSet)
-          script.push({ kind: 'bomb', cellSet, gridAfter: after })
-          sg = after
-        }
-      }
-    }
-
-    // Cascades
-    let totalNatural = 0
-    let cascadeNum = 0
-    while (cascadeNum < MAX_CASCADES) {
-      const matches = findMatches(sg)
-      if (matches.length === 0) break
-      cascadeNum++
-      const cellSet = new Set()
-      for (const m of matches) for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
-
-      let stepWin = 0
-      if (inBonus) {
-        let mulSum = 0
-        for (const k of cellSet) {
-          const [x, y] = k.split(',').map(Number)
-          mulSum += cellMul(sg[y][x])
-        }
-        stepWin = currentStake * mulSum
-      } else {
-        stepWin = matches.reduce((s, m) => s + currentStake * m.mul, 0)
-      }
-      totalNatural += stepWin
-
-      const after = applyGravity(sg, cellSet)
-      script.push({
-        kind: 'cascade',
-        cascadeNum,
-        matches,
-        cellSet,
-        stepWin,
-        gridAfter: after,
-      })
-      sg = after
-
-      // Refill
-      const refillCount = 3 + Math.ceil(matches.length * 1.5)
-      for (let i = 0; i < refillCount; i++) {
-        const piece = pickRandomPiece({ bonus: inBonus })
+      // Initial drop
+      for (let i = 0; i < INITIAL_PIECES; i++) {
+        let forceI = false
+        if (simBuff && i === 0) { forceI = true; simBuff = false }
+        const piece = pickRandomPiece({ bonus: inBonus, forceI, noSpecial: isDud })
         const x = pickColumn(sg, piece, { clearWeight })
-        if (x < 0) break
+        if (x < 0) continue
         const mulProvider = inBonus
           ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
           : null
         const { grid: ng } = dropPiece(sg, piece, x, mulProvider)
-        script.push({ kind: 'place', gap: 120, gridAfter: ng })
+        script.push({ kind: 'place', gap: 110, gridAfter: ng })
         sg = ng
       }
 
-      // Bombs after refill
-      const bombs2 = []
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          if (isCellBomb(sg[r][c])) bombs2.push([c, r])
-        }
-      }
-      if (bombs2.length > 0) {
-        const cellSet2 = new Set()
-        for (const [bx, by] of bombs2) {
-          for (const k of bombExplosionCells(bx, by)) {
-            const [x, y] = k.split(',').map(Number)
-            if (isCellCoin(sg[y][x])) continue
-            cellSet2.add(k)
+      // Initial bombs
+      {
+        const bombs = []
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (isCellBomb(sg[r][c])) bombs.push([c, r])
           }
         }
-        if (cellSet2.size > 0) {
-          const after2 = applyGravity(sg, cellSet2)
-          script.push({ kind: 'bomb', cellSet: cellSet2, gridAfter: after2 })
-          sg = after2
+        if (bombs.length > 0) {
+          const cellSet = new Set()
+          for (const [bx, by] of bombs) {
+            for (const k of bombExplosionCells(bx, by)) {
+              const [x, y] = k.split(',').map(Number)
+              if (isCellCoin(sg[y][x])) continue
+              cellSet.add(k)
+            }
+          }
+          if (cellSet.size > 0) {
+            const after = applyGravity(sg, cellSet)
+            script.push({ kind: 'bomb', cellSet, gridAfter: after })
+            sg = after
+          }
         }
       }
+
+      // Cascades
+      let totalNatural = 0
+      let cascadeNum = 0
+      while (cascadeNum < MAX_CASCADES) {
+        const matches = findMatches(sg)
+        if (matches.length === 0) break
+        cascadeNum++
+        const cellSet = new Set()
+        for (const m of matches) for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
+
+        let stepWin = 0
+        if (inBonus) {
+          let mulSum = 0
+          for (const k of cellSet) {
+            const [x, y] = k.split(',').map(Number)
+            mulSum += cellMul(sg[y][x])
+          }
+          stepWin = currentStake * mulSum
+        } else {
+          stepWin = matches.reduce((s, m) => s + currentStake * m.mul, 0)
+        }
+        totalNatural += stepWin
+
+        const after = applyGravity(sg, cellSet)
+        script.push({
+          kind: 'cascade',
+          cascadeNum,
+          matches,
+          cellSet,
+          stepWin,
+          gridAfter: after,
+        })
+        sg = after
+
+        // Refill
+        const refillCount = 3 + Math.ceil(matches.length * 1.5)
+        for (let i = 0; i < refillCount; i++) {
+          const piece = pickRandomPiece({ bonus: inBonus, noSpecial: isDud })
+          const x = pickColumn(sg, piece, { clearWeight })
+          if (x < 0) break
+          const mulProvider = inBonus
+            ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
+            : null
+          const { grid: ng } = dropPiece(sg, piece, x, mulProvider)
+          script.push({ kind: 'place', gap: 120, gridAfter: ng })
+          sg = ng
+        }
+
+        // Bombs after refill
+        const bombs2 = []
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (isCellBomb(sg[r][c])) bombs2.push([c, r])
+          }
+        }
+        if (bombs2.length > 0) {
+          const cellSet2 = new Set()
+          for (const [bx, by] of bombs2) {
+            for (const k of bombExplosionCells(bx, by)) {
+              const [x, y] = k.split(',').map(Number)
+              if (isCellCoin(sg[y][x])) continue
+              cellSet2.add(k)
+            }
+          }
+          if (cellSet2.size > 0) {
+            const after2 = applyGravity(sg, cellSet2)
+            script.push({ kind: 'bomb', cellSet: cellSet2, gridAfter: after2 })
+            sg = after2
+          }
+        }
+      }
+
+      return { script, totalNatural, cascadeNum }
+    }
+
+    // Run simulation. Retry up to 12× for non-dud spins that need
+    // cascades but the unlucky AI didn't make any. For dud rounds we
+    // accept whatever the strict no-match AI produced (zero cascades
+    // is the desired outcome).
+    let sim = simulateOnce()
+    if (needCascades) {
+      let attempts = 0
+      while (sim.cascadeNum === 0 && attempts < 12) {
+        sim = simulateOnce()
+        attempts++
+      }
+    }
+    const { script, totalNatural } = sim
+
+    // Consume the rage buff now that we've committed to a script.
+    if (rageBuffActive) {
+      forceNextIRef.current = false
+      setForceNextI(false)
     }
 
     // Compute the scale factor so cascade wins sum exactly to the target.
-    // If natural=0 (e.g. dud round with no clears), we'll just credit the
-    // target as a single end-of-spin reveal (rare).
+    // For dud rounds: scale = 0 (no payout) — but the no-match AI also
+    // means there typically aren't any cascade steps in the script.
     const scale = totalNatural > 0 ? spinTarget / totalNatural : 0
 
     // ── Phase 2: replay the script with animation + scaled wins ──
