@@ -1133,3 +1133,173 @@
   filter: saturate(0.4);
   cursor: not-allowed;
 }
+
+/* ───────────────────────── BONUS SUMMARY OVERLAY ───────────────────────── */
+.tetris-summary-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(2, 6, 23, 0.86);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: tetrisBuyBackdropFade 0.3s ease;
+}
+
+.tetris-summary-card {
+  position: relative;
+  width: min(100%, 360px);
+  padding: 32px 24px 22px;
+  border-radius: 28px;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.32), transparent 55%),
+    linear-gradient(180deg, #0b1f17 0%, #061410 100%);
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.7),
+    0 0 80px rgba(34, 197, 94, 0.28),
+    inset 0 1px 0 rgba(187, 247, 208, 0.2);
+  overflow: hidden;
+  animation: tetrisBuyCardPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tetris-summary-glow {
+  position: absolute;
+  inset: -50% -10% auto -10%;
+  height: 70%;
+  background:
+    radial-gradient(ellipse at center, rgba(74, 222, 128, 0.5), transparent 60%);
+  pointer-events: none;
+  filter: blur(28px);
+  z-index: 0;
+  animation: tetrisSummaryGlow 2.4s ease-in-out infinite alternate;
+}
+@keyframes tetrisSummaryGlow {
+  0%   { opacity: 0.6; transform: scaleY(1); }
+  100% { opacity: 1;   transform: scaleY(1.08); }
+}
+
+/* Tiny confetti specks */
+.tetris-summary-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.tetris-summary-confetti span {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  opacity: 0;
+  animation: tetrisConfettiFall 2.4s ease-out infinite;
+}
+.tetris-summary-confetti span:nth-child(1) { left: 8%;  top: -6%; background: #fde047; animation-delay: 0s; }
+.tetris-summary-confetti span:nth-child(2) { left: 22%; top: -8%; background: #4ade80; animation-delay: 0.18s; }
+.tetris-summary-confetti span:nth-child(3) { left: 38%; top: -4%; background: #ec4899; animation-delay: 0.36s; }
+.tetris-summary-confetti span:nth-child(4) { left: 52%; top: -7%; background: #06b6d4; animation-delay: 0.54s; }
+.tetris-summary-confetti span:nth-child(5) { left: 64%; top: -5%; background: #fde047; animation-delay: 0.72s; }
+.tetris-summary-confetti span:nth-child(6) { left: 76%; top: -8%; background: #a855f7; animation-delay: 0.9s; }
+.tetris-summary-confetti span:nth-child(7) { left: 88%; top: -4%; background: #f97316; animation-delay: 1.08s; }
+.tetris-summary-confetti span:nth-child(8) { left: 14%; top: -6%; background: #4ade80; animation-delay: 1.26s; }
+
+@keyframes tetrisConfettiFall {
+  0%   { transform: translateY(0)   rotate(0deg);   opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: translateY(420px) rotate(420deg); opacity: 0; }
+}
+
+.tetris-summary-card > *:not(.tetris-summary-glow):not(.tetris-summary-confetti) {
+  position: relative;
+  z-index: 1;
+}
+
+.tetris-summary-kicker {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.16);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  text-shadow: 0 0 10px rgba(74, 222, 128, 0.6);
+}
+
+.tetris-summary-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(187, 247, 208, 0.78);
+}
+
+.tetris-summary-amount {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 44px;
+  font-weight: 950;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  word-break: break-word;
+}
+.tetris-summary-amount.is-win {
+  background: linear-gradient(180deg, #bbf7d0 0%, #4ade80 50%, #16a34a 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 4px 14px rgba(34, 197, 94, 0.55));
+  animation: tetrisSummaryAmountPulse 1.6s ease-in-out infinite alternate;
+}
+.tetris-summary-amount.is-zero {
+  color: rgba(255, 255, 255, 0.65);
+}
+@keyframes tetrisSummaryAmountPulse {
+  0%   { transform: scale(1);    filter: drop-shadow(0 4px 14px rgba(34, 197, 94, 0.55)); }
+  100% { transform: scale(1.04); filter: drop-shadow(0 6px 24px rgba(74, 222, 128, 0.85)); }
+}
+
+.tetris-summary-multiplier {
+  display: block;
+  margin: 0 0 18px;
+  min-height: 16px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: rgba(253, 224, 71, 0.85);
+  text-shadow: 0 0 12px rgba(253, 224, 71, 0.45);
+}
+
+.tetris-summary-close {
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #052e16;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.4), transparent 38%),
+    linear-gradient(180deg, #86efac 0%, #4ade80 60%, #16a34a 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 12px 28px rgba(34, 197, 94, 0.45);
+  cursor: pointer;
+  transition: transform 0.08s ease, filter 0.18s, box-shadow 0.25s;
+}
+.tetris-summary-close:active {
+  transform: scale(0.97);
+  filter: brightness(1.12);
+}

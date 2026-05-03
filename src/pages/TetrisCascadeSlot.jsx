@@ -388,6 +388,7 @@ export default function TetrisCascadeSlot() {
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0)
   const [rage, setRage] = useState(0) // 0..RAGE_MAX
   const [forceNextI, setForceNextI] = useState(false)
+  const [bonusSummary, setBonusSummary] = useState(null) // { totalWin } | null
 
   const stakeIndex = BETS.indexOf(stake)
   const isBusy = phase === 'dropping' || phase === 'clearing'
@@ -401,6 +402,9 @@ export default function TetrisCascadeSlot() {
   const freeSpinsLeftRef = useRef(freeSpinsLeft)
   const rageRef = useRef(rage)
   const forceNextIRef = useRef(forceNextI)
+  // Accumulates winnings across the whole bonus round (all 10 free spins).
+  // Reset whenever the bonus starts fresh.
+  const bonusAccruedRef = useRef(0)
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current = stake }, [stake])
   useEffect(() => { autoRef.current = autoSpin }, [autoSpin])
@@ -573,7 +577,12 @@ export default function TetrisCascadeSlot() {
 
     haptic('medium')
     const currentStake = stakeRef.current
-    setTotalWin(0)
+    // Reset displayed totalWin only for paid spins. In a bonus round we
+    // keep the running total across all 10 free spins so the win bar
+    // shows the cumulative amount.
+    if (!bonusThisSpin) {
+      setTotalWin(0)
+    }
     setCascadeStep(0)
     setBigText(null)
 
@@ -606,16 +615,18 @@ export default function TetrisCascadeSlot() {
       for (const m of matches) {
         for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
       }
-      // Compute payout — in bonus, sum cell multipliers over all cleared
-      // cells; otherwise fall back to standard match.mul × cascade.
+      // Compute payout.
+      // Bonus payout follows the spec literally: each cleared cell contributes
+      // its built-in multiplier; the line is worth stake × Σ(cell muls). No
+      // cascade boost — the per-cell multipliers are already the reward.
+      // Example: a row of 5 cells each carrying x2 → mulSum = 10 → win = 10× stake.
       if (bonusThisSpin) {
         let mulSum = 0
         for (const k of cellSet) {
           const [x, y] = k.split(',').map(Number)
           mulSum += cellMul(g[y][x])
         }
-        const baseLineMul = matches.reduce((s, m) => s + m.mul, 0)
-        stepWin = currentStake * (mulSum + baseLineMul) * cascade
+        stepWin = currentStake * mulSum
       } else {
         stepWin = matches.reduce((s, m) => s + currentStake * m.mul * cascade, 0)
       }
@@ -633,7 +644,11 @@ export default function TetrisCascadeSlot() {
       await sleep(360)
 
       win += stepWin
-      setTotalWin(win)
+      // In a bonus round the displayed total accumulates across all
+      // free spins — add stepWin on top of whatever was already shown.
+      // For paid spins the totalWin started at 0 this spin, so this is
+      // equivalent to setTotalWin(win).
+      setTotalWin(prev => prev + stepWin)
       setBigText(null)
 
       // Rage meter (bonus only)
@@ -676,6 +691,11 @@ export default function TetrisCascadeSlot() {
       setBalance(balanceRef.current + win)
       setBalanceBounce(true)
       setTimeout(() => setBalanceBounce(false), 700)
+      // Track running bonus total so we can show it in the end-of-bonus
+      // summary overlay.
+      if (bonusThisSpin) {
+        bonusAccruedRef.current += win
+      }
     }
     setPhase('done')
 
@@ -718,6 +738,10 @@ export default function TetrisCascadeSlot() {
       rageRef.current = 0
       setForceNextI(false)
       forceNextIRef.current = false
+      // Reset the bonus win accumulator + win bar so the cumulative
+      // total starts fresh for this round.
+      bonusAccruedRef.current = 0
+      setTotalWin(0)
       // Auto-start the first free spin
       await sleep(450)
       runSpin(true)
@@ -731,7 +755,7 @@ export default function TetrisCascadeSlot() {
       return
     }
 
-    // Bonus complete
+    // Bonus complete — close out and show the summary overlay.
     if (bonusThisSpin && freeSpinsLeftRef.current <= 0) {
       setIsBonus(false)
       isBonusRef.current = false
@@ -739,6 +763,13 @@ export default function TetrisCascadeSlot() {
       rageRef.current = 0
       setForceNextI(false)
       forceNextIRef.current = false
+      const total = bonusAccruedRef.current
+      bonusAccruedRef.current = 0
+      await sleep(700)
+      if (!cancelRef.current) {
+        setBonusSummary({ totalWin: total })
+        haptic('success')
+      }
     }
 
     // Auto-spin chain (paid spins only)
@@ -864,6 +895,8 @@ export default function TetrisCascadeSlot() {
     rageRef.current = 0
     setForceNextI(false)
     forceNextIRef.current = false
+    bonusAccruedRef.current = 0
+    setTotalWin(0)
     setPhase('done')
 
     await sleep(450)
@@ -1075,6 +1108,36 @@ export default function TetrisCascadeSlot() {
               <button type="button" onClick={() => { haptic('light'); setExitConfirm(false) }}>{t.slotExitStay}</button>
               <button type="button" onClick={confirmExit}>{t.slotExitLeave}</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {bonusSummary && (
+        <div className="tetris-summary-backdrop" onClick={() => { haptic('light'); setBonusSummary(null) }}>
+          <div className="tetris-summary-card" onClick={e => e.stopPropagation()}>
+            <div className="tetris-summary-glow" aria-hidden="true" />
+            <div className="tetris-summary-confetti" aria-hidden="true">
+              <span /><span /><span /><span /><span /><span /><span /><span />
+            </div>
+            <span className="tetris-summary-kicker">{t.slotTetrisBonusEnded}</span>
+            <h3 className="tetris-summary-title">{t.slotTetrisBonusTotalWin}</h3>
+            <strong className={`tetris-summary-amount ${bonusSummary.totalWin > 0 ? 'is-win' : 'is-zero'}`}>
+              {bonusSummary.totalWin > 0
+                ? `+${formatCurrency(bonusSummary.totalWin, currency, rates)}`
+                : formatCurrency(0, currency, rates)}
+            </strong>
+            <span className="tetris-summary-multiplier">
+              {bonusSummary.totalWin > 0 && stakeRef.current > 0
+                ? `×${(bonusSummary.totalWin / stakeRef.current).toFixed(1)} ${t.slotTetrisStakeWord}`
+                : ''}
+            </span>
+            <button
+              type="button"
+              className="tetris-summary-close"
+              onClick={() => { haptic('light'); setBonusSummary(null) }}
+            >
+              {t.slotTetrisBonusClose}
+            </button>
           </div>
         </div>
       )}
