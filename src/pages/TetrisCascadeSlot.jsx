@@ -5,6 +5,7 @@ import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
+import { startTetrisRound, finishTetrisRound } from '../lib/supabase'
 import './TetrisCascadeSlot.css'
 
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
@@ -147,7 +148,11 @@ function countHoles(grid) {
   return holes
 }
 
-function pickColumn(grid, piece) {
+function pickColumn(grid, piece, opts = {}) {
+  // clearWeight  > 0  → AI loves clears (default smart-drop).
+  // clearWeight <= 0  → AI avoids clears (used for "dud" rounds where
+  //                     the server has decided this spin pays nothing).
+  const { clearWeight = 12 } = opts
   const w = pieceWidth(piece.cells)
   const candidates = []
   for (let x = 0; x <= COLS - w; x++) {
@@ -160,7 +165,7 @@ function pickColumn(grid, piece) {
     const maxHeight = Math.max(...heights)
     const holes = countHoles(simGrid)
     const score =
-      cleared * 12
+      cleared * clearWeight
       - aggHeight * 0.7
       - maxHeight * 1.0
       - holes * 30
@@ -171,6 +176,97 @@ function pickColumn(grid, piece) {
   candidates.sort((a, b) => b.score - a.score)
   const top = candidates.slice(0, Math.min(2, candidates.length))
   return top[Math.floor(Math.random() * top.length)].x
+}
+
+// Local dev-mode outcome generator. Mirrors the SQL function in
+// migration_tetris_rtp.sql so the slot is playable without a Supabase
+// connection. Used when user is the mock dev user.
+function decideTetrisOutcomeDev(stake, isBought) {
+  const roll = Math.random()
+  let outcome_kind, bonus_kind = null
+  if (isBought) {
+    outcome_kind = 'bonus'
+    if      (roll < 0.20) bonus_kind = 'empty'
+    else if (roll < 0.55) bonus_kind = 'small'
+    else if (roll < 0.85) bonus_kind = 'medium'
+    else if (roll < 0.985) bonus_kind = 'big'
+    else                  bonus_kind = 'jackpot'
+  } else {
+    if      (roll < 0.55) outcome_kind = 'dud'
+    else if (roll < 0.80) outcome_kind = 'small'
+    else if (roll < 0.93) outcome_kind = 'medium'
+    else if (roll < 0.985) outcome_kind = 'big'
+    else if (roll < 0.997) outcome_kind = 'huge'
+    else {
+      outcome_kind = 'bonus'
+      const r2 = Math.random()
+      if      (r2 < 0.30) bonus_kind = 'small'
+      else if (r2 < 0.75) bonus_kind = 'medium'
+      else if (r2 < 0.95) bonus_kind = 'big'
+      else                bonus_kind = 'jackpot'
+    }
+  }
+  let mul = 0
+  if (outcome_kind === 'dud') mul = 0
+  else if (outcome_kind === 'small')  mul = Math.floor(Math.random() * 3) + 1
+  else if (outcome_kind === 'medium') mul = Math.floor(Math.random() * 10) + 5
+  else if (outcome_kind === 'big')    mul = Math.floor(Math.random() * 20) + 20
+  else if (outcome_kind === 'huge')   mul = Math.floor(Math.random() * 50) + 50
+  else if (outcome_kind === 'bonus') {
+    if      (bonus_kind === 'empty')   mul = Math.floor(Math.random() * 30) + 1
+    else if (bonus_kind === 'small')   mul = Math.floor(Math.random() * 100) + 50
+    else if (bonus_kind === 'medium')  mul = Math.floor(Math.random() * 300) + 200
+    else if (bonus_kind === 'big')     mul = Math.floor(Math.random() * 1500) + 500
+    else if (bonus_kind === 'jackpot') mul = 5000
+  }
+  return {
+    ok: true,
+    round_id: `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    outcome_kind,
+    target_payout_rub: stake * mul,
+    bonus_kind,
+    is_bought: isBought,
+  }
+}
+
+// Slice a bonus round's total payout across N free spins. Used when the
+// server returns target_payout_rub for the whole bonus — the frontend
+// then plays each spin so its visual win matches its assigned slice.
+//
+// jackpot:   one spin gets the entire prize (Perfect Clear); the rest pay 0
+// empty:     mostly zeros, a couple of tiny scraps
+// otherwise: random distribution biased toward 1-3 "big" spins
+function distributeBonusPayout(totalPayout, spinCount, bonusKind) {
+  const slices = new Array(spinCount).fill(0)
+  if (totalPayout <= 0 || spinCount <= 0) return slices
+
+  if (bonusKind === 'jackpot') {
+    const idx = Math.floor(Math.random() * spinCount)
+    slices[idx] = totalPayout
+    return slices
+  }
+
+  // Pick which spins win at all.
+  const winRate = bonusKind === 'empty' ? 0.25 : 0.7
+  const winners = []
+  for (let i = 0; i < spinCount; i++) {
+    if (Math.random() < winRate) winners.push(i)
+  }
+  if (winners.length === 0) winners.push(Math.floor(Math.random() * spinCount))
+
+  // Random weights, then normalize to total.
+  const weights = winners.map(() => Math.random() * Math.random() + 0.05)
+  const wSum = weights.reduce((a, b) => a + b, 0)
+  let assigned = 0
+  for (let i = 0; i < winners.length - 1; i++) {
+    const slice = Math.round(totalPayout * (weights[i] / wSum))
+    slices[winners[i]] = slice
+    assigned += slice
+  }
+  // Last winner gets the remainder so the total matches exactly.
+  slices[winners[winners.length - 1]] = Math.max(0, totalPayout - assigned)
+
+  return slices
 }
 
 // ── Match detection ──
@@ -408,6 +504,16 @@ export default function TetrisCascadeSlot() {
   // Accumulates winnings across the whole bonus round (all 10 free spins).
   // Reset whenever the bonus starts fresh.
   const bonusAccruedRef = useRef(0)
+  // Holds the current server-issued round descriptor:
+  //   { round_id, balance, outcome_kind, target_payout_rub, bonus_kind, is_bought }
+  // For paid spins this is set in runSpin before any animation runs.
+  // For bonus free spins this stays set across all 10 spins until the
+  // round closes via finishTetrisRound().
+  const currentRoundRef = useRef(null)
+  // Pre-distributed payout slices for the active bonus round (one entry
+  // per free spin), and how many of those have been paid so far.
+  const bonusSlicesRef = useRef([])
+  const bonusSliceIdxRef = useRef(0)
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current = stake }, [stake])
   useEffect(() => { autoRef.current = autoSpin }, [autoSpin])
@@ -470,7 +576,10 @@ export default function TetrisCascadeSlot() {
   }
 
   // ── Drop initial pieces ──
-  async function dropInitialPieces(initial, bonus) {
+  // clearWeight controls the smart-drop AI:
+  //   12  → default, prefers placements that clear lines
+  //  -50  → "dud" mode, avoids clears entirely
+  async function dropInitialPieces(initial, bonus, clearWeight = 12) {
     let g = initial
     for (let i = 0; i < INITIAL_PIECES; i++) {
       if (cancelRef.current) return g
@@ -482,7 +591,7 @@ export default function TetrisCascadeSlot() {
         setForceNextI(false)
       }
       const piece = pickRandomPiece({ bonus, forceI })
-      const x = pickColumn(g, piece)
+      const x = pickColumn(g, piece, { clearWeight })
       if (x < 0) continue
       const mulProvider = bonus
         ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
@@ -495,11 +604,11 @@ export default function TetrisCascadeSlot() {
     return g
   }
 
-  async function dropFillerPieces(g, count, bonus) {
+  async function dropFillerPieces(g, count, bonus, clearWeight = 12) {
     for (let i = 0; i < count; i++) {
       if (cancelRef.current) return g
       const piece = pickRandomPiece({ bonus })
-      const x = pickColumn(g, piece)
+      const x = pickColumn(g, piece, { clearWeight })
       if (x < 0) break
       const mulProvider = bonus
         ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
@@ -508,6 +617,30 @@ export default function TetrisCascadeSlot() {
       g = ng
       setGrid(g.map(row => [...row]))
       await sleep(120)
+    }
+    return g
+  }
+
+  // Force exactly N scatter coins to drop into spread-out columns —
+  // used on the trigger spin when the server has decided this round
+  // is a 'bonus' outcome.
+  async function forceScatterDrop(g, count = COINS_TO_TRIGGER) {
+    const cols = []
+    // pick `count` distinct columns spread across the board
+    const all = [0,1,2,3,4,5,6,7,8,9]
+    while (cols.length < count && all.length) {
+      const idx = Math.floor(Math.random() * all.length)
+      cols.push(all[idx])
+      all.splice(idx, 1)
+    }
+    for (const c of cols) {
+      if (cancelRef.current) return g
+      const piece = { kind: 'coin', cells: [[0,0]], color: 'coin' }
+      if (!canPlace(g, piece.cells, c, 0)) continue
+      const { grid: ng } = dropPiece(g, piece, c)
+      g = ng
+      setGrid(g.map(row => [...row]))
+      await sleep(140)
     }
     return g
   }
@@ -559,50 +692,85 @@ export default function TetrisCascadeSlot() {
     return g
   }
 
-  // ── Main spin ──
+  // ── Main spin (RTP-driven) ──
+  // Paid spins call start_tetris_round which RETURNS the outcome:
+  //   - outcome_kind: 'dud' | 'small' | 'medium' | 'big' | 'huge' | 'bonus'
+  //   - target_payout_rub: the exact amount the server has decided to pay
+  //   - bonus_kind: subtype when outcome_kind='bonus'
+  //
+  // The frontend animates a natural-looking spin (cascades, line clears,
+  // colour runs) but the FINAL displayed win + balance change is whatever
+  // the server pre-decided. For dud rounds the smart-drop AI is told to
+  // avoid clears so the visuals stay believable.
+  //
+  // For 'bonus' outcomes the trigger spin pays nothing itself — the
+  // server's target_payout_rub is the TOTAL bonus payout, which the
+  // frontend then distributes across the 10 free spins via
+  // distributeBonusPayout(). At end of bonus, finish_tetris_round is
+  // called once for the entire round.
   async function runSpin(bonusOverride = null) {
     if (cancelRef.current) return
 
-    // Are we in a bonus round on this spin?
-    const bonusThisSpin = bonusOverride ?? isBonusRef.current
+    const inBonus = bonusOverride ?? isBonusRef.current
+    let round = currentRoundRef.current
 
-    if (!bonusThisSpin) {
+    if (!inBonus) {
+      // Paid spin — start a new round on the server (or dev-mode local).
       if (balanceRef.current < stakeRef.current) {
         setAutoSpin(false); autoRef.current = false
         return
       }
-      setBalance(balanceRef.current - stakeRef.current)
+      const isDev = !user || user.id === 'dev'
+      let result
+      if (isDev) {
+        const dev = decideTetrisOutcomeDev(stakeRef.current, false)
+        result = { ...dev, balance: balanceRef.current - stakeRef.current }
+      } else {
+        result = await startTetrisRound(user.id, stakeRef.current, false)
+        if (cancelRef.current) return
+        if (!result || result.error || !result.ok) {
+          console.error('startTetrisRound failed:', result)
+          setAutoSpin(false); autoRef.current = false
+          return
+        }
+      }
+      round = result
+      currentRoundRef.current = round
+      setBalance(round.balance)
+      balanceRef.current = round.balance
     } else {
-      // Free spin — decrement freeSpinsLeft
+      // Free spin within a bonus round — decrement counter
       setFreeSpinsLeft(prev => Math.max(0, prev - 1))
       freeSpinsLeftRef.current = Math.max(0, freeSpinsLeftRef.current - 1)
     }
 
     haptic('medium')
     const currentStake = stakeRef.current
-    // Reset displayed totalWin only for paid spins. In a bonus round we
-    // keep the running total across all 10 free spins so the win bar
-    // shows the cumulative amount.
-    if (!bonusThisSpin) {
+    if (!inBonus) {
       setTotalWin(0)
     }
     setCascadeStep(0)
     setBigText(null)
 
+    const willTriggerBonus = !inBonus && round?.outcome_kind === 'bonus'
+    const isDud           = !inBonus && round?.outcome_kind === 'dud'
+    // For dud rounds, tell the AI to AVOID clears. For bonus trigger
+    // we still want some visual cascading before scatters appear.
+    const clearWeight     = isDud ? -50 : 12
+
     let g = makeEmptyGrid()
     setGrid(g)
     setPhase('dropping')
 
-    g = await dropInitialPieces(g, bonusThisSpin)
+    g = await dropInitialPieces(g, inBonus, clearWeight)
     if (cancelRef.current) return
 
-    // Detonate bombs first (they create gaps for the cascade phase).
-    // Coins survive bomb blasts so they still count later.
     g = await explodeBombsIfAny(g)
     if (cancelRef.current) return
 
-    // Cascade loop
-    let win = 0
+    // Cascade loop — natural matching for visual feedback. The displayed
+    // running win during the loop is just for the cascade animations;
+    // it gets snapped to the server-decided slice at the end.
     let cascade = 0
     let safety = 0
     while (safety++ < MAX_CASCADES) {
@@ -618,12 +786,7 @@ export default function TetrisCascadeSlot() {
       for (const m of matches) {
         for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
       }
-      // Compute payout.
-      // Bonus payout follows the spec literally: each cleared cell contributes
-      // its built-in multiplier; the line is worth stake × Σ(cell muls). No
-      // cascade boost — the per-cell multipliers are already the reward.
-      // Example: a row of 5 cells each carrying x2 → mulSum = 10 → win = 10× stake.
-      if (bonusThisSpin) {
+      if (inBonus) {
         let mulSum = 0
         for (const k of cellSet) {
           const [x, y] = k.split(',').map(Number)
@@ -631,16 +794,11 @@ export default function TetrisCascadeSlot() {
         }
         stepWin = currentStake * mulSum
       } else {
-        // Non-bonus payout: each cascade contributes its own wins, but
-        // there is no extra cascade multiplier on top — long chains
-        // simply sum up.
         stepWin = matches.reduce((s, m) => s + currentStake * m.mul, 0)
       }
 
       setBigText(buildBigText(matches))
-
-      const flashGrid = markClearing(g, cellSet)
-      setGrid(flashGrid)
+      setGrid(markClearing(g, cellSet))
       haptic(matches.some(m => m.type === 'col' || m.cells.length >= 9) ? 'success' : 'medium')
       await sleep(420)
       if (cancelRef.current) return
@@ -649,16 +807,11 @@ export default function TetrisCascadeSlot() {
       setGrid(g.map(row => [...row]))
       await sleep(360)
 
-      win += stepWin
-      // In a bonus round the displayed total accumulates across all
-      // free spins — add stepWin on top of whatever was already shown.
-      // For paid spins the totalWin started at 0 this spin, so this is
-      // equivalent to setTotalWin(win).
+      // Visual running total during cascade. Snapped at end of spin.
       setTotalWin(prev => prev + stepWin)
       setBigText(null)
 
-      // Rage meter (bonus only)
-      if (bonusThisSpin) {
+      if (inBonus) {
         const linesContribution = matches.length
         const newRage = Math.min(RAGE_MAX, rageRef.current + linesContribution)
         rageRef.current = newRage
@@ -672,46 +825,87 @@ export default function TetrisCascadeSlot() {
       }
 
       const refillCount = 3 + Math.ceil(matches.length * 1.5)
-      g = await dropFillerPieces(g, refillCount, bonusThisSpin)
+      g = await dropFillerPieces(g, refillCount, inBonus, clearWeight)
       if (cancelRef.current) return
-      // After refill, more bombs might exist — chain explosions too.
       g = await explodeBombsIfAny(g)
       if (cancelRef.current) return
       setPhase('dropping')
     }
 
-    // Perfect Clear (only when bonus active)
-    if (bonusThisSpin && isGridEmpty(g)) {
-      const perfectWin = currentStake * PERFECT_CLEAR_WIN_MUL
-      win += perfectWin
-      setTotalWin(win)
-      setBigText({ kind: 'perfect', label: t.slotTetrisPerfectClear, mul: PERFECT_CLEAR_WIN_MUL })
-      setFreeSpinsLeft(prev => prev + 5)
-      freeSpinsLeftRef.current = freeSpinsLeftRef.current + 5
-      haptic('success')
-      await sleep(1500)
-      setBigText(null)
+    // For bonus-trigger spins: drop 5 scatter coins now, AFTER the
+    // natural cascade phase. They remain on the grid for the celebration.
+    if (willTriggerBonus) {
+      g = await forceScatterDrop(g, COINS_TO_TRIGGER)
+      if (cancelRef.current) return
     }
 
-    if (win > 0) {
-      setBalance(balanceRef.current + win)
-      setBalanceBounce(true)
-      setTimeout(() => setBalanceBounce(false), 700)
-      // Track running bonus total so we can show it in the end-of-bonus
-      // summary overlay.
-      if (bonusThisSpin) {
-        bonusAccruedRef.current += win
+    // ── Determine this spin's actual payout from the server-decided round ──
+    let spinPayout = 0
+    let isJackpotSpin = false
+    if (inBonus) {
+      // Pull the next pre-allocated slice for this free spin.
+      spinPayout = bonusSlicesRef.current[bonusSliceIdxRef.current] || 0
+      bonusSliceIdxRef.current++
+      // If this slice is the full jackpot (Perfect Clear), force the
+      // grid to clear and show the celebration.
+      if (spinPayout >= currentStake * PERFECT_CLEAR_WIN_MUL && spinPayout > 0) {
+        isJackpotSpin = true
+        const allCells = new Set()
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (g[r][c] !== null && g[r][c] !== 'CLEARING') allCells.add(`${c},${r}`)
+          }
+        }
+        if (allCells.size > 0) {
+          setGrid(markClearing(g, allCells))
+          haptic('success')
+          await sleep(420)
+          g = applyGravity(g, allCells)
+          setGrid(g.map(row => [...row]))
+          await sleep(280)
+        }
+        setBigText({
+          kind: 'perfect',
+          label: t.slotTetrisPerfectClear,
+          mul: PERFECT_CLEAR_WIN_MUL,
+        })
+        haptic('success')
+        await sleep(1700)
+        setBigText(null)
+      }
+    } else if (willTriggerBonus) {
+      // Trigger spin pays nothing — payout is carried by the bonus.
+      spinPayout = 0
+    } else if (round) {
+      spinPayout = Number(round.target_payout_rub) || 0
+    }
+
+    // Snap the win bar to the server-driven amount, credit balance.
+    if (inBonus) {
+      // Cumulative bonus total: replace running display with accrued + slice.
+      const newAccrued = bonusAccruedRef.current + spinPayout
+      bonusAccruedRef.current = newAccrued
+      setTotalWin(newAccrued)
+      if (spinPayout > 0) {
+        setBalance(balanceRef.current + spinPayout)
+        balanceRef.current = balanceRef.current + spinPayout
+        setBalanceBounce(true)
+        setTimeout(() => setBalanceBounce(false), 700)
+      }
+    } else {
+      // Paid spin: snap to target.
+      setTotalWin(spinPayout)
+      if (spinPayout > 0) {
+        setBalance(balanceRef.current + spinPayout)
+        balanceRef.current = balanceRef.current + spinPayout
+        setBalanceBounce(true)
+        setTimeout(() => setBalanceBounce(false), 700)
       }
     }
     setPhase('done')
 
-    // Bonus trigger from coin scatters (only outside bonus). Counted at
-    // the END of the spin so coins from cascade refills count too. Coins
-    // are inert all spin long; only here, when 5+ have triggered the
-    // bonus, do they finally pop with a flash + collapse — as part of
-    // the celebration animation.
-    const coinsLanded = bonusThisSpin ? 0 : countCoins(g)
-    if (!bonusThisSpin && coinsLanded >= COINS_TO_TRIGGER) {
+    // ── Bonus trigger: animate scatter sweep + celebration, then chain ──
+    if (willTriggerBonus) {
       const coinCellSet = new Set()
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
@@ -736,6 +930,7 @@ export default function TetrisCascadeSlot() {
       haptic('success')
       await sleep(2000)
       setBigText(null)
+
       setIsBonus(true)
       isBonusRef.current = true
       setFreeSpinsLeft(BONUS_FREE_SPINS)
@@ -744,25 +939,31 @@ export default function TetrisCascadeSlot() {
       rageRef.current = 0
       setForceNextI(false)
       forceNextIRef.current = false
-      // Reset the bonus win accumulator + win bar so the cumulative
-      // total starts fresh for this round.
+
+      // Pre-distribute the server's bonus payout across the 10 spins.
+      bonusSlicesRef.current = distributeBonusPayout(
+        Number(round?.target_payout_rub) || 0,
+        BONUS_FREE_SPINS,
+        round?.bonus_kind,
+      )
+      bonusSliceIdxRef.current = 0
       bonusAccruedRef.current = 0
       setTotalWin(0)
-      // Auto-start the first free spin
+
       await sleep(450)
       runSpin(true)
       return
     }
 
-    // Continue bonus round
-    if (bonusThisSpin && freeSpinsLeftRef.current > 0 && !cancelRef.current) {
+    // ── Continue bonus round if more free spins remain ──
+    if (inBonus && freeSpinsLeftRef.current > 0 && !cancelRef.current) {
       await sleep(900)
       runSpin(true)
       return
     }
 
-    // Bonus complete — close out and show the summary overlay.
-    if (bonusThisSpin && freeSpinsLeftRef.current <= 0) {
+    // ── End of bonus round: finalize, show summary ──
+    if (inBonus && freeSpinsLeftRef.current <= 0) {
       setIsBonus(false)
       isBonusRef.current = false
       setRage(0)
@@ -771,14 +972,39 @@ export default function TetrisCascadeSlot() {
       forceNextIRef.current = false
       const total = bonusAccruedRef.current
       bonusAccruedRef.current = 0
+      bonusSlicesRef.current = []
+      bonusSliceIdxRef.current = 0
+
+      // Finalize the round on the server. Server will pay this much
+      // (clamped to the original target). We've already credited
+      // balance per slice, so server credit reconciles the final value.
+      // Dev rounds (no Supabase user) skip the RPC call.
+      if (currentRoundRef.current) {
+        const rid = currentRoundRef.current.round_id
+        if (typeof rid === 'string' && !rid.startsWith('dev-')) {
+          await finishTetrisRound(rid, total)
+        }
+        currentRoundRef.current = null
+      }
+
       await sleep(700)
       if (!cancelRef.current) {
         setBonusSummary({ totalWin: total })
         haptic('success')
       }
+      return
     }
 
-    // Auto-spin chain (paid spins only)
+    // ── End of a paid (non-bonus, non-trigger) spin: finalize ──
+    if (!inBonus && !willTriggerBonus && currentRoundRef.current) {
+      const rid = currentRoundRef.current.round_id
+      if (typeof rid === 'string' && !rid.startsWith('dev-')) {
+        await finishTetrisRound(rid, spinPayout)
+      }
+      currentRoundRef.current = null
+    }
+
+    // ── Auto-spin chain ──
     if (autoRef.current && !isBonusRef.current && balanceRef.current >= stakeRef.current && !cancelRef.current) {
       await sleep(900)
       if (autoRef.current && !cancelRef.current && balanceRef.current >= stakeRef.current) {
@@ -832,16 +1058,34 @@ export default function TetrisCascadeSlot() {
     if (balanceRef.current < cost) return
     haptic('success')
     setBuyBonusOpen(false)
-    setBalance(balanceRef.current - cost)
-    balanceRef.current = balanceRef.current - cost
     await runBoughtBonus()
   }
 
-  // Special "spin" played after buying — no real round, just plops 5
-  // scatters onto an empty grid, then runs the standard bonus trigger
-  // (sweep + celebration banner + auto-start the free-spin chain).
+  // Special bonus-purchase flow.
+  // Calls start_tetris_round(stake, is_bought=true). Server deducts
+  // stake × 100 and returns the bonus's pre-decided target_payout_rub.
+  // Frontend then animates 5 scatters dropping in, the celebration
+  // banner, and chains the 10 free spins driven by the same round.
   async function runBoughtBonus() {
     if (cancelRef.current) return
+    const isDev = !user || user.id === 'dev'
+    const cost = stakeRef.current * BUY_BONUS_COST_MUL
+    let result
+    if (isDev) {
+      const dev = decideTetrisOutcomeDev(stakeRef.current, true)
+      result = { ...dev, balance: balanceRef.current - cost }
+    } else {
+      result = await startTetrisRound(user.id, stakeRef.current, true)
+      if (cancelRef.current) return
+      if (!result || result.error || !result.ok) {
+        console.error('startTetrisRound (bought) failed:', result)
+        return
+      }
+    }
+    currentRoundRef.current = result
+    setBalance(result.balance)
+    balanceRef.current = result.balance
+
     haptic('medium')
     setTotalWin(0)
     setCascadeStep(0)
@@ -851,7 +1095,7 @@ export default function TetrisCascadeSlot() {
     setGrid(g)
     setPhase('dropping')
 
-    // Drop 5 coin scatters into 5 evenly spaced columns.
+    // Drop 5 coin scatters into spread-out columns.
     const cols = [1, 3, 5, 7, 9]
     for (const c of cols) {
       if (cancelRef.current) return
@@ -864,7 +1108,7 @@ export default function TetrisCascadeSlot() {
     await sleep(380)
     if (cancelRef.current) return
 
-    // Sweep them with a flash + collapse — same animation as a natural trigger.
+    // Sweep them with a flash + collapse.
     const coinCellSet = new Set()
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -881,7 +1125,6 @@ export default function TetrisCascadeSlot() {
       await sleep(280)
     }
 
-    // Celebration banner.
     setBigText({
       kind: 'bonus',
       label: t.slotTetrisBonusTrigger,
@@ -892,7 +1135,6 @@ export default function TetrisCascadeSlot() {
     await sleep(2000)
     setBigText(null)
 
-    // Activate bonus and chain the first free spin.
     setIsBonus(true)
     isBonusRef.current = true
     setFreeSpinsLeft(BONUS_FREE_SPINS)
@@ -901,6 +1143,13 @@ export default function TetrisCascadeSlot() {
     rageRef.current = 0
     setForceNextI(false)
     forceNextIRef.current = false
+
+    bonusSlicesRef.current = distributeBonusPayout(
+      Number(result.target_payout_rub) || 0,
+      BONUS_FREE_SPINS,
+      result.bonus_kind,
+    )
+    bonusSliceIdxRef.current = 0
     bonusAccruedRef.current = 0
     setTotalWin(0)
     setPhase('done')

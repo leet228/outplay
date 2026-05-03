@@ -1044,6 +1044,33 @@ export async function finishSlotRound(roundId, outcome, payoutRub, floors, multi
   return data
 }
 
+// ── Tetris Cascade RTP RPCs ──────────────────────────
+// Server pre-decides outcome_kind ('dud' | 'small' | 'medium' | 'big' |
+// 'huge' | 'bonus') and the exact target_payout_rub. The frontend
+// animates a spin around that target.
+//   isBought = true → buy-bonus button. Server deducts stake × 100
+//   and always returns a 'bonus' outcome.
+export async function startTetrisRound(userId, stakeRub, isBought = false) {
+  const { data, error } = await supabase.rpc('start_tetris_round', {
+    p_user_id: userId,
+    p_stake_rub: stakeRub,
+    p_is_bought: !!isBought,
+  })
+  if (error) { console.error('startTetrisRound error:', error); return { error: error.message } }
+  return data
+}
+
+// Closes a tetris round. Server clamps payout at the pre-decided
+// target_payout_rub — clients can't overshoot.
+export async function finishTetrisRound(roundId, payoutRub) {
+  const { data, error } = await supabase.rpc('finish_tetris_round', {
+    p_round_id: roundId,
+    p_payout_rub: Math.max(0, Math.round(payoutRub || 0)),
+  })
+  if (error) { console.error('finishTetrisRound error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Admin: slot stats ───────────────────────
 export async function adminGetSlotStats() {
   const { data, error } = await supabase.rpc('admin_get_slot_stats')
