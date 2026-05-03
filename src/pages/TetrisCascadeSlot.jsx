@@ -807,8 +807,15 @@ export default function TetrisCascadeSlot() {
       setGrid(g.map(row => [...row]))
       await sleep(360)
 
-      // Visual running total during cascade. Snapped at end of spin.
-      setTotalWin(prev => prev + stepWin)
+      // The cascade animations and the big-text overlay still fire,
+      // but the win-bar counter is NOT incremented here. The displayed
+      // total is whatever the server pre-decided — set once at the end
+      // of the spin (paid spin → target_payout, bonus free spin →
+      // accrued + slice). This avoids a visible "snap down" when the
+      // natural cascade wins outpace the RTP-controlled outcome.
+      // (stepWin is computed for legacy reasons — kept in case we want
+      //  per-cascade animations later.)
+      void stepWin
       setBigText(null)
 
       if (inBonus) {
