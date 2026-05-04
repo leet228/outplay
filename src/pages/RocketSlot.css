@@ -560,6 +560,66 @@
   box-shadow: 0 4px 14px rgba(236, 72, 153, 0.45);
 }
 
+/* ── Exit confirm modal ──────────────────────────────────────── */
+.rocket-exit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(3, 7, 18, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.rocket-exit-card {
+  width: min(100%, 340px);
+  padding: 22px;
+  border-radius: 26px;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    #1d0838;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+}
+.rocket-exit-card h3 {
+  margin: 0 0 8px;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: -0.55px;
+}
+.rocket-exit-card p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.rocket-exit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+.rocket-exit-actions button {
+  min-height: 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.rocket-exit-actions button:last-child {
+  color: #fff;
+  background: linear-gradient(135deg, #f43f5e, #be123c);
+  border-color: rgba(251, 113, 133, 0.6);
+}
+
 /* ─────────────────────────────────────────────────────────────
  * Home page artwork — small card thumbnail + large preview-modal
  * variant. Mirrors the layout density of Tower / Tetris cards:

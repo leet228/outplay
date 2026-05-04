@@ -512,13 +512,25 @@ $$;
 -- Returns the last N finished/crashed crash multipliers — drives the
 -- chip strip in the UI.
 
+-- Server clock — clients use this once on mount to compensate for
+-- desktop clock drift (countdown / multiplier all driven by it).
+CREATE OR REPLACE FUNCTION get_server_now()
+RETURNS BIGINT
+LANGUAGE sql STABLE
+AS $$
+  SELECT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+$$;
+
+
+-- Filter by timestamp, not status — any round whose flight is over
+-- counts as history regardless of how its status column ended up.
 CREATE OR REPLACE FUNCTION get_rocket_history(p_limit INTEGER DEFAULT 24)
 RETURNS TABLE(round_id BIGINT, crash_at_mul NUMERIC, crashed_at TIMESTAMPTZ)
 LANGUAGE sql STABLE
 AS $$
   SELECT id, crash_at_mul, crashed_at
     FROM rocket_rounds
-   WHERE status IN ('crashed', 'finished')
+   WHERE crashed_at < NOW()
    ORDER BY id DESC
    LIMIT p_limit
 $$;
@@ -576,6 +588,7 @@ GRANT EXECUTE ON FUNCTION place_rocket_bet(UUID, BIGINT, INTEGER, NUMERIC)
 GRANT EXECUTE ON FUNCTION cashout_rocket_bet(UUID, NUMERIC)           TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION get_rocket_history(INTEGER)                 TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION get_my_rocket_bet(UUID, BIGINT)             TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION get_server_now()                            TO authenticated, anon;
 
 NOTIFY pgrst, 'reload schema';
 

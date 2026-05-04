@@ -11,6 +11,7 @@ import {
   placeRocketBet,
   cashoutRocketBet,
   subscribeRocketRounds,
+  getServerNow,
 } from '../lib/supabase'
 import './RocketSlot.css'
 
@@ -128,6 +129,7 @@ export default function RocketSlot() {
   const [cashedAt, setCashedAt] = useState(null)
   const [cashedWin, setCashedWin] = useState(0)
   const [crashedAt, setCrashedAt] = useState(null)
+  const [exitConfirm, setExitConfirm] = useState(false)
 
   // ── Refs (avoid stale closures inside the long-lived loop) ──
   const phaseRef = useRef(phase)
@@ -145,6 +147,10 @@ export default function RocketSlot() {
   const roundRef = useRef(null)
   const lastHistoryIdRef = useRef(null)
   const cashingOutRef = useRef(false)  // prevents double cash-out RPCs
+  // Clock skew — serverNow − Date.now() at mount. All phase / multiplier
+  // math uses (Date.now() + clockOffsetMs) so a desktop with sloppy
+  // clock still sees the right countdown.
+  const clockOffsetRef = useRef(0)
 
   useEffect(() => { phaseRef.current = phase }, [phase])
   useEffect(() => { betRef.current = bet }, [bet])
@@ -155,15 +161,21 @@ export default function RocketSlot() {
 
   const stakeIndex = BETS.indexOf(stake)
 
-  // Telegram BackButton — round goes on without the player; leaving is safe.
+  // Telegram BackButton — same UX as Tower / Tetris: prompt for
+  // confirmation only if a bet is on the table that hasn't paid out
+  // yet. Otherwise leaving is silent.
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return
     tg.BackButton.show()
-    const back = () => { haptic('light'); navigate('/') }
+    const back = () => {
+      haptic('light')
+      if (bet && cashedAt === null) setExitConfirm(true)
+      else navigate('/')
+    }
     tg.BackButton.onClick(back)
     return () => { tg.BackButton.offClick(back); tg.BackButton.hide() }
-  }, [navigate])
+  }, [navigate, bet, cashedAt])
 
   useEffect(() => () => { cancelRef.current = true }, [])
 
@@ -277,9 +289,10 @@ export default function RocketSlot() {
     function scheduleNextRoundWakeup(round) {
       if (nextRoundTimer) clearTimeout(nextRoundTimer)
       const holdUntil = new Date(round.hold_until).getTime()
-      // +120ms buffer so server clock has definitely crossed hold_until
+      const serverNow = Date.now() + clockOffsetRef.current
+      // +150ms buffer so server clock has definitely crossed hold_until
       // by the time we ask it for the next round.
-      const delay = Math.max(50, holdUntil - Date.now() + 120)
+      const delay = Math.max(50, holdUntil - serverNow + 150)
       nextRoundTimer = setTimeout(async () => {
         if (cancelRef.current) return
         const next = await getOrCreateCurrentRocketRound()
@@ -291,7 +304,8 @@ export default function RocketSlot() {
       if (cancelRef.current) return
       const round = roundRef.current
       if (round) {
-        const snap = snapshotFromRound(round)
+        const now = Date.now() + clockOffsetRef.current
+        const snap = snapshotFromRound(round, now)
         if (snap) {
           setPhase(snap.phase); phaseRef.current = snap.phase
           setMultiplier(snap.multiplier)
@@ -309,7 +323,14 @@ export default function RocketSlot() {
       }
     }
 
-    // Initial load — history + first round pull.
+    // Initial load — clock-sync FIRST so the very first frameTick uses
+    // a corrected time, then history + current round in parallel.
+    getServerNow().then(serverNow => {
+      if (typeof serverNow === 'number') {
+        clockOffsetRef.current = serverNow - Date.now()
+      }
+    }).catch(() => {})
+
     Promise.all([
       getRocketHistory(HISTORY_SIZE).then(rows => {
         if (Array.isArray(rows)) {
@@ -328,11 +349,18 @@ export default function RocketSlot() {
     // Backstop: if for some reason Realtime AND our setTimeout both
     // missed an event and the visible round is stale by 5+ seconds,
     // pull a fresh one. Interval is sparse so it's basically free.
+    // ALSO covers the initial-load case where the first RPC failed
+    // and roundRef is still null after BACKSTOP_POLL_MS.
     backstopTimer = setInterval(async () => {
       const round = roundRef.current
-      if (!round) return
+      if (!round) {
+        const r = await getOrCreateCurrentRocketRound()
+        applyRoundUpdate(r)
+        return
+      }
       const holdUntil = new Date(round.hold_until).getTime()
-      if (Date.now() > holdUntil + 5000) {
+      const serverNow = Date.now() + clockOffsetRef.current
+      if (serverNow > holdUntil + 5000) {
         const next = await getOrCreateCurrentRocketRound()
         applyRoundUpdate(next)
       }
@@ -678,6 +706,23 @@ export default function RocketSlot() {
         </div>
       </section>
      </div>
+
+      {exitConfirm && (
+        <div className="rocket-exit-backdrop" onClick={() => { haptic('light'); setExitConfirm(false) }}>
+          <div className="rocket-exit-card" onClick={e => e.stopPropagation()}>
+            <h3>{t.slotExitTitle}</h3>
+            <p>{t.slotExitText}</p>
+            <div className="rocket-exit-actions">
+              <button type="button" onClick={() => { haptic('light'); setExitConfirm(false) }}>
+                {t.slotExitStay}
+              </button>
+              <button type="button" onClick={() => { haptic('medium'); setExitConfirm(false); navigate('/') }}>
+                {t.slotExitLeave}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

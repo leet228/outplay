@@ -1159,6 +1159,16 @@ export async function getMyRocketBet(userId, roundId) {
   return data
 }
 
+// Returns the server's current epoch_ms. Client uses this once on
+// mount to compute clockOffsetMs = serverNow − Date.now() and applies
+// the offset to every phase / multiplier calculation, so a desktop
+// with a 2-3s clock drift still sees the right countdown.
+export async function getServerNow() {
+  const { data, error } = await supabase.rpc('get_server_now')
+  if (error) { console.error('getServerNow error:', error); return null }
+  return Number(data)
+}
+
 // Subscribe to new rocket rounds. Callback fires with the freshly
 // inserted round row. Returns the channel — caller must channel.unsubscribe()
 // on cleanup.
