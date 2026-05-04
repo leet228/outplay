@@ -295,6 +295,10 @@ export default function RocketSlot() {
       setHasRound(true)
     }
 
+    // Latest moment we asked the server "give me the current round".
+    // Used to debounce idle-recovery pulls.
+    let lastFetchAt = Date.now()
+
     function frameTick() {
       if (cancelRef.current) return
       // Always bump the render tick so React commits a fresh paint
@@ -316,6 +320,13 @@ export default function RocketSlot() {
               && typeof auto === 'number' && auto > 1
               && snap.multiplier >= auto) {
             performCashOutServer(auto)
+          }
+          // Stuck in 'idle' (now > hold_until) means the next round
+          // hasn't reached us yet — Realtime broadcast may have
+          // dropped. Pull on demand, debounced to once a second.
+          if (snap.phase === 'idle' && Date.now() - lastFetchAt > 1000) {
+            lastFetchAt = Date.now()
+            getCurrentRocketRound().then(applyRoundUpdate)
           }
         }
       }
@@ -618,7 +629,10 @@ export default function RocketSlot() {
 
         {/* Centre HUD */}
         <div className={`rocket-hud rocket-hud--${phase}`}>
-          {!hasRound ? (
+          {!hasRound || phase === 'idle' ? (
+            // Either we haven't fetched the first round yet, or the
+            // current round's hold expired and we're waiting for the
+            // engine's next round to land via Realtime.
             <span className="rocket-hud-label">{t.slotRocketWaiting}…</span>
           ) : phase === 'betting' ? (
             <>
@@ -637,6 +651,7 @@ export default function RocketSlot() {
               <span className="rocket-hud-label">{t.slotRocketFlying}</span>
             </>
           ) : (
+            // phase === 'crashed'
             <>
               <span className="rocket-hud-mul rocket-hud-mul--crashed">{fmtMul(crashedAt ?? 1)}</span>
               <span className="rocket-hud-label rocket-hud-label--crashed">{t.slotRocketCrashed}</span>

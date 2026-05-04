@@ -31,4 +31,18 @@ BEGIN
 END;
 $$;
 
+-- Sanity: make sure rocket_rounds is in the Realtime publication.
+-- If a previous migration ran but the publication step failed, the
+-- client never gets INSERT broadcasts and ends up sitting on a
+-- crashed round forever.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+     WHERE pubname = 'supabase_realtime' AND tablename = 'rocket_rounds'
+  ) THEN
+    EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE rocket_rounds';
+  END IF;
+END $$;
+
 NOTIFY pgrst, 'reload schema';
