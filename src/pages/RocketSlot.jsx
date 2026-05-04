@@ -442,21 +442,28 @@ export default function RocketSlot() {
   // Sample the exponential growth curve from t=0 to t=now along the same
   // (rx, ry) projection rocketPosForM uses, so curve and rocket always
   // share an endpoint.
-  const pathData = useMemo(() => {
-    if (phase !== 'flying' && phase !== 'crashed') return ''
+  //
+  // Computed inline on EVERY render (no useMemo). With useMemo we hit
+  // a subtle React-18 batching issue: while a bet is on the table the
+  // CTA also re-renders with the live multiplier, and its render slips
+  // into a different commit than the curve's, leaving the memo'd path
+  // stuck at whatever multiplier value was current the previous tick.
+  // 32 samples × a few floats per sample = microseconds; cheaper than
+  // the bug.
+  let pathData = ''
+  if (phase === 'flying' || phase === 'crashed') {
     const targetM = phase === 'crashed' ? (crashedAt ?? 1) : multiplier
-    if (targetM <= 1.001) return ''
-    const tEnd = Math.log(targetM) / Math.log(GROWTH_BASE)
-    const SAMPLES = 32
-    let d = ''
-    for (let i = 0; i <= SAMPLES; i++) {
-      const t = (i / SAMPLES) * tEnd
-      const m = Math.pow(GROWTH_BASE, t)
-      const { rx, ry } = rocketPosForM(m)
-      d += (i === 0 ? 'M ' : ' L ') + rx.toFixed(2) + ' ' + ry.toFixed(2)
+    if (targetM > 1.001) {
+      const tEnd = Math.log(targetM) / Math.log(GROWTH_BASE)
+      const SAMPLES = 32
+      for (let i = 0; i <= SAMPLES; i++) {
+        const t = (i / SAMPLES) * tEnd
+        const m = Math.pow(GROWTH_BASE, t)
+        const { rx, ry } = rocketPosForM(m)
+        pathData += (i === 0 ? 'M ' : ' L ') + rx.toFixed(2) + ' ' + ry.toFixed(2)
+      }
     }
-    return d
-  }, [multiplier, phase, crashedAt])
+  }
 
   const rocketPos = phase === 'flying'
     ? rocketPosForM(multiplier)
