@@ -81,6 +81,13 @@ $$;
 -- That's the critical bit — without per-iteration COMMITs, the new
 -- rocket_rounds INSERTs would be invisible to Realtime / clients
 -- until the whole 55-second tick finished.
+--
+-- IMPORTANT: no inner EXCEPTION block around the COMMIT — Postgres
+-- forbids transaction control inside an exception handler. Errors
+-- inside rocket_ensure_round() are caught by ITS exception handler
+-- (logs to admin_logs, returns NULL), so they never bubble up here.
+-- A truly unexpected raise will abort this cron tick; the next
+-- minute's tick recovers automatically.
 CREATE OR REPLACE PROCEDURE rocket_engine_tick()
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -90,15 +97,8 @@ DECLARE
   v_started TIMESTAMPTZ := clock_timestamp();
 BEGIN
   WHILE EXTRACT(EPOCH FROM (clock_timestamp() - v_started)) < 55 LOOP
-    BEGIN
-      PERFORM rocket_ensure_round();
-      COMMIT;
-    EXCEPTION WHEN OTHERS THEN
-      ROLLBACK;
-      -- Log but keep ticking; one bad iteration shouldn't kill the engine.
-      PERFORM admin_log('error', 'proc:rocket_engine_tick', SQLERRM, '{}'::jsonb);
-      COMMIT;
-    END;
+    PERFORM rocket_ensure_round();
+    COMMIT;
     PERFORM pg_sleep(0.5);
   END LOOP;
 END;
