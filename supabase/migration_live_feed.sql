@@ -93,6 +93,7 @@ DECLARE
     ARRAY['tetris-cascade', 'Tetris Cascade'],
     ARRAY['rocket',         'Rocket']
   ];
+  v_bets INTEGER[] := ARRAY[10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000];
   v_game_idx INTEGER;
   v_amount   INTEGER;
   v_abs      INTEGER;
@@ -100,28 +101,29 @@ DECLARE
 BEGIN
   v_game_idx := 1 + floor(random() * 3)::INT;
 
-  -- Distribution of |amount|:
-  --   95 %  1–199 ₽
-  --    3 %  200–1 999 ₽
-  --    1 %  2 000–4 999 ₽
-  --    1 %  5 000–24 999 ₽
-  r := random();
-  v_abs := CASE
-    WHEN r < 0.95 THEN 1   + floor(random() * 199 )::INT
-    WHEN r < 0.98 THEN 200 + floor(random() * 1800)::INT
-    WHEN r < 0.99 THEN 2000 + floor(random() * 3000)::INT
-    ELSE              5000 + floor(random() * 20000)::INT
-  END;
-
   -- 60 % loss, 40 % win.
   IF random() < 0.60 THEN
-    v_amount := -v_abs;
+    -- LOSS = stake burned, so it must be one of the BETS values. The
+    -- bucket boundaries reproduce the 95/3/1/1 distribution.
+    r := random();
+    v_amount := -CASE
+      WHEN r < 0.95 THEN v_bets[1 + floor(random() * 4)::INT]   -- 10/25/50/100
+      WHEN r < 0.98 THEN v_bets[5 + floor(random() * 2)::INT]   -- 250/500
+      WHEN r < 0.99 THEN v_bets[7 + floor(random() * 2)::INT]   -- 1000/2000
+      ELSE              v_bets[9 + floor(random() * 4)::INT]    -- 4000-25000
+    END;
   ELSE
-    v_amount :=  v_abs;
+    -- WIN: any amount with the matching magnitude distribution.
+    r := random();
+    v_abs := CASE
+      WHEN r < 0.95 THEN 1   + floor(random() * 199 )::INT
+      WHEN r < 0.98 THEN 200 + floor(random() * 1800)::INT
+      WHEN r < 0.99 THEN 2000 + floor(random() * 3000)::INT
+      ELSE              5000 + floor(random() * 20000)::INT
+    END;
+    v_amount := v_abs;
   END IF;
 
-  -- user_name / avatar_emoji are kept on the row but not surfaced in
-  -- the UI — placeholder values so the columns stay populated.
   INSERT INTO live_feed_events (
     user_name, avatar_emoji, game_id, game_label, amount_rub, is_fake
   ) VALUES (
