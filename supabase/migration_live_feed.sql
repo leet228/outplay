@@ -88,78 +88,44 @@ CREATE OR REPLACE FUNCTION feed_insert_fake()
 RETURNS VOID LANGUAGE plpgsql VOLATILE
 AS $$
 DECLARE
-  v_names TEXT[] := ARRAY[
-    'Алекс_88', 'MaxPower', 'IceQueen', 'Ninja777', 'BlackJack', 'RoyalLuck',
-    'Borisich', 'Misha25', 'Den4ik', 'Polina_K', 'WildLion', 'Saturn999',
-    'Артём', 'Vlad_77', 'KingArthur', 'Лиза', 'Котяра', 'CryptoSamurai',
-    'Slavik', 'Roman94', 'Olga_M', 'Nikita_S', 'Pavel', 'Дима', 'Оксана',
-    'Sergeant', 'NeoMatrix', 'PhantomX', 'GoldFinger', 'StormBreaker',
-    'Юля_07', 'Vovan', 'Kostya_42', 'Анна', 'Ivan_K', 'Tanya11',
-    'Beast_Mode', 'Lucky_Dan', 'TopShot', 'Гриша', 'AlexW', 'IronWolf',
-    'JediMaster', 'Captain_K', 'Kirill_8', 'Yura_99', 'AntonM', 'Petr',
-    'Kris_75', 'BigBoss', 'Аркадий', 'Vasyok', 'ColdSteel', 'Dasha_K',
-    'Nastya_22', 'PixelKing', 'NightOwl', 'Степан', 'StreetFighter',
-    'AceHigh', 'Fenix', 'GhostRider', 'Тимур', 'Илья', 'Egor_M',
-    'Marusya', 'Daria88', 'CodeBreaker', 'SilentBob', 'Rocky', 'Karina',
-    'Roman_S', 'Andrey_K', 'Vlad_N', 'Maks_777', 'Lena_94', 'WildFox',
-    'Mishanya', 'Stas_R', 'Sasha_W', 'GoldRush', 'Sergeyka', 'Gleb_G',
-    'Виталик', 'AlexBoss', 'Pasha_L', 'Влад', 'Игорь', 'Slava_M',
-    'Kostian', 'Genka', 'Alex9999', 'StanleyK', 'Daniil', 'Roma_S',
-    'Bogdan_K', 'Yan_M', 'Eduard_777', 'Marina_88', 'Cobra', 'Toxic',
-    'Rebel', 'PixelPro', 'NightHawk', 'Diamond', 'StormX', 'Phantom',
-    'Артур', 'Степа', 'Maxon', 'Dimon', 'Fed4', 'Hero_98', 'Boyko',
-    'Yaroslav', 'Yulika', 'Renat', 'Adam_K', 'Andron', 'Kostyl',
-    'Cherep', 'Vityok', 'Senya', 'BigMike', 'Edik_M', 'Tikhon',
-    'CyberPunk', 'Sniper', 'Hunter', 'Wizard', 'Mage_77', 'Bishop',
-    'Knight_X', 'Тоша', 'Денис', 'Mikhail_N', 'TopGun', 'GoldKing',
-    'CashKing', 'BetMaster', 'BigWinner', 'LuckyOne', 'Royal88', 'Joker'
-  ];
-  v_emojis TEXT[] := ARRAY[
-    '🦁', '🐯', '🐺', '🦊', '🐉', '🦅', '🦄', '👑', '🃏', '🎭',
-    '🚀', '⚡', '💎', '🔥', '⭐', '✨', '💰', '🏆', '🎯', '🎰',
-    '🦈', '🐲', '🐧', '🦉', '🦇', '🐝', '🌟', '🎪', '🎲', '🎮'
-  ];
   v_games TEXT[][] := ARRAY[
     ARRAY['tower-stack',    'Tower Stack'],
     ARRAY['tetris-cascade', 'Tetris Cascade'],
     ARRAY['rocket',         'Rocket']
   ];
-  v_name      TEXT;
-  v_emoji     TEXT;
-  v_game_idx  INTEGER;
-  v_stake     INTEGER;
-  v_amount    INTEGER;
-  r           NUMERIC;
-  v_mul       NUMERIC;
+  v_game_idx INTEGER;
+  v_amount   INTEGER;
+  v_abs      INTEGER;
+  r          NUMERIC;
 BEGIN
-  v_name  := v_names[1 + floor(random() * array_length(v_names, 1))::INT];
-  v_emoji := v_emojis[1 + floor(random() * array_length(v_emojis, 1))::INT];
-  v_game_idx := 1 + floor(random() * 3)::INT;  -- 1..3
-  v_stake := feed_random_stake();
-  r := random();
+  v_game_idx := 1 + floor(random() * 3)::INT;
 
-  IF r < 0.35 THEN
-    -- Win: stake × multiplier with a long tail
-    DECLARE
-      r2 NUMERIC := random();
-    BEGIN
-      v_mul := CASE
-        WHEN r2 < 0.60 THEN 1.5 + random() * 1.5         -- 1.5-3
-        WHEN r2 < 0.90 THEN 3 + random() * 7              -- 3-10
-        WHEN r2 < 0.98 THEN 10 + random() * 20            -- 10-30
-        ELSE                30 + random() * 70            -- 30-100 (rare)
-      END;
-    END;
-    v_amount := floor(v_stake * v_mul)::INTEGER;
+  -- Distribution of |amount|:
+  --   95 %  1–199 ₽
+  --    3 %  200–1 999 ₽
+  --    1 %  2 000–4 999 ₽
+  --    1 %  5 000–24 999 ₽
+  r := random();
+  v_abs := CASE
+    WHEN r < 0.95 THEN 1   + floor(random() * 199 )::INT
+    WHEN r < 0.98 THEN 200 + floor(random() * 1800)::INT
+    WHEN r < 0.99 THEN 2000 + floor(random() * 3000)::INT
+    ELSE              5000 + floor(random() * 20000)::INT
+  END;
+
+  -- 60 % loss, 40 % win.
+  IF random() < 0.60 THEN
+    v_amount := -v_abs;
   ELSE
-    -- Loss: lose the full stake
-    v_amount := -v_stake;
+    v_amount :=  v_abs;
   END IF;
 
+  -- user_name / avatar_emoji are kept on the row but not surfaced in
+  -- the UI — placeholder values so the columns stay populated.
   INSERT INTO live_feed_events (
     user_name, avatar_emoji, game_id, game_label, amount_rub, is_fake
   ) VALUES (
-    v_name, v_emoji, v_games[v_game_idx][1], v_games[v_game_idx][2], v_amount, true
+    'Outplay', '🎰', v_games[v_game_idx][1], v_games[v_game_idx][2], v_amount, true
   );
 END;
 $$;

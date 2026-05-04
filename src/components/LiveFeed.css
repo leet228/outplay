@@ -1,85 +1,66 @@
 /* ─────────────────────────────────────────────────────────────
- * Live feed — activity ribbon under the Slots tab on Home.
+ * Live feed under the Slots tab on Home.
  *
- * Layout: header pill + vertical list of fixed-height rows.
- * Each new row slides down from the top via CSS only — no JS
- * keyframes, no layout thrash, GPU-accelerated transform/opacity.
+ * Each event is its OWN card (no outer wrapper background) — matches
+ * the reference design where the list reads as a stack of dark
+ * pills with subtle dividers.
+ *
+ * Animations:
+ *   - new row at the top: slide-in from above + fade-in
+ *   - row past the visible window: fade-out + slight slide-down
+ *   Both compositor-only (transform / opacity), no layout reflow.
  * ───────────────────────────────────────────────────────────── */
 
 .live-feed {
-  margin: 16px 0 18px;
-  padding: 12px;
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(28, 28, 30, 0.85), rgba(20, 20, 22, 0.95));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
-  overflow: hidden;
+  margin: 18px 0 22px;
+  /* No card around the whole feed — rows are individual cards. */
 }
 
-.live-feed-header {
+/* "Game | Payment" column header */
+.live-feed-headerline {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 0 4px 10px;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.62);
-}
-
-.live-feed-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
-  animation: live-feed-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes live-feed-pulse {
-  0%, 100% { opacity: 0.95; transform: scale(1); }
-  50%      { opacity: 0.45; transform: scale(0.7); }
-}
-
-.live-feed-empty {
-  padding: 18px 4px;
-  text-align: center;
-  font-size: 13px;
+  padding: 4px 14px 10px;
+  font-size: 12px;
+  font-weight: 700;
   color: rgba(255, 255, 255, 0.45);
 }
 
-/* List */
+.live-feed-headerline-payment {
+  /* nothing extra, just for clarity */
+}
+
 .live-feed-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  /* `transform: translateZ(0)` promotes to its own layer so child
-   * transforms during slide-in don't repaint the parent stack. */
+  gap: 8px;
+  /* Promote to its own compositor layer so child transforms don't
+   * bubble up into expensive parent repaints. */
   transform: translateZ(0);
+  /* Enough room for ~10 rows to live; new ones land at the top via
+   * flex order naturally and the bottom one fades out. */
 }
 
-/* Row */
+/* Row card */
 .live-feed-row {
   display: grid;
-  grid-template-columns: 36px 1fr auto;
+  grid-template-columns: 48px 1fr auto;
   align-items: center;
   gap: 12px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--surface, #1c1c1e);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  /* Slide-in: comes from "above" with a quick fade. Only runs once
-   * per element (animation-fill-mode forwards keeps end-state). */
-  animation: live-feed-slide-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  /* Hint to the compositor — the only thing that animates is
-   * transform/opacity, both compositor-only. */
+  /* Slide-in animation runs on mount, once. `both` keeps the start
+   * frame so the row never flashes at full opacity before animating. */
+  animation: live-feed-slide-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   will-change: transform, opacity;
 }
 
 @keyframes live-feed-slide-in {
   from {
-    transform: translateY(-14px);
+    transform: translateY(-12px);
     opacity: 0;
   }
   to {
@@ -88,18 +69,56 @@
   }
 }
 
-.live-feed-avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  font-size: 20px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(236, 72, 153, 0.18));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+/* Bottom row (overflow) — fades out as a new event slides in. */
+.live-feed-row.is-leaving {
+  animation: live-feed-fade-out 0.42s ease forwards;
+  pointer-events: none;
 }
 
+@keyframes live-feed-fade-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+.live-feed-row.is-win {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: linear-gradient(
+    90deg,
+    rgba(34, 197, 94, 0.10) 0%,
+    rgba(28, 28, 30, 1) 50%
+  );
+}
+
+/* Slot icon — gradient square with the slot's mini-thumbnail SVG. */
+.live-feed-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #2a2a2e, #18181a);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.live-feed-icon.icon--tower-stack {
+  background: linear-gradient(135deg, #4ca464, #1f3db0);
+}
+.live-feed-icon.icon--tetris-cascade {
+  background: linear-gradient(135deg, #6366f1, #be185d);
+}
+.live-feed-icon.icon--rocket {
+  background: linear-gradient(135deg, #ec4899, #4c1d95);
+}
+
+/* Meta column — studio name + game name */
 .live-feed-meta {
   display: flex;
   flex-direction: column;
@@ -107,8 +126,15 @@
   line-height: 1.2;
 }
 
-.live-feed-name {
-  font-size: 13px;
+.live-feed-studio {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 600;
+}
+
+.live-feed-game {
+  margin-top: 3px;
+  font-size: 15px;
   font-weight: 800;
   color: #fff;
   white-space: nowrap;
@@ -116,32 +142,42 @@
   text-overflow: ellipsis;
 }
 
-.live-feed-game {
-  margin-top: 2px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
+/* Payout column — green $ pill + amount */
 .live-feed-amount {
-  font-size: 14px;
-  font-weight: 900;
-  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   white-space: nowrap;
 }
 
-.live-feed-row.is-win .live-feed-amount {
+.live-feed-money-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.32);
+}
+
+.live-feed-amount-value {
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.live-feed-row.is-win .live-feed-amount-value {
   color: #34d399;
 }
 
-.live-feed-row.is-loss .live-feed-amount {
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.live-feed-row.is-win {
-  /* Subtle green wash for wins */
-  background: linear-gradient(90deg, rgba(34, 197, 94, 0.10), rgba(255, 255, 255, 0.03));
-  border-color: rgba(34, 197, 94, 0.22);
+.live-feed-empty {
+  padding: 18px 4px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
 }
