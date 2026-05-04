@@ -1115,15 +1115,39 @@ export async function adminResetSlotStats(slotId) {
 // poll get_or_create_current_rocket_round() and also subscribe to the
 // rocket_rounds Realtime channel for live new-round broadcasts.
 
+// Frontend error sink — fires admin_logs row with source='client:scope'
+// so production failures (RPC errors that fall through, Realtime
+// subscription drops) end up in the same place as server-side errors.
+// Best-effort: never throws and never blocks the calling function.
+export async function logClientError(scope, message, payload = {}) {
+  try {
+    await supabase.rpc('client_log_error', {
+      p_scope: String(scope || 'unknown').slice(0, 60),
+      p_message: String(message || '(no message)').slice(0, 500),
+      p_payload: payload || {},
+    })
+  } catch {
+    // swallow — logging itself must not break callers
+  }
+}
+
 export async function getOrCreateCurrentRocketRound() {
   const { data, error } = await supabase.rpc('get_or_create_current_rocket_round')
-  if (error) { console.error('getOrCreateCurrentRocketRound error:', error); return { error: error.message } }
+  if (error) {
+    console.error('getOrCreateCurrentRocketRound error:', error)
+    logClientError('rocket.get_or_create_current_round', error.message, { code: error.code })
+    return { error: error.message }
+  }
   return data
 }
 
 export async function getRocketHistory(limit = 24) {
   const { data, error } = await supabase.rpc('get_rocket_history', { p_limit: limit })
-  if (error) { console.error('getRocketHistory error:', error); return [] }
+  if (error) {
+    console.error('getRocketHistory error:', error)
+    logClientError('rocket.get_history', error.message, { code: error.code, limit })
+    return []
+  }
   return data ?? []
 }
 
@@ -1134,7 +1158,13 @@ export async function placeRocketBet(userId, roundId, stakeRub, autoCashMul = nu
     p_stake_rub: stakeRub,
     p_auto_cash_mul: autoCashMul,
   })
-  if (error) { console.error('placeRocketBet error:', error); return { error: error.message } }
+  if (error) {
+    console.error('placeRocketBet error:', error)
+    logClientError('rocket.place_bet', error.message, {
+      code: error.code, user_id: userId, round_id: roundId, stake: stakeRub,
+    })
+    return { error: error.message }
+  }
   return data
 }
 
@@ -1146,7 +1176,13 @@ export async function cashoutRocketBet(betId, atMul = null) {
     p_bet_id: betId,
     p_at_mul: atMul,
   })
-  if (error) { console.error('cashoutRocketBet error:', error); return { error: error.message } }
+  if (error) {
+    console.error('cashoutRocketBet error:', error)
+    logClientError('rocket.cashout_bet', error.message, {
+      code: error.code, bet_id: betId, at_mul: atMul,
+    })
+    return { error: error.message }
+  }
   return data
 }
 
@@ -1155,7 +1191,11 @@ export async function getMyRocketBet(userId, roundId) {
     p_user_id: userId,
     p_round_id: roundId,
   })
-  if (error) { console.error('getMyRocketBet error:', error); return null }
+  if (error) {
+    console.error('getMyRocketBet error:', error)
+    logClientError('rocket.get_my_bet', error.message, { code: error.code })
+    return null
+  }
   return data
 }
 
@@ -1165,20 +1205,33 @@ export async function getMyRocketBet(userId, roundId) {
 // with a 2-3s clock drift still sees the right countdown.
 export async function getServerNow() {
   const { data, error } = await supabase.rpc('get_server_now')
-  if (error) { console.error('getServerNow error:', error); return null }
+  if (error) {
+    console.error('getServerNow error:', error)
+    logClientError('rocket.server_now', error.message, { code: error.code })
+    return null
+  }
   return Number(data)
 }
 
 // Subscribe to new rocket rounds. Callback fires with the freshly
 // inserted round row. Returns the channel — caller must channel.unsubscribe()
-// on cleanup.
+// on cleanup. Subscription state is monitored so dropped channels show
+// up in admin_logs.
 export function subscribeRocketRounds(onNewRound) {
   const channel = supabase
     .channel('rocket_rounds_inserts')
     .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'rocket_rounds' },
         (payload) => onNewRound(payload.new))
-    .subscribe()
+    .subscribe((status, err) => {
+      // Supabase emits 'CLOSED' / 'CHANNEL_ERROR' / 'TIMED_OUT' on
+      // failure; SUBSCRIBED is the happy path and shouldn't be logged.
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        const msg = err?.message || `realtime status: ${status}`
+        console.warn('subscribeRocketRounds:', status, err)
+        logClientError('rocket.realtime', msg, { status })
+      }
+    })
   return channel
 }
 

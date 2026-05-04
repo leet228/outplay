@@ -214,6 +214,11 @@ BEGIN
   RETURNING * INTO v_round;
 
   RETURN v_round;
+
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:rocket_create_round', SQLERRM,
+    jsonb_build_object('prev_id', v_prev_id, 'bias', v_bias, 'crash', v_crash));
+  RAISE;
 END;
 $$;
 
@@ -264,6 +269,11 @@ BEGIN
 
   v_round := rocket_create_round();
   RETURN v_round;
+
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:get_or_create_current_rocket_round', SQLERRM,
+    jsonb_build_object('current_id', v_round.id));
+  RAISE;
 END;
 $$;
 
@@ -300,6 +310,10 @@ BEGIN
            updated_at         = NOW()
      WHERE slot_id = 'rocket';
   END IF;
+
+EXCEPTION WHEN OTHERS THEN
+  PERFORM admin_log('error', 'rpc:rocket_settle_round_losses', SQLERRM,
+    jsonb_build_object('round_id', p_round_id));
 END;
 $$;
 
@@ -522,6 +536,29 @@ AS $$
 $$;
 
 
+-- Frontend error sink — wrappers in supabase.js call this when a
+-- Rocket RPC returns an error or a Realtime subscription fails, so
+-- the failure shows up in admin_logs alongside server-side ones.
+CREATE OR REPLACE FUNCTION client_log_error(
+  p_scope    TEXT,
+  p_message  TEXT,
+  p_payload  JSONB DEFAULT '{}'::jsonb
+)
+RETURNS VOID
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM admin_log(
+    'error',
+    'client:' || COALESCE(LEFT(p_scope, 60),  'unknown'),
+    LEFT(COALESCE(p_message, '(no message)'), 500),
+    COALESCE(p_payload, '{}'::jsonb)
+  );
+END;
+$$;
+
+
 -- Filter by timestamp, not status — any round whose flight is over
 -- counts as history regardless of how its status column ended up.
 CREATE OR REPLACE FUNCTION get_rocket_history(p_limit INTEGER DEFAULT 24)
@@ -589,6 +626,7 @@ GRANT EXECUTE ON FUNCTION cashout_rocket_bet(UUID, NUMERIC)           TO authent
 GRANT EXECUTE ON FUNCTION get_rocket_history(INTEGER)                 TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION get_my_rocket_bet(UUID, BIGINT)             TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION get_server_now()                            TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION client_log_error(TEXT, TEXT, JSONB)         TO authenticated, anon;
 
 NOTIFY pgrst, 'reload schema';
 
