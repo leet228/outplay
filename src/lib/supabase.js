@@ -1131,6 +1131,21 @@ export async function logClientError(scope, message, payload = {}) {
   }
 }
 
+// Pure read of the current round. The round is created/managed by
+// the server-side pg_cron engine — clients never trigger creation.
+export async function getCurrentRocketRound() {
+  const { data, error } = await supabase.rpc('get_current_rocket_round')
+  if (error) {
+    console.error('getCurrentRocketRound error:', error)
+    logClientError('rocket.get_current_round', error.message, { code: error.code })
+    return { error: error.message }
+  }
+  return data
+}
+
+// Legacy wrapper kept as a safety net if the cron engine is paused.
+// New client code should prefer getCurrentRocketRound() — this one
+// triggers a write path (lazy round creation) on the server.
 export async function getOrCreateCurrentRocketRound() {
   const { data, error } = await supabase.rpc('get_or_create_current_rocket_round')
   if (error) {

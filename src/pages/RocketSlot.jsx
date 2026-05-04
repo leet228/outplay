@@ -6,7 +6,7 @@ import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
 import {
-  getOrCreateCurrentRocketRound,
+  getCurrentRocketRound,
   getRocketHistory,
   placeRocketBet,
   cashoutRocketBet,
@@ -130,6 +130,10 @@ export default function RocketSlot() {
   const [cashedWin, setCashedWin] = useState(0)
   const [crashedAt, setCrashedAt] = useState(null)
   const [exitConfirm, setExitConfirm] = useState(false)
+  // True once we've received the first round from the server (or in
+  // dev mode where there is no server). Drives a loader until the
+  // engine's first round shows up.
+  const [hasRound, setHasRound] = useState(isDev)
   // Monotonic counter bumped on every frame tick — guarantees a fresh
   // re-render even when none of the other state values changed by
   // enough to register (React skips identical state updates). The
@@ -261,19 +265,18 @@ export default function RocketSlot() {
       }
     }
 
-    // ── SERVER mode ────────────────────────────────────────────────
-    // Event-driven loop:
-    //   * Realtime channel listens for INSERTs on rocket_rounds — every
-    //     client learns about new rounds the moment one is created.
-    //   * On mount we pull the current round once.
-    //   * After that, a single setTimeout wakes us right at hold_until
-    //     to pull / lazy-create the next round. ONE RPC per round, not
-    //     30 per minute.
-    //   * A 30s backstop interval covers the unlikely case of both the
-    //     Realtime broadcast AND our scheduled wake-up missing.
-    //   * 10fps frame ticker drives the multiplier readout + auto-cash.
+    // ── SERVER mode (pure reader) ──────────────────────────────────
+    // The server-side pg_cron engine creates rounds 24/7 — this client
+    // does NOT trigger any creation. It just:
+    //   1. fetches the current round once on mount
+    //   2. listens to Realtime INSERTs for the next ones
+    //   3. renders the multiplier locally from server timestamps +
+    //      clockOffset (snapshotFromRound)
+    //   4. has a sparse 30s backstop fetch if Realtime drops
+    //
+    // No scheduleNextRoundWakeup, no advisory locks, no race on
+    // creation — the engine owns that. This client is a pure renderer.
     let frameTimer = null
-    let nextRoundTimer = null
     let backstopTimer = null
     let channel = null
 
@@ -289,21 +292,7 @@ export default function RocketSlot() {
         setCashedWin(0)
       }
       roundRef.current = round
-      scheduleNextRoundWakeup(round)
-    }
-
-    function scheduleNextRoundWakeup(round) {
-      if (nextRoundTimer) clearTimeout(nextRoundTimer)
-      const holdUntil = new Date(round.hold_until).getTime()
-      const serverNow = Date.now() + clockOffsetRef.current
-      // +150ms buffer so server clock has definitely crossed hold_until
-      // by the time we ask it for the next round.
-      const delay = Math.max(50, holdUntil - serverNow + 150)
-      nextRoundTimer = setTimeout(async () => {
-        if (cancelRef.current) return
-        const next = await getOrCreateCurrentRocketRound()
-        applyRoundUpdate(next)
-      }, delay)
+      setHasRound(true)
     }
 
     function frameTick() {
@@ -346,40 +335,38 @@ export default function RocketSlot() {
           setHistory(rows.slice().reverse().map(r => Number(r.crash_at_mul)))
         }
       }),
-      getOrCreateCurrentRocketRound().then(applyRoundUpdate),
+      getCurrentRocketRound().then(applyRoundUpdate),
     ]).catch(() => {})
 
-    // Realtime — instant new-round broadcast (no client even needs to
-    // ask the server when a new round comes in).
+    // Realtime — instant new-round broadcast.
     channel = subscribeRocketRounds(applyRoundUpdate)
 
     frameTimer = setInterval(frameTick, FRAME_INTERVAL_MS)
 
-    // Backstop: if for some reason Realtime AND our setTimeout both
-    // missed an event and the visible round is stale by 5+ seconds,
-    // pull a fresh one. Interval is sparse so it's basically free.
-    // ALSO covers the initial-load case where the first RPC failed
-    // and roundRef is still null after BACKSTOP_POLL_MS.
+    // Backstop: if Realtime drops, re-fetch every BACKSTOP_POLL_MS.
+    // Also covers the initial-load case where the first RPC failed
+    // and roundRef is still null.
     backstopTimer = setInterval(async () => {
       const round = roundRef.current
+      const serverNow = Date.now() + clockOffsetRef.current
       if (!round) {
-        const r = await getOrCreateCurrentRocketRound()
+        const r = await getCurrentRocketRound()
         applyRoundUpdate(r)
         return
       }
       const holdUntil = new Date(round.hold_until).getTime()
-      const serverNow = Date.now() + clockOffsetRef.current
-      if (serverNow > holdUntil + 5000) {
-        const next = await getOrCreateCurrentRocketRound()
-        applyRoundUpdate(next)
+      // Round is well past its hold window — Realtime probably dropped,
+      // re-fetch to catch up to whatever the engine has done since.
+      if (serverNow > holdUntil + 3000) {
+        const r = await getCurrentRocketRound()
+        applyRoundUpdate(r)
       }
     }, BACKSTOP_POLL_MS)
 
     return () => {
-      if (frameTimer)     clearInterval(frameTimer)
-      if (nextRoundTimer) clearTimeout(nextRoundTimer)
-      if (backstopTimer)  clearInterval(backstopTimer)
-      if (channel)        channel.unsubscribe()
+      if (frameTimer)    clearInterval(frameTimer)
+      if (backstopTimer) clearInterval(backstopTimer)
+      if (channel)       channel.unsubscribe()
     }
   }, [isDev])
 
@@ -631,7 +618,9 @@ export default function RocketSlot() {
 
         {/* Centre HUD */}
         <div className={`rocket-hud rocket-hud--${phase}`}>
-          {phase === 'betting' ? (
+          {!hasRound ? (
+            <span className="rocket-hud-label">{t.slotRocketWaiting}…</span>
+          ) : phase === 'betting' ? (
             <>
               <span className="rocket-hud-label">{t.slotRocketWaiting}</span>
               <span className="rocket-hud-time">{bettingSecondsLeft}s</span>
