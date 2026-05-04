@@ -1230,8 +1230,9 @@ export async function getServerNow() {
 
 // Subscribe to new rocket rounds. Callback fires with the freshly
 // inserted round row. Returns the channel — caller must channel.unsubscribe()
-// on cleanup. Subscription state is monitored so dropped channels show
-// up in admin_logs.
+// on cleanup. Only genuine failures (CHANNEL_ERROR / TIMED_OUT) are
+// logged; CLOSED is the normal status emitted on .unsubscribe() when
+// the user leaves the page.
 export function subscribeRocketRounds(onNewRound) {
   const channel = supabase
     .channel('rocket_rounds_inserts')
@@ -1239,9 +1240,7 @@ export function subscribeRocketRounds(onNewRound) {
         { event: 'INSERT', schema: 'public', table: 'rocket_rounds' },
         (payload) => onNewRound(payload.new))
     .subscribe((status, err) => {
-      // Supabase emits 'CLOSED' / 'CHANNEL_ERROR' / 'TIMED_OUT' on
-      // failure; SUBSCRIBED is the happy path and shouldn't be logged.
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         const msg = err?.message || `realtime status: ${status}`
         console.warn('subscribeRocketRounds:', status, err)
         logClientError('rocket.realtime', msg, { status })
@@ -1268,7 +1267,9 @@ export async function getLiveFeed(limit = 30) {
 
 // Subscribe to new live_feed_events INSERTs. onInsert(row) fires for
 // every new row. Returns the Supabase channel — caller must call
-// channel.unsubscribe() on cleanup.
+// channel.unsubscribe() on cleanup. Only genuine failures
+// (CHANNEL_ERROR / TIMED_OUT) are logged; CLOSED is the normal
+// status emitted on .unsubscribe() when the user leaves the page.
 export function subscribeLiveFeed(onInsert) {
   const channel = supabase
     .channel('live_feed_inserts')
@@ -1276,7 +1277,7 @@ export function subscribeLiveFeed(onInsert) {
         { event: 'INSERT', schema: 'public', table: 'live_feed_events' },
         (payload) => onInsert(payload.new))
     .subscribe((status, err) => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         const msg = err?.message || `realtime status: ${status}`
         console.warn('subscribeLiveFeed:', status, err)
         logClientError('live_feed.realtime', msg, { status })
