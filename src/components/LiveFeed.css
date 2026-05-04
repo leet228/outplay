@@ -41,13 +41,14 @@
   transform: translateZ(0);
 }
 
-/* Row card */
+/* Row card. Height target: just slightly taller than the header
+ * pill above (~46 px) — about 54 px total. */
 .live-feed-row {
   display: grid;
-  grid-template-columns: 48px 1fr auto;
+  grid-template-columns: 36px 1fr auto;
   align-items: center;
-  gap: 14px;
-  padding: 10px 14px;
+  gap: 12px;
+  padding: 8px 14px;
   border-radius: 14px;
   background: var(--surface, #1c1c1e);
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -95,12 +96,12 @@
 
 /* Slot icon — PNG asset from src/assets/games */
 .live-feed-icon {
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -115,7 +116,7 @@
 
 /* Game name (no studio label) */
 .live-feed-game {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   color: #fff;
   white-space: nowrap;
