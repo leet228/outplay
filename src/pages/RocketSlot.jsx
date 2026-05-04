@@ -130,6 +130,12 @@ export default function RocketSlot() {
   const [cashedWin, setCashedWin] = useState(0)
   const [crashedAt, setCrashedAt] = useState(null)
   const [exitConfirm, setExitConfirm] = useState(false)
+  // Monotonic counter bumped on every frame tick — guarantees a fresh
+  // re-render even when none of the other state values changed by
+  // enough to register (React skips identical state updates). The
+  // curve recomputes on every render so this keeps it perfectly in
+  // sync with the rocket and the multiplier readout.
+  const [renderTick, setRenderTick] = useState(0)
 
   // ── Refs (avoid stale closures inside the long-lived loop) ──
   const phaseRef = useRef(phase)
@@ -302,6 +308,9 @@ export default function RocketSlot() {
 
     function frameTick() {
       if (cancelRef.current) return
+      // Always bump the render tick so React commits a fresh paint
+      // even if other state values didn't change.
+      setRenderTick(t => (t + 1) % 1_000_000)
       const round = roundRef.current
       if (round) {
         const now = Date.now() + clockOffsetRef.current
@@ -572,33 +581,22 @@ export default function RocketSlot() {
 
         <svg className="rocket-curve" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           <defs>
-            <linearGradient id="rocket-curve-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ff5b8a" stopOpacity="0.55" />
-              <stop offset="100%" stopColor="#ff5b8a" stopOpacity="0" />
-            </linearGradient>
             <linearGradient id="rocket-curve-stroke" x1="0" y1="1" x2="1" y2="0">
               <stop offset="0%" stopColor="#fb7185" />
               <stop offset="100%" stopColor="#fde68a" />
             </linearGradient>
           </defs>
           {pathData && (
-            <>
-              <path
-                d={`${pathData} L ${rocketPos.rx.toFixed(2)} 100 L 6 100 Z`}
-                fill="url(#rocket-curve-fill)"
-                opacity={phase === 'crashed' ? 0.35 : 0.9}
-              />
-              <path
-                d={pathData}
-                stroke="url(#rocket-curve-stroke)"
-                strokeWidth="0.9"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                vectorEffect="non-scaling-stroke"
-                opacity={phase === 'crashed' ? 0.55 : 1}
-              />
-            </>
+            <path
+              d={pathData}
+              stroke="url(#rocket-curve-stroke)"
+              strokeWidth="0.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              vectorEffect="non-scaling-stroke"
+              opacity={phase === 'crashed' ? 0.55 : 1}
+            />
           )}
         </svg>
 
