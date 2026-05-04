@@ -201,7 +201,7 @@ BEGIN
   v_flight_seconds := rocket_flight_seconds(v_crash);
   v_betting_until := NOW() + INTERVAL '5 seconds';
   v_crashed_at    := v_betting_until + (v_flight_seconds || ' seconds')::INTERVAL;
-  v_hold_until    := v_crashed_at + INTERVAL '3 seconds';
+  v_hold_until    := v_crashed_at + INTERVAL '1 second';
 
   INSERT INTO rocket_rounds (
     crash_at_mul, rtp_bias, betting_until, flying_started_at,

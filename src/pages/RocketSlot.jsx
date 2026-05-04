@@ -7,6 +7,7 @@ import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
 import {
   getCurrentRocketRound,
+  getOrCreateCurrentRocketRound,
   getRocketHistory,
   placeRocketBet,
   cashoutRocketBet,
@@ -322,11 +323,14 @@ export default function RocketSlot() {
             performCashOutServer(auto)
           }
           // Stuck in 'idle' (now > hold_until) means the next round
-          // hasn't reached us yet — Realtime broadcast may have
-          // dropped. Pull on demand, debounced to once a second.
+          // hasn't reached us yet. Don't just read — actively ask
+          // the server to spawn the next round if cron hasn't yet.
+          // Debounced to once a second; the RPC has an advisory
+          // lock inside so concurrent client calls won't double-
+          // create.
           if (snap.phase === 'idle' && Date.now() - lastFetchAt > 1000) {
             lastFetchAt = Date.now()
-            getCurrentRocketRound().then(applyRoundUpdate)
+            getOrCreateCurrentRocketRound().then(applyRoundUpdate)
           }
         }
       }
