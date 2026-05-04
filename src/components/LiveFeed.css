@@ -1,34 +1,35 @@
 /* ─────────────────────────────────────────────────────────────
  * Live feed under the Slots tab on Home.
  *
- * Each event is its OWN card (no outer wrapper background) — matches
- * the reference design where the list reads as a stack of dark
- * pills with subtle dividers.
+ * Layout:
+ *   - Top "Game | Payment" header is its own dark pill card.
+ *   - Each event below is its own dark pill card too — no shared
+ *     wrapper background.
  *
  * Animations:
- *   - new row at the top: slide-in from above + fade-in
+ *   - new row at the top: slide-in + fade-in
  *   - row past the visible window: fade-out + slight slide-down
  *   Both compositor-only (transform / opacity), no layout reflow.
  * ───────────────────────────────────────────────────────────── */
 
 .live-feed {
   margin: 18px 0 22px;
-  /* No card around the whole feed — rows are individual cards. */
 }
 
-/* "Game | Payment" column header */
+/* "Game | Payment" — same dark pill style as the rows below */
 .live-feed-headerline {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 14px 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.live-feed-headerline-payment {
-  /* nothing extra, just for clarity */
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--surface, #1c1c1e);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
 }
 
 .live-feed-list {
@@ -38,8 +39,6 @@
   /* Promote to its own compositor layer so child transforms don't
    * bubble up into expensive parent repaints. */
   transform: translateZ(0);
-  /* Enough room for ~10 rows to live; new ones land at the top via
-   * flex order naturally and the bottom one fades out. */
 }
 
 /* Row card */
@@ -47,13 +46,13 @@
   display: grid;
   grid-template-columns: 48px 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 14px;
+  padding: 10px 14px;
   border-radius: 14px;
   background: var(--surface, #1c1c1e);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  /* Slide-in animation runs on mount, once. `both` keeps the start
-   * frame so the row never flashes at full opacity before animating. */
+  /* Slide-in runs once on mount. `both` keeps the start frame so the
+   * row never flashes at full opacity before animating. */
   animation: live-feed-slide-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   will-change: transform, opacity;
 }
@@ -69,7 +68,6 @@
   }
 }
 
-/* Bottom row (overflow) — fades out as a new event slides in. */
 .live-feed-row.is-leaving {
   animation: live-feed-fade-out 0.42s ease forwards;
   pointer-events: none;
@@ -91,50 +89,33 @@
   background: linear-gradient(
     90deg,
     rgba(34, 197, 94, 0.10) 0%,
-    rgba(28, 28, 30, 1) 50%
+    rgba(28, 28, 30, 1) 55%
   );
 }
 
-/* Slot icon — gradient square with the slot's mini-thumbnail SVG. */
+/* Slot icon — PNG asset from src/assets/games */
 .live-feed-icon {
   width: 48px;
   height: 48px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 10px;
   overflow: hidden;
-  background: linear-gradient(135deg, #2a2a2e, #18181a);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.live-feed-icon.icon--tower-stack {
-  background: linear-gradient(135deg, #4ca464, #1f3db0);
-}
-.live-feed-icon.icon--tetris-cascade {
-  background: linear-gradient(135deg, #6366f1, #be185d);
-}
-.live-feed-icon.icon--rocket {
-  background: linear-gradient(135deg, #ec4899, #4c1d95);
+.live-feed-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-/* Meta column — studio name + game name */
-.live-feed-meta {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  line-height: 1.2;
-}
-
-.live-feed-studio {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
-  font-weight: 600;
-}
-
+/* Game name (no studio label) */
 .live-feed-game {
-  margin-top: 3px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 800;
   color: #fff;
   white-space: nowrap;
@@ -142,7 +123,7 @@
   text-overflow: ellipsis;
 }
 
-/* Payout column — green $ pill + amount */
+/* Payout — green $ pill + amount */
 .live-feed-amount {
   display: inline-flex;
   align-items: center;
