@@ -1,0 +1,147 @@
+/* ─────────────────────────────────────────────────────────────
+ * Live feed — activity ribbon under the Slots tab on Home.
+ *
+ * Layout: header pill + vertical list of fixed-height rows.
+ * Each new row slides down from the top via CSS only — no JS
+ * keyframes, no layout thrash, GPU-accelerated transform/opacity.
+ * ───────────────────────────────────────────────────────────── */
+
+.live-feed {
+  margin: 16px 0 18px;
+  padding: 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(28, 28, 30, 0.85), rgba(20, 20, 22, 0.95));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.live-feed-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.live-feed-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+  animation: live-feed-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-feed-pulse {
+  0%, 100% { opacity: 0.95; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.7); }
+}
+
+.live-feed-empty {
+  padding: 18px 4px;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* List */
+.live-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* `transform: translateZ(0)` promotes to its own layer so child
+   * transforms during slide-in don't repaint the parent stack. */
+  transform: translateZ(0);
+}
+
+/* Row */
+.live-feed-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  /* Slide-in: comes from "above" with a quick fade. Only runs once
+   * per element (animation-fill-mode forwards keeps end-state). */
+  animation: live-feed-slide-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  /* Hint to the compositor — the only thing that animates is
+   * transform/opacity, both compositor-only. */
+  will-change: transform, opacity;
+}
+
+@keyframes live-feed-slide-in {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.live-feed-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 20px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(236, 72, 153, 0.18));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.live-feed-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.live-feed-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-feed-game {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-feed-amount {
+  font-size: 14px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.live-feed-row.is-win .live-feed-amount {
+  color: #34d399;
+}
+
+.live-feed-row.is-loss .live-feed-amount {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.live-feed-row.is-win {
+  /* Subtle green wash for wins */
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.10), rgba(255, 255, 255, 0.03));
+  border-color: rgba(34, 197, 94, 0.22);
+}

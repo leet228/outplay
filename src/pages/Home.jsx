@@ -14,6 +14,7 @@ import './Home.css'
 // Imported here so the home-page rocket card art styles ship with Home,
 // not just when the player opens the slot itself.
 import './RocketSlot.css'
+import LiveFeed from '../components/LiveFeed'
 
 /* ── Icons ── */
 function QuizIcon() {
@@ -1977,6 +1978,11 @@ export default function Home() {
                 ))}
               </div>
             </div>
+
+            {/* Live activity ribbon — wins/losses across all slots,
+                real bets mixed with seeded fake events from the
+                server's pg_cron job so the feed always feels alive. */}
+            <LiveFeed />
           </div>
         )}
 
