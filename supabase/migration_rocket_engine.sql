@@ -43,9 +43,11 @@ $$;
 
 
 -- ── 3. Engine helper — create next round if needed ───────────────
--- Single transaction, no advisory lock (engine is single-writer so
--- no race), idempotent: if the current round's hold hasn't expired
--- yet, returns it unchanged. Otherwise spawns the next round.
+-- Same advisory lock id as get_or_create_current_rocket_round so the
+-- cron tick (this) and the client's idle re-fetch can't both create
+-- the same "next" round in parallel. After the lock is acquired we
+-- re-check the latest round's hold_until in case the other writer
+-- beat us to creation.
 CREATE OR REPLACE FUNCTION rocket_ensure_round()
 RETURNS rocket_rounds
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
@@ -54,6 +56,8 @@ AS $$
 DECLARE
   v_round rocket_rounds;
 BEGIN
+  PERFORM pg_advisory_xact_lock(72321);
+
   SELECT * INTO v_round FROM rocket_rounds ORDER BY id DESC LIMIT 1;
 
   IF v_round.id IS NULL THEN

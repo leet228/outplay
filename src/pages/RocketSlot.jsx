@@ -27,10 +27,10 @@ const GROWTH_BASE = 1.06          // multiplier(t) = 1.06^t (t in seconds)
 // is plenty for digit changes — going higher just burns React renders.
 const FRAME_INTERVAL_MS = 100
 // Backstop poll — fires only if no Realtime INSERT has been seen for a
-// long while AND the current round is well past its hold window. This
-// is purely defensive; the normal flow is event-driven (Realtime +
-// per-round setTimeout to fetch the next round once the hold expires).
-const BACKSTOP_POLL_MS = 30_000
+// long while AND the current round is well past its hold window. With
+// idle re-fetch driving the common case, the backstop is purely a
+// last-ditch safety net for a fully dropped Realtime connection.
+const BACKSTOP_POLL_MS = 60_000
 // Visual reference for the betting progress bar — server's window is
 // also 5s, kept in sync with migration_rocket_slot.sql.
 const BETTING_DURATION_MS = 5000
@@ -449,33 +449,8 @@ export default function RocketSlot() {
     setStake(BETS[nextIndex])
   }
 
-  // ── Visualisation: SVG curve + rocket position ──
-  // Sample the exponential growth curve from t=0 to t=now along the same
-  // (rx, ry) projection rocketPosForM uses, so curve and rocket always
-  // share an endpoint.
-  //
-  // Computed inline on EVERY render (no useMemo). With useMemo we hit
-  // a subtle React-18 batching issue: while a bet is on the table the
-  // CTA also re-renders with the live multiplier, and its render slips
-  // into a different commit than the curve's, leaving the memo'd path
-  // stuck at whatever multiplier value was current the previous tick.
-  // 32 samples × a few floats per sample = microseconds; cheaper than
-  // the bug.
-  let pathData = ''
-  if (phase === 'flying' || phase === 'crashed') {
-    const targetM = phase === 'crashed' ? (crashedAt ?? 1) : multiplier
-    if (targetM > 1.001) {
-      const tEnd = Math.log(targetM) / Math.log(GROWTH_BASE)
-      const SAMPLES = 32
-      for (let i = 0; i <= SAMPLES; i++) {
-        const t = (i / SAMPLES) * tEnd
-        const m = Math.pow(GROWTH_BASE, t)
-        const { rx, ry } = rocketPosForM(m)
-        pathData += (i === 0 ? 'M ' : ' L ') + rx.toFixed(2) + ' ' + ry.toFixed(2)
-      }
-    }
-  }
-
+  // ── Visualisation: rocket position ──
+  // Trail SVG was removed; only the rocket itself moves now.
   const rocketPos = phase === 'flying'
     ? rocketPosForM(multiplier)
     : phase === 'crashed'
@@ -580,27 +555,6 @@ export default function RocketSlot() {
           <span className="rocket-cloud rocket-cloud--three" />
           <span className="rocket-grid" />
         </div>
-
-        <svg className="rocket-curve" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="rocket-curve-stroke" x1="0" y1="1" x2="1" y2="0">
-              <stop offset="0%" stopColor="#fb7185" />
-              <stop offset="100%" stopColor="#fde68a" />
-            </linearGradient>
-          </defs>
-          {pathData && (
-            <path
-              d={pathData}
-              stroke="url(#rocket-curve-stroke)"
-              strokeWidth="0.9"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-              vectorEffect="non-scaling-stroke"
-              opacity={phase === 'crashed' ? 0.55 : 1}
-            />
-          )}
-        </svg>
 
         {/* Rocket */}
         <div
