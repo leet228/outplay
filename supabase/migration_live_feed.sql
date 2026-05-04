@@ -269,33 +269,12 @@ EXECUTE FUNCTION feed_on_rocket_bet_change();
 DO $$ BEGIN PERFORM cron.unschedule('live-feed-fake');    EXCEPTION WHEN OTHERS THEN NULL; END $$;
 DO $$ BEGIN PERFORM cron.unschedule('live-feed-cleanup'); EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
--- Bursty ~2-per-second cadence. Inside each cron tick the burst
--- function picks a random count (0-3) and inserts them with small
--- random pauses, so the ribbon arrives on uneven beats.
-CREATE OR REPLACE FUNCTION feed_insert_fake_burst()
-RETURNS VOID LANGUAGE plpgsql VOLATILE
-AS $$
-DECLARE
-  v_count INTEGER;
-  i       INTEGER;
-BEGIN
-  v_count := CASE
-    WHEN random() < 0.10 THEN 0
-    WHEN random() < 0.40 THEN 1
-    WHEN random() < 0.80 THEN 2
-    ELSE                     3
-  END;
-  FOR i IN 1..v_count LOOP
-    PERFORM feed_insert_fake();
-    PERFORM pg_sleep(0.05 + random() * 0.45);
-  END LOOP;
-END;
-$$;
-
+-- One fake event every 4 seconds. Real events from slot_rounds /
+-- rocket_bets triggers flow on top of this.
 SELECT cron.schedule(
   'live-feed-fake',
-  '1 second',
-  $$ SELECT public.feed_insert_fake_burst() $$
+  '4 seconds',
+  $$ SELECT public.feed_insert_fake() $$
 );
 
 -- Cleanup every 5 minutes — keep the last 200 rows, drop the rest.
