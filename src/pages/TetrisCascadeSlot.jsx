@@ -198,14 +198,23 @@ function pickColumn(grid, piece, opts = {}) {
 function decideTetrisOutcomeDev(stake, isBought) {
   const roll = Math.random()
   let outcome_kind, bonus_kind = null
-  // Distribution mirrors migration_tetris_rtp_v3.sql exactly:
+  // Distribution mirrors migration_tetris_rtp_v4.sql.
+  //
+  // Regular spin (paid):
   //   dud 74.6 %, small 18 %, medium 5 %, big 1.5 %, huge 0.8 %, bonus 0.1 %
-  // Inside bonus: small 55 %, medium 28 %, big 14 %, jackpot 3 %.
+  // In-spin bonus tiers: small 55 %, medium 28 %, big 14 %, jackpot 3 %
+  //   (E[mul] ≈ 120 ⇒ contribution to RTP ≈ 12 pp)
+  //
+  // Bought bonus (cost = stake × 100): tilted to small for ~80 % RTP
+  //   on the buy feature.
+  //   small 70 %, medium 23 %, big 6 %, jackpot 1 %  (E[mul] ≈ 81)
+  //
+  // Dev mode skips the deficit circuit-breaker (no slot_stats access).
   if (isBought) {
     outcome_kind = 'bonus'
-    if      (roll < 0.55) bonus_kind = 'small'
-    else if (roll < 0.83) bonus_kind = 'medium'
-    else if (roll < 0.97) bonus_kind = 'big'
+    if      (roll < 0.70) bonus_kind = 'small'
+    else if (roll < 0.93) bonus_kind = 'medium'
+    else if (roll < 0.99) bonus_kind = 'big'
     else                  bonus_kind = 'jackpot'
   } else {
     if      (roll < 0.746)                                outcome_kind = 'dud'
