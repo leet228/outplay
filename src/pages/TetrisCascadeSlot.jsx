@@ -18,22 +18,17 @@ const ROWS = 8
 
 const INITIAL_PIECES = 12
 const COLOR_LINE_MIN = 7
-const MAX_CASCADES = 6
+const MAX_CASCADES = 4
 
 // Special piece spawn rates.
-const WILD_RATE = 0.08         // colour wildcard cells
-const COIN_RATE = 0.045        // 1×1 scatter coins (trigger the bonus)
+const WILD_RATE = 0.06         // colour wildcard cells
+const COIN_RATE = 0.040        // 1×1 scatter coins (trigger the bonus)
 const COINS_TO_TRIGGER = 5     // coins on grid after initial drop → bonus
 
 // Bonus configuration.
-const BONUS_FREE_SPINS = 10
-const BONUS_PIECE_MULS = [2, 3, 5, 10] // each cell carries one of these in bonus
+const BONUS_FREE_SPINS = 6
+const BONUS_PIECE_MULS = [0.5, 1, 1, 2] // each cell carries one of these in bonus (avg 1.125)
 const RAGE_MAX = 6              // line clears in bonus to fill the rage meter
-// Visual reveal multiplier for the jackpot bonus tier. Matches v3
-// SQL: jackpot mul = 800. The spin-time absolute cap
-// (LEAST(stake × 1000, 200 000 ₽)) keeps payouts bounded at very
-// high stakes.
-const PERFECT_CLEAR_WIN_MUL = 800
 const BUY_BONUS_COST_MUL = 100  // buy-in price = stake × this
 // Single-spin payout cap mirroring the SQL hard cap.
 const SINGLE_SPIN_PAYOUT_CAP = 200000
@@ -50,11 +45,32 @@ const PIECES = {
 }
 const PIECE_KEYS = Object.keys(PIECES)
 
-// Match payouts (non-bonus). Tuned so a typical lucky spin lands in
-// the 3-15× stake band. A really hot multi-cascade can creep into
-// 30-50× territory but no further — no compounding cascade multiplier
-// is applied, long chains just sum up.
-const COLOR_RUN_MUL = { 7: 1, 8: 1, 9: 2, 10: 3 }
+// ── PAYTABLE (Pragmatic-style honest model) ──
+// All values × stake. Sum of these — across all matches found in all
+// cascades of one paid spin — is the natural win the client claims at
+// finalize. Verified by scripts/tetris-honest-sim.js to long-run at
+// ≈91 % RTP (under 95 % by design — house edge ~9 % over millions of
+// spins). Keep these in sync with the simulator.
+const PAY = {
+  fullRow: 0.20,   // full row of 10 cells, any colour mix
+  fullCol: 0.08,   // full column of 8 cells, any colour mix
+  run7:    0.45,   // colour run length 7 (horizontal OR vertical)
+  run8:    1.60,   // colour run length 8
+  run9:    5.20,   // colour run length 9
+  run10:  21.00,   // colour run length 10 (full same-colour row)
+}
+
+function payMulFor(match) {
+  if (match.type === 'row') return PAY.fullRow
+  if (match.type === 'col') return PAY.fullCol
+  if (match.type === 'color-h' || match.type === 'color-v') {
+    if (match.len <= 7)  return PAY.run7
+    if (match.len === 8) return PAY.run8
+    if (match.len === 9) return PAY.run9
+    return PAY.run10
+  }
+  return 0
+}
 
 // ── Helpers ──
 function makeEmptyGrid() {
@@ -192,114 +208,19 @@ function pickColumn(grid, piece, opts = {}) {
   return top[Math.floor(Math.random() * top.length)].x
 }
 
-// Local dev-mode outcome generator. Mirrors the SQL function in
-// migration_tetris_rtp_v2.sql so the slot is playable without a
-// Supabase connection. Used when user is the mock dev user.
-function decideTetrisOutcomeDev(stake, isBought) {
-  const roll = Math.random()
-  let outcome_kind, bonus_kind = null
-  // Distribution mirrors migration_tetris_rtp_v4.sql.
-  //
-  // Regular spin (paid):
-  //   dud 74.6 %, small 18 %, medium 5 %, big 1.5 %, huge 0.8 %, bonus 0.1 %
-  // In-spin bonus tiers: small 55 %, medium 28 %, big 14 %, jackpot 3 %
-  //   (E[mul] ≈ 120 ⇒ contribution to RTP ≈ 12 pp)
-  //
-  // Bought bonus (cost = stake × 100): tilted to small for ~80 % RTP
-  //   on the buy feature.
-  //   small 70 %, medium 23 %, big 6 %, jackpot 1 %  (E[mul] ≈ 81)
-  //
-  // Dev mode skips the deficit circuit-breaker (no slot_stats access).
-  if (isBought) {
-    outcome_kind = 'bonus'
-    if      (roll < 0.70) bonus_kind = 'small'
-    else if (roll < 0.93) bonus_kind = 'medium'
-    else if (roll < 0.99) bonus_kind = 'big'
-    else                  bonus_kind = 'jackpot'
-  } else {
-    if      (roll < 0.746)                                outcome_kind = 'dud'
-    else if (roll < 0.746 + 0.180)                        outcome_kind = 'small'
-    else if (roll < 0.746 + 0.180 + 0.050)                outcome_kind = 'medium'
-    else if (roll < 0.746 + 0.180 + 0.050 + 0.015)        outcome_kind = 'big'
-    else if (roll < 0.746 + 0.180 + 0.050 + 0.015 + 0.008) outcome_kind = 'huge'
-    else {
-      outcome_kind = 'bonus'
-      const r2 = Math.random()
-      if      (r2 < 0.55) bonus_kind = 'small'
-      else if (r2 < 0.83) bonus_kind = 'medium'
-      else if (r2 < 0.97) bonus_kind = 'big'
-      else                bonus_kind = 'jackpot'
-    }
-  }
-  let mul = 0
-  if (outcome_kind === 'dud') mul = 0
-  else if (outcome_kind === 'small')  mul = 1  + Math.floor(Math.random() * 2)        // 1-2
-  else if (outcome_kind === 'medium') mul = 3  + Math.floor(Math.random() * 4)        // 3-6
-  else if (outcome_kind === 'big')    mul = 7  + Math.floor(Math.random() * 7)        // 7-13
-  else if (outcome_kind === 'huge')   mul = 18 + Math.floor(Math.random() * 12)       // 18-29
-  else if (outcome_kind === 'bonus') {
-    if      (bonus_kind === 'small')   mul = 25  + Math.floor(Math.random() * 36)     // 25-60
-    else if (bonus_kind === 'medium')  mul = 70  + Math.floor(Math.random() * 81)     // 70-150
-    else if (bonus_kind === 'big')     mul = 200 + Math.floor(Math.random() * 201)    // 200-400
-    else if (bonus_kind === 'jackpot') mul = 800
-  }
-  // Mirror the SQL hard cap: LEAST(stake × mul, stake × 1000, 200_000)
-  const target = Math.min(stake * mul, stake * 1000, SINGLE_SPIN_PAYOUT_CAP)
+// Local dev-mode "round" stub. With the Pragmatic-style honest model
+// the server no longer pre-decides outcomes — start_tetris_round is
+// just an atomic stake charge. In dev mode we don't talk to Supabase
+// at all, so we mint a local round id and trust the caller to deduct
+// stake from balance.
+function makeDevRound(balanceAfter, isBought) {
   return {
     ok: true,
     round_id: `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    outcome_kind,
-    target_payout_rub: target,
-    bonus_kind,
-    is_bought: isBought,
+    balance: balanceAfter,
+    is_bought: !!isBought,
+    deficit_active: false,
   }
-}
-
-// Clamp a single-spin payout to the same cap the SQL applies. Used as
-// a defensive filter on bonus slices so a "big bonus on a high stake"
-// can never produce a single free spin paying more than the cap.
-function clampSpinPayout(value, stake) {
-  return Math.min(value, stake * 1000, SINGLE_SPIN_PAYOUT_CAP)
-}
-
-// Slice a bonus round's total payout across N free spins. Used when the
-// server returns target_payout_rub for the whole bonus — the frontend
-// then plays each spin so its visual win matches its assigned slice.
-//
-// jackpot:   one spin gets the entire prize (Perfect Clear); the rest pay 0
-// empty:     mostly zeros, a couple of tiny scraps
-// otherwise: random distribution biased toward 1-3 "big" spins
-function distributeBonusPayout(totalPayout, spinCount, bonusKind) {
-  const slices = new Array(spinCount).fill(0)
-  if (totalPayout <= 0 || spinCount <= 0) return slices
-
-  if (bonusKind === 'jackpot') {
-    const idx = Math.floor(Math.random() * spinCount)
-    slices[idx] = totalPayout
-    return slices
-  }
-
-  // Pick which spins win at all.
-  const winRate = bonusKind === 'empty' ? 0.25 : 0.7
-  const winners = []
-  for (let i = 0; i < spinCount; i++) {
-    if (Math.random() < winRate) winners.push(i)
-  }
-  if (winners.length === 0) winners.push(Math.floor(Math.random() * spinCount))
-
-  // Random weights, then normalize to total.
-  const weights = winners.map(() => Math.random() * Math.random() + 0.05)
-  const wSum = weights.reduce((a, b) => a + b, 0)
-  let assigned = 0
-  for (let i = 0; i < winners.length - 1; i++) {
-    const slice = Math.round(totalPayout * (weights[i] / wSum))
-    slices[winners[i]] = slice
-    assigned += slice
-  }
-  // Last winner gets the remainder so the total matches exactly.
-  slices[winners[winners.length - 1]] = Math.max(0, totalPayout - assigned)
-
-  return slices
 }
 
 // ── Match detection ──
@@ -337,7 +258,9 @@ function findMatches(grid) {
     if (grid[r].every(isLineFiller)) {
       const cells = []
       for (let c = 0; c < COLS; c++) cells.push([c, r])
-      matches.push({ type: 'row', cells, mul: 1 })
+      const m = { type: 'row', cells, len: COLS }
+      m.mul = payMulFor(m)
+      matches.push(m)
     }
   }
 
@@ -349,7 +272,9 @@ function findMatches(grid) {
     if (full) {
       const cells = []
       for (let r = 0; r < ROWS; r++) cells.push([c, r])
-      matches.push({ type: 'col', cells, mul: 2 })
+      const m = { type: 'col', cells, len: ROWS }
+      m.mul = payMulFor(m)
+      matches.push(m)
     }
   }
 
@@ -360,13 +285,12 @@ function findMatches(grid) {
     let allWild = true
     const closeRun = (endC) => {
       const len = endC - runStart
-      if (len >= COLOR_LINE_MIN && runColor !== null && runColor !== 'wild' || (len >= COLOR_LINE_MIN && !allWild)) {
-        // Only emit if we have a real (non-all-wild) colour.
-        if (allWild) return
+      if (len >= COLOR_LINE_MIN && !allWild && runColor !== null && runColor !== 'wild') {
         const cells = []
         for (let i = runStart; i < endC; i++) cells.push([i, r])
-        const mul = COLOR_RUN_MUL[Math.min(len, 10)] || COLOR_RUN_MUL[10]
-        matches.push({ type: 'color-h', cells, mul, color: runColor, len })
+        const m = { type: 'color-h', cells, color: runColor, len }
+        m.mul = payMulFor(m)
+        matches.push(m)
       }
     }
     for (let c = 0; c <= COLS; c++) {
@@ -402,8 +326,9 @@ function findMatches(grid) {
       if (len >= COLOR_LINE_MIN && !allWild && runColor !== null && runColor !== 'wild') {
         const cells = []
         for (let i = runStart; i < endR; i++) cells.push([c, i])
-        const mul = COLOR_RUN_MUL[Math.min(len, 10)] || COLOR_RUN_MUL[10]
-        matches.push({ type: 'color-v', cells, mul, color: runColor, len })
+        const m = { type: 'color-v', cells, color: runColor, len }
+        m.mul = payMulFor(m)
+        matches.push(m)
       }
     }
     for (let r = 0; r <= ROWS; r++) {
@@ -524,15 +449,11 @@ export default function TetrisCascadeSlot() {
   // Reset whenever the bonus starts fresh.
   const bonusAccruedRef = useRef(0)
   // Holds the current server-issued round descriptor:
-  //   { round_id, balance, outcome_kind, target_payout_rub, bonus_kind, is_bought }
+  //   { round_id, balance, deficit_active, is_bought }
   // For paid spins this is set in runSpin before any animation runs.
-  // For bonus free spins this stays set across all 10 spins until the
-  // round closes via finishTetrisRound().
+  // For bonus free spins this stays set across all free spins until the
+  // round closes via finishTetrisRound() with the natural total win.
   const currentRoundRef = useRef(null)
-  // Pre-distributed payout slices for the active bonus round (one entry
-  // per free spin), and how many of those have been paid so far.
-  const bonusSlicesRef = useRef([])
-  const bonusSliceIdxRef = useRef(0)
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current = stake }, [stake])
   useEffect(() => { autoRef.current = autoSpin }, [autoSpin])
@@ -577,11 +498,11 @@ export default function TetrisCascadeSlot() {
     setStake(BETS[nextIndex])
   }
 
-  // ── Drop initial pieces ──
+  // ── Drop initial pieces (legacy helper, retained for backward compat) ──
   // clearWeight controls the smart-drop AI:
-  //   12  → default, prefers placements that clear lines
-  //  -50  → "dud" mode, avoids clears entirely
-  async function dropInitialPieces(initial, bonus, clearWeight = 12) {
+  //   0   → honest physics (default). No bias toward or against matches.
+  //  -50  → strict no-match (used in deficit-active / forced-loss path).
+  async function dropInitialPieces(initial, bonus, clearWeight = 0) {
     let g = initial
     for (let i = 0; i < INITIAL_PIECES; i++) {
       if (cancelRef.current) return g
@@ -606,7 +527,7 @@ export default function TetrisCascadeSlot() {
     return g
   }
 
-  async function dropFillerPieces(g, count, bonus, clearWeight = 12) {
+  async function dropFillerPieces(g, count, bonus, clearWeight = 0) {
     for (let i = 0; i < count; i++) {
       if (cancelRef.current) return g
       const piece = pickRandomPiece({ bonus })
@@ -619,30 +540,6 @@ export default function TetrisCascadeSlot() {
       g = ng
       setGrid(g.map(row => [...row]))
       await sleep(120)
-    }
-    return g
-  }
-
-  // Force exactly N scatter coins to drop into spread-out columns —
-  // used on the trigger spin when the server has decided this round
-  // is a 'bonus' outcome.
-  async function forceScatterDrop(g, count = COINS_TO_TRIGGER) {
-    const cols = []
-    // pick `count` distinct columns spread across the board
-    const all = [0,1,2,3,4,5,6,7,8,9]
-    while (cols.length < count && all.length) {
-      const idx = Math.floor(Math.random() * all.length)
-      cols.push(all[idx])
-      all.splice(idx, 1)
-    }
-    for (const c of cols) {
-      if (cancelRef.current) return g
-      const piece = { kind: 'coin', cells: [[0,0]], color: 'coin' }
-      if (!canPlace(g, piece.cells, c, 0)) continue
-      const { grid: ng } = dropPiece(g, piece, c)
-      g = ng
-      setGrid(g.map(row => [...row]))
-      await sleep(140)
     }
     return g
   }
@@ -662,22 +559,24 @@ export default function TetrisCascadeSlot() {
     return { kind: 'line', mul: top.mul, label: t.slotTetrisLineWin }
   }
 
-  // ── Main spin (RTP-driven) ──
-  // Paid spins call start_tetris_round which RETURNS the outcome:
-  //   - outcome_kind: 'dud' | 'small' | 'medium' | 'big' | 'huge' | 'bonus'
-  //   - target_payout_rub: the exact amount the server has decided to pay
-  //   - bonus_kind: subtype when outcome_kind='bonus'
+  // ── Main spin (HONEST RNG, Pragmatic-style) ──
+  // Flow:
+  //   1. start_tetris_round atomically charges the stake and creates a
+  //      pending round. Server returns { round_id, balance, deficit_active }
+  //      and pre-decides NOTHING about the outcome.
+  //   2. Client runs a natural spin: 12 random tetrominoes (+ scatter coins
+  //      and wild cells per spawn rates) fall, matches are detected,
+  //      cascades chain up to MAX_CASCADES. Each match pays stake × PAY[type]
+  //      (or stake × Σ cell.mul for bonus cells). Wins accumulate naturally.
+  //   3. Bonus is triggered when ≥ COINS_TO_TRIGGER coins are present on the
+  //      grid AFTER all cascades complete — purely a function of how the
+  //      RNG fell. The trigger spin's own natural matches still pay; the
+  //      bonus pays additional rounds on top.
+  //   4. At end of paid spin (or end of bonus round), finish_tetris_round
+  //      claims the natural total. Server caps at stake×1000/200k absolute
+  //      and applies the deficit circuit breaker if pnl is past floor.
   //
-  // The frontend animates a natural-looking spin (cascades, line clears,
-  // colour runs) but the FINAL displayed win + balance change is whatever
-  // the server pre-decided. For dud rounds the smart-drop AI is told to
-  // avoid clears so the visuals stay believable.
-  //
-  // For 'bonus' outcomes the trigger spin pays nothing itself — the
-  // server's target_payout_rub is the TOTAL bonus payout, which the
-  // frontend then distributes across the 10 free spins via
-  // distributeBonusPayout(). At end of bonus, finish_tetris_round is
-  // called once for the entire round.
+  // No target_payout, no scaling — visuals match the math.
   async function runSpin(bonusOverride = null) {
     if (cancelRef.current) return
 
@@ -693,8 +592,7 @@ export default function TetrisCascadeSlot() {
       const isDev = !user || user.id === 'dev'
       let result
       if (isDev) {
-        const dev = decideTetrisOutcomeDev(stakeRef.current, false)
-        result = { ...dev, balance: balanceRef.current - stakeRef.current }
+        result = makeDevRound(balanceRef.current - stakeRef.current, false)
       } else {
         result = await startTetrisRound(user.id, stakeRef.current, false)
         if (cancelRef.current) return
@@ -722,46 +620,18 @@ export default function TetrisCascadeSlot() {
     setCascadeStep(0)
     setBigText(null)
 
-    const willTriggerBonus = !inBonus && round?.outcome_kind === 'bonus'
-    const isDud           = !inBonus && round?.outcome_kind === 'dud'
-
-    // Decide this spin's exact target payout (RTP-driven).
-    let spinTarget = 0
-    if (inBonus) {
-      spinTarget = bonusSlicesRef.current[bonusSliceIdxRef.current] || 0
-    } else if (willTriggerBonus) {
-      spinTarget = 0 // trigger spin pays nothing — bonus carries payout
-    } else if (round) {
-      spinTarget = Number(round.target_payout_rub) || 0
-    }
-    const isJackpotSpin = inBonus && round?.bonus_kind === 'jackpot'
-                            && spinTarget >= currentStake * PERFECT_CLEAR_WIN_MUL
-                            && spinTarget > 0
-    // ANY spin where the win bar will display 0 — be it a dud, a bonus
-    // trigger (bonus carries the payout), or a bonus free spin assigned
-    // a 0-slice — must NOT fire any cascades. Without this, an "empty"
-    // bonus would still flash line clears that contributed nothing to
-    // the running total, which the user reads as buggy.
-    const isZeroPaySpin = spinTarget === 0
-    const needCascades  = !isZeroPaySpin
-    // clearWeight: -50 (anti-match) for any zero-pay spin; 12 inside
-    // a paid bonus spin (where bonus piece multipliers naturally make
-    // cascades worth a lot); 30 for paid wins so cascades are likely
-    // to fire and the RTP target is hit.
-    const clearWeight = isZeroPaySpin ? -50 : (inBonus ? 12 : 30)
-    // Suppress coins / wilds on zero-pay paid-side spins so they can't
-    // accidentally trigger the bonus or extend a colour run during a
-    // round whose payout is fixed at zero.
-    const noSpecialThisSpin = !inBonus && isZeroPaySpin
+    // Honest physics. clearWeight=0 means the smart-drop AI only avoids
+    // tower / hole disasters, with NO bias toward or against matches.
+    // If the server says the deficit breaker is active, we suppress
+    // scatter coins so the bonus can't trigger during a forced-loss
+    // streak (server would zero the payout anyway).
+    const clearWeight = 0
+    const noSpecialThisSpin = !inBonus && round?.deficit_active === true
 
     // Capture rage-buff state once; consumed after we commit to a script.
     const rageBuffActive = inBonus && forceNextIRef.current
 
     // ── Phase 1: simulate the spin in pure JS (no animation) ──
-    // Pure function: same bonus/clearWeight inputs, runs the smart-drop
-    // AI through a full spin and returns the script + naturals. Called
-    // once for paid/dud spins; can be retried if non-dud produced no
-    // cascades (super-unlucky AI).
     const simulateOnce = () => {
       const script = []
       let simBuff = rageBuffActive
@@ -782,7 +652,8 @@ export default function TetrisCascadeSlot() {
         sg = ng
       }
 
-      // Cascades
+      // Cascades — natural, payout = stake × payMulFor(m) per match
+      // for regular spins, stake × Σ cell.mul for bonus spins.
       let totalNatural = 0
       let cascadeNum = 0
       while (cascadeNum < MAX_CASCADES) {
@@ -801,7 +672,7 @@ export default function TetrisCascadeSlot() {
           }
           stepWin = currentStake * mulSum
         } else {
-          stepWin = matches.reduce((s, m) => s + currentStake * m.mul, 0)
+          for (const m of matches) stepWin += currentStake * payMulFor(m)
         }
         totalNatural += stepWin
 
@@ -829,25 +700,16 @@ export default function TetrisCascadeSlot() {
           script.push({ kind: 'place', gap: 120, gridAfter: ng })
           sg = ng
         }
-
       }
 
-      return { script, totalNatural, cascadeNum }
+      // Final state: detect natural bonus trigger (paid spins only).
+      const triggeredBonus = !inBonus && countCoins(sg) >= COINS_TO_TRIGGER
+
+      return { script, totalNatural, cascadeNum, triggeredBonus, finalGrid: sg }
     }
 
-    // Run simulation. Retry up to 12× for non-dud spins that need
-    // cascades but the unlucky AI didn't make any. For dud rounds we
-    // accept whatever the strict no-match AI produced (zero cascades
-    // is the desired outcome).
-    let sim = simulateOnce()
-    if (needCascades) {
-      let attempts = 0
-      while (sim.cascadeNum === 0 && attempts < 12) {
-        sim = simulateOnce()
-        attempts++
-      }
-    }
-    const { script, totalNatural } = sim
+    const sim = simulateOnce()
+    const { script, totalNatural, triggeredBonus } = sim
 
     // Consume the rage buff now that we've committed to a script.
     if (rageBuffActive) {
@@ -855,18 +717,17 @@ export default function TetrisCascadeSlot() {
       setForceNextI(false)
     }
 
-    // Compute the scale factor so cascade wins sum exactly to the target.
-    // For dud rounds: scale = 0 (no payout) — but the no-match AI also
-    // means there typically aren't any cascade steps in the script.
-    const scale = totalNatural > 0 ? spinTarget / totalNatural : 0
+    // Cap single-spin natural at the same hard cap the SQL applies.
+    // (The server caps anyway — this just keeps the visual honest.)
+    const cappedNatural = Math.min(totalNatural, currentStake * 1000, SINGLE_SPIN_PAYOUT_CAP)
 
-    // ── Phase 2: replay the script with animation + scaled wins ──
+    // ── Phase 2: replay the script with animation, paying naturals ──
     let g = makeEmptyGrid()
     setGrid(g)
     setPhase('dropping')
 
     const baseDisplayWin = inBonus ? bonusAccruedRef.current : 0
-    let accumulatedScaled = 0
+    let accumulated = 0
 
     for (const step of script) {
       if (cancelRef.current) return
@@ -886,18 +747,21 @@ export default function TetrisCascadeSlot() {
         setGrid(g.map(row => [...row]))
         await sleep(360)
 
-        // Scaled win contribution from this cascade.
-        const scaled = Math.round(step.stepWin * scale)
-        if (scaled > 0) {
-          accumulatedScaled += scaled
-          setTotalWin(baseDisplayWin + accumulatedScaled)
+        // Pay this cascade's natural contribution. If the cap clipped
+        // the spin total, scale the displayed step accordingly so the
+        // running sum lands exactly at cappedNatural.
+        const scaledStep = totalNatural > 0
+          ? Math.round(step.stepWin * (cappedNatural / totalNatural))
+          : 0
+        if (scaledStep > 0) {
+          accumulated += scaledStep
+          setTotalWin(baseDisplayWin + accumulated)
         }
         setBigText(null)
 
         // Rage meter (bonus only)
         if (inBonus) {
-          const linesContribution = step.matches.length
-          const newRage = Math.min(RAGE_MAX, rageRef.current + linesContribution)
+          const newRage = Math.min(RAGE_MAX, rageRef.current + step.matches.length)
           rageRef.current = newRage
           setRage(newRage)
           if (newRage >= RAGE_MAX) {
@@ -912,62 +776,26 @@ export default function TetrisCascadeSlot() {
     }
 
     // Reconcile any rounding error so the displayed total equals exactly
-    // baseDisplayWin + spinTarget.
-    if (accumulatedScaled !== spinTarget) {
-      setTotalWin(baseDisplayWin + spinTarget)
+    // baseDisplayWin + cappedNatural.
+    const spinPayout = cappedNatural
+    if (accumulated !== spinPayout) {
+      setTotalWin(baseDisplayWin + spinPayout)
     }
 
-    // For bonus-trigger spins drop the 5 scatter coins now (after cascade).
-    if (willTriggerBonus) {
-      g = await forceScatterDrop(g, COINS_TO_TRIGGER)
-      if (cancelRef.current) return
-    }
-
-    // Jackpot bonus spin → force-clear remaining cells with the Perfect
-    // Clear celebration so the visuals match the x5000 payout.
-    if (isJackpotSpin) {
-      const allCells = new Set()
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          if (g[r][c] !== null && g[r][c] !== 'CLEARING') allCells.add(`${c},${r}`)
-        }
-      }
-      if (allCells.size > 0) {
-        setGrid(markClearing(g, allCells))
-        haptic('success')
-        await sleep(420)
-        g = applyGravity(g, allCells)
-        setGrid(g.map(row => [...row]))
-        await sleep(280)
-      }
-      setBigText({
-        kind: 'perfect',
-        label: t.slotTetrisPerfectClear,
-        mul: PERFECT_CLEAR_WIN_MUL,
-      })
-      haptic('success')
-      await sleep(1700)
-      setBigText(null)
-    }
-
-    // Track accrued + advance bonus slice index, credit balance.
+    // Track accrued, credit balance optimistically.
     if (inBonus) {
-      bonusAccruedRef.current += spinTarget
-      bonusSliceIdxRef.current++
+      bonusAccruedRef.current += spinPayout
     }
-    if (spinTarget > 0) {
-      setBalance(balanceRef.current + spinTarget)
-      balanceRef.current = balanceRef.current + spinTarget
+    if (spinPayout > 0) {
+      setBalance(balanceRef.current + spinPayout)
+      balanceRef.current = balanceRef.current + spinPayout
       setBalanceBounce(true)
       setTimeout(() => setBalanceBounce(false), 700)
     }
     setPhase('done')
 
-    // Variable kept for parity with later code paths.
-    const spinPayout = spinTarget; void spinPayout
-
-    // ── Bonus trigger: animate scatter sweep + celebration, then chain ──
-    if (willTriggerBonus) {
+    // ── Bonus trigger: sweep coins, celebrate, transition to bonus mode ──
+    if (triggeredBonus) {
       const coinCellSet = new Set()
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
@@ -1002,15 +830,9 @@ export default function TetrisCascadeSlot() {
       setForceNextI(false)
       forceNextIRef.current = false
 
-      // Pre-distribute the server's bonus payout across the 10 spins.
-      bonusSlicesRef.current = distributeBonusPayout(
-        Number(round?.target_payout_rub) || 0,
-        BONUS_FREE_SPINS,
-        round?.bonus_kind,
-      )
-      bonusSliceIdxRef.current = 0
-      bonusAccruedRef.current = 0
-      setTotalWin(0)
+      // Carry the trigger spin's natural win into the bonus accumulator
+      // so the server gets ONE finalize call with regular + bonus combined.
+      bonusAccruedRef.current = spinPayout
 
       await sleep(450)
       runSpin(true)
@@ -1034,13 +856,10 @@ export default function TetrisCascadeSlot() {
       forceNextIRef.current = false
       const total = bonusAccruedRef.current
       bonusAccruedRef.current = 0
-      bonusSlicesRef.current = []
-      bonusSliceIdxRef.current = 0
 
-      // Finalize the round on the server. Server will pay this much
-      // (clamped to the original target). We've already credited
-      // balance per slice, so server credit reconciles the final value.
-      // Dev rounds (no Supabase user) skip the RPC call.
+      // Finalize the round on the server. Server caps + applies deficit
+      // breaker; client already credited optimistically. Dev rounds skip
+      // the RPC.
       if (currentRoundRef.current) {
         const rid = currentRoundRef.current.round_id
         if (typeof rid === 'string' && !rid.startsWith('dev-')) {
@@ -1058,7 +877,7 @@ export default function TetrisCascadeSlot() {
     }
 
     // ── End of a paid (non-bonus, non-trigger) spin: finalize ──
-    if (!inBonus && !willTriggerBonus && currentRoundRef.current) {
+    if (!inBonus && !triggeredBonus && currentRoundRef.current) {
       const rid = currentRoundRef.current.round_id
       if (typeof rid === 'string' && !rid.startsWith('dev-')) {
         await finishTetrisRound(rid, spinPayout)
@@ -1125,17 +944,18 @@ export default function TetrisCascadeSlot() {
 
   // Special bonus-purchase flow.
   // Calls start_tetris_round(stake, is_bought=true). Server deducts
-  // stake × 100 and returns the bonus's pre-decided target_payout_rub.
-  // Frontend then animates 5 scatters dropping in, the celebration
-  // banner, and chains the 10 free spins driven by the same round.
+  // stake × 100 and returns a pending round (no pre-decided outcome).
+  // Frontend animates 5 scatters dropping in, the celebration banner,
+  // then chains the BONUS_FREE_SPINS free spins driven by the same
+  // round. The bonus pays naturally from per-cell multipliers; total
+  // is finalized once at end of bonus.
   async function runBoughtBonus() {
     if (cancelRef.current) return
     const isDev = !user || user.id === 'dev'
     const cost = stakeRef.current * BUY_BONUS_COST_MUL
     let result
     if (isDev) {
-      const dev = decideTetrisOutcomeDev(stakeRef.current, true)
-      result = { ...dev, balance: balanceRef.current - cost }
+      result = makeDevRound(balanceRef.current - cost, true)
     } else {
       result = await startTetrisRound(user.id, stakeRef.current, true)
       if (cancelRef.current) return
@@ -1206,12 +1026,6 @@ export default function TetrisCascadeSlot() {
     setForceNextI(false)
     forceNextIRef.current = false
 
-    bonusSlicesRef.current = distributeBonusPayout(
-      Number(result.target_payout_rub) || 0,
-      BONUS_FREE_SPINS,
-      result.bonus_kind,
-    )
-    bonusSliceIdxRef.current = 0
     bonusAccruedRef.current = 0
     setTotalWin(0)
     setPhase('done')

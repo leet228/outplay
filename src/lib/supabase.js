@@ -1044,12 +1044,18 @@ export async function finishSlotRound(roundId, outcome, payoutRub, floors, multi
   return data
 }
 
-// ── Tetris Cascade RTP RPCs ──────────────────────────
-// Server pre-decides outcome_kind ('dud' | 'small' | 'medium' | 'big' |
-// 'huge' | 'bonus') and the exact target_payout_rub. The frontend
-// animates a spin around that target.
-//   isBought = true → buy-bonus button. Server deducts stake × 100
-//   and always returns a 'bonus' outcome.
+// ── Tetris Cascade RPCs (HONEST RNG model — v5) ──────
+// Server is now a pass-through:
+//   start_tetris_round  — atomically charges the stake and creates a
+//                         pending round. Returns { ok, round_id, balance,
+//                         deficit_active, is_bought }. NO outcome decision.
+//   finish_tetris_round — accepts the client's claimed natural payout,
+//                         caps it at stake × 1000 / 200 000 ₽ absolute,
+//                         applies the deficit circuit breaker, credits
+//                         balance, updates aggregate stats.
+//
+//   isBought = true → buy-bonus path. Server deducts stake × 100; the
+//   client plays a bonus round (no preceding regular spin).
 export async function startTetrisRound(userId, stakeRub, isBought = false) {
   const { data, error } = await supabase.rpc('start_tetris_round', {
     p_user_id: userId,
@@ -1060,8 +1066,9 @@ export async function startTetrisRound(userId, stakeRub, isBought = false) {
   return data
 }
 
-// Closes a tetris round. Server clamps payout at the pre-decided
-// target_payout_rub — clients can't overshoot.
+// Closes a tetris round. Server caps payout at stake × 1000 (or
+// 200 000 ₽ absolute, whichever smaller) and applies the deficit
+// circuit breaker if the slot's pnl is past floor.
 export async function finishTetrisRound(roundId, payoutRub) {
   const { data, error } = await supabase.rpc('finish_tetris_round', {
     p_round_id: roundId,
