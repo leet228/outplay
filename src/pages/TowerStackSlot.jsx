@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import useGameStore from '../store/useGameStore'
@@ -12,99 +12,19 @@ import './TowerStackSlot.css'
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
 const MIN_BALANCE_RUB = 10
 const SLOT_ID = 'tower-stack'
+const BASE_HOUSE_WIDTH = 168
 
-// ── Minecraft houses ──
-// Each variant is a high-level config (size + materials + window /
-// door positions). HouseSilhouette renders it as an inline SVG with
-// real Minecraft-ish texture patterns (cobblestone noise, plank
-// stripes, log grain), a flat plank roof and a black outline — the
-// same general look as a real village house.
-const BLOCK = 14
-const BASE_HOUSE_WIDTH = 98  // median across variants (7 cols × 14)
-
-// 8 distinct village houses. cols × rows includes the roof row at top
-// and the foundation (cobblestone) row at bottom. Walls are everything
-// in between.
-const HOUSES = {
-  oak_cottage: {
-    cols: 6, rows: 6,
-    wall: 'oak_plank', corner: 'oak_log',
-    roof: 'oak_plank', foundation: 'cobble',
-    windows: [[1, 2], [4, 2]],
-    doors:   [[2, 4], [3, 4]],
-  },
-  birch_house: {
-    cols: 7, rows: 6,
-    wall: 'birch_plank', corner: 'birch_log',
-    roof: 'birch_plank', foundation: 'cobble',
-    windows: [[1, 2], [5, 2]],
-    doors:   [[3, 4]],
-  },
-  spruce_lodge: {
-    cols: 8, rows: 7,
-    wall: 'spruce_plank', corner: 'spruce_log',
-    roof: 'dark_plank', foundation: 'cobble',
-    windows: [[1, 2], [3, 2], [6, 2]],
-    doors:   [[4, 5]],
-  },
-  dark_oak_tall: {
-    cols: 6, rows: 8,
-    wall: 'dark_plank', corner: 'dark_log',
-    roof: 'dark_plank', foundation: 'cobble',
-    windows: [[1, 2], [4, 2], [1, 4], [4, 4]],
-    doors:   [[2, 6], [3, 6]],
-  },
-  acacia_hut: {
-    cols: 5, rows: 5,
-    wall: 'acacia_plank', corner: 'acacia_log',
-    roof: 'oak_plank', foundation: 'cobble',
-    windows: [[1, 1], [3, 1]],
-    doors:   [[2, 3]],
-  },
-  stone_house: {
-    cols: 7, rows: 6,
-    wall: 'stone_brick', corner: 'oak_log',
-    roof: 'oak_plank', foundation: 'cobble',
-    windows: [[1, 2], [3, 2], [5, 2]],
-    doors:   [[3, 4]],
-  },
-  cobble_smith: {
-    cols: 6, rows: 6,
-    wall: 'cobble', corner: 'oak_log',
-    roof: 'oak_plank', foundation: 'cobble',
-    windows: [[1, 2], [4, 2]],
-    doors:   [[2, 4]],
-    chimney: { x: 4, h: 1 }, // 1-block chimney sticking above the roof
-  },
-  big_library: {
-    cols: 8, rows: 8,
-    wall: 'oak_plank', corner: 'dark_log',
-    roof: 'dark_plank', foundation: 'cobble',
-    windows: [[1, 2], [3, 2], [6, 2], [1, 4], [3, 4], [6, 4]],
-    doors:   [[3, 6], [4, 6]],
-  },
-}
-
-function variantFromKey(key) {
-  const cfg = HOUSES[key]
-  return {
-    kind: key,
-    cfg,
-    width: cfg.cols * BLOCK,
-    bodyH: cfg.rows * BLOCK,
-    roofH: 0,
-  }
-}
-
+// Houses share a flat roof; bodies vary by inner detailing (windows/doors).
+// Heights are normalized so the camera moves cleanly per story.
 const HOUSE_VARIANTS = [
-  variantFromKey('oak_cottage'),
-  variantFromKey('birch_house'),
-  variantFromKey('spruce_lodge'),
-  variantFromKey('dark_oak_tall'),
-  variantFromKey('acacia_hut'),
-  variantFromKey('stone_house'),
-  variantFromKey('cobble_smith'),
-  variantFromKey('big_library'),
+  { kind: 'cottage',   color: 'red',    bodyH: 58, roofH: 10 },
+  { kind: 'townhouse', color: 'blue',   bodyH: 60, roofH: 10 },
+  { kind: 'shop',      color: 'mint',   bodyH: 56, roofH: 10 },
+  { kind: 'apartment', color: 'purple', bodyH: 64, roofH: 10 },
+  { kind: 'cottage',   color: 'amber',  bodyH: 58, roofH: 10 },
+  { kind: 'townhouse', color: 'green',  bodyH: 60, roofH: 10 },
+  { kind: 'shop',      color: 'pink',   bodyH: 56, roofH: 10 },
+  { kind: 'apartment', color: 'sky',    bodyH: 64, roofH: 10 },
 ]
 
 function clamp(value, min, max) {
@@ -116,236 +36,51 @@ function rand(min, max) {
 }
 
 // Cumulative bottom offset (px) for the house at given index in the stack.
-// Heights are pure layout heights now; no roof-tuck overlap. The
-// foundation slab is 46 px tall and sits at bottom: 0 of the stack,
-// so the very first house has to start above it (bottom: 46) — not
-// 42, otherwise the house's own bottom row sinks 4 px into the
-// foundation slab.
 function bottomFor(blocks, index) {
-  let bottom = 46 // foundation top
+  let bottom = 42 // foundation top
   for (let i = 0; i < index; i++) {
-    bottom += (blocks[i]?.bodyH ?? BLOCK * 7)
+    const h = (blocks[i]?.bodyH ?? 56) + (blocks[i]?.roofH ?? 14) - 6 // -6 = roof tucks behind
+    bottom += h
   }
   return bottom
 }
 
-// Reusable Minecraft-ish texture patterns. Each pattern is a single
-// SVG <pattern> definition that tiles to fill any sized rect. The
-// caller passes a unique idPrefix so multiple house instances on the
-// page don't fight over pattern IDs.
-function HousePatterns({ idPrefix }) {
+// Decorations inside a house: roof, body, windows, door — driven by `kind`.
+function HouseSilhouette({ kind }) {
   return (
-    <defs>
-      {/* Cobblestone — irregular grey blocks with darker mortar */}
-      <pattern id={`${idPrefix}-cobble`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-        <rect width="14" height="14" fill="#7c7c7c" />
-        <rect width="14" height="14" fill="none" stroke="#3a3a3a" strokeWidth="1" />
-        <rect x="2"  y="2"  width="3" height="3" fill="#a0a0a0" />
-        <rect x="8"  y="3"  width="3" height="2" fill="#9a9a9a" />
-        <rect x="3"  y="8"  width="2" height="3" fill="#909090" />
-        <rect x="9"  y="9"  width="3" height="2" fill="#a8a8a8" />
-        <rect x="6"  y="5"  width="1" height="1" fill="#5a5a5a" />
-        <rect x="11" y="6"  width="1" height="1" fill="#5a5a5a" />
-        <rect x="2"  y="11" width="1" height="1" fill="#5a5a5a" />
-      </pattern>
-
-      {/* Stone bricks — uniform grid */}
-      <pattern id={`${idPrefix}-stone_brick`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-        <rect width="14" height="14" fill="#8a8a8a" />
-        <rect width="14" height="14" fill="none" stroke="#454545" strokeWidth="1" />
-        <rect x="0" y="6" width="14" height="2" fill="#454545" />
-        <rect x="6" y="0" width="2" height="6"  fill="#454545" />
-        <rect x="0" y="8" width="2" height="6"  fill="#454545" />
-        <rect x="2" y="8" width="2" height="2"  fill="#a0a0a0" />
-        <rect x="8" y="2" width="2" height="2"  fill="#a0a0a0" />
-      </pattern>
-
-      {/* Oak planks — horizontal woodgrain */}
-      <pattern id={`${idPrefix}-oak_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
-        <rect width="28" height="14" fill="#b58a55" />
-        <rect width="28" height="2"  y="0"  fill="#7a5a30" />
-        <rect width="14" height="2"  y="7"  x="0"  fill="#9d7644" />
-        <rect width="14" height="2"  y="7"  x="14" fill="#9d7644" />
-        <rect width="14" height="1"  y="3"  x="2"  fill="#cba074" />
-        <rect width="10" height="1"  y="11" x="14" fill="#cba074" />
-      </pattern>
-
-      {/* Birch planks — pale, fine horizontal grain */}
-      <pattern id={`${idPrefix}-birch_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
-        <rect width="28" height="14" fill="#efe6c2" />
-        <rect width="28" height="1"  y="0" fill="#a89968" />
-        <rect width="28" height="1"  y="7" fill="#cdbe87" />
-        <rect width="28" height="1"  y="13" fill="#a89968" />
-        <rect width="2"  height="14" x="6"  fill="#cdbe87" />
-        <rect width="2"  height="14" x="20" fill="#cdbe87" />
-      </pattern>
-
-      {/* Spruce planks — darker brown grain */}
-      <pattern id={`${idPrefix}-spruce_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
-        <rect width="28" height="14" fill="#7d6038" />
-        <rect width="28" height="2"  y="0" fill="#3d2c16" />
-        <rect width="28" height="1"  y="7" fill="#5a4326" />
-        <rect width="2"  height="14" x="10" fill="#5a4326" />
-        <rect width="2"  height="14" x="22" fill="#5a4326" />
-      </pattern>
-
-      {/* Dark oak planks */}
-      <pattern id={`${idPrefix}-dark_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
-        <rect width="28" height="14" fill="#4a341e" />
-        <rect width="28" height="2"  y="0"  fill="#22150a" />
-        <rect width="28" height="1"  y="7"  fill="#321f10" />
-        <rect width="14" height="1"  y="3"  x="2"  fill="#5e4527" />
-        <rect width="2"  height="14" x="13" fill="#22150a" />
-      </pattern>
-
-      {/* Acacia planks — orange-red */}
-      <pattern id={`${idPrefix}-acacia_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
-        <rect width="28" height="14" fill="#c47148" />
-        <rect width="28" height="2"  y="0"  fill="#5a2811" />
-        <rect width="28" height="1"  y="7"  fill="#823a1a" />
-        <rect width="2"  height="14" x="9"  fill="#823a1a" />
-        <rect width="2"  height="14" x="21" fill="#823a1a" />
-      </pattern>
-
-      {/* Oak log — vertical strips with annual rings */}
-      <pattern id={`${idPrefix}-oak_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-        <rect width="14" height="14" fill="#7a5634" />
-        <rect width="14" height="14" fill="none" stroke="#3d2814" strokeWidth="1" />
-        <rect x="2"  y="0" width="2" height="14" fill="#5a3d20" />
-        <rect x="9"  y="0" width="2" height="14" fill="#5a3d20" />
-        <rect x="6"  y="0" width="1" height="14" fill="#9a734a" />
-      </pattern>
-
-      {/* Dark oak log */}
-      <pattern id={`${idPrefix}-dark_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-        <rect width="14" height="14" fill="#3a2c1d" />
-        <rect width="14" height="14" fill="none" stroke="#16100a" strokeWidth="1" />
-        <rect x="2" y="0" width="2" height="14" fill="#22180e" />
-        <rect x="9" y="0" width="2" height="14" fill="#22180e" />
-      </pattern>
-
-      {/* Spruce log */}
-      <pattern id={`${idPrefix}-spruce_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-        <rect width="14" height="14" fill="#4a3b25" />
-        <rect width="14" height="14" fill="none" stroke="#1d1408" strokeWidth="1" />
-        <rect x="2" y="0" width="2" height="14" fill="#2a200f" />
-        <rect x="9" y="0" width="2" height="14" fill="#2a200f" />
-      </pattern>
-
-      {/* Birch log — pale with dark stripes */}
-      <pattern id={`${idPrefix}-birch_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-        <rect width="14" height="14" fill="#dad2af" />
-        <rect width="14" height="14" fill="none" stroke="#7a7553" strokeWidth="1" />
-        <rect x="2" y="2" width="3" height="2" fill="#3a3a3a" />
-        <rect x="9" y="9" width="3" height="2" fill="#3a3a3a" />
-      </pattern>
-
-      {/* Acacia log */}
-      <pattern id={`${idPrefix}-acacia_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-        <rect width="14" height="14" fill="#a04a26" />
-        <rect width="14" height="14" fill="none" stroke="#3d1f0c" strokeWidth="1" />
-        <rect x="2" y="0" width="2" height="14" fill="#7a3617" />
-        <rect x="9" y="0" width="2" height="14" fill="#7a3617" />
-      </pattern>
-    </defs>
-  )
-}
-
-// Renders a single Minecraft house using SVG patterns + a flat roof.
-// Walls are one big <rect> with a pattern fill (real plank / stone /
-// cobble texture, not an obvious 14-px grid). Corners are darker log
-// pillars. Roof is a flat plank slab with a black outline.
-function HouseSilhouette({ variant }) {
-  const reactId = useId()
-  if (!variant?.cfg) return null
-  const { cols, rows, wall, corner, roof, foundation, windows = [], doors = [], chimney } = variant.cfg
-  const W = cols * BLOCK
-  const H = rows * BLOCK
-  const wallTop = BLOCK            // the roof eats the top row
-  const wallBottom = H - BLOCK     // the foundation eats the bottom row
-  const wallH = wallBottom - wallTop
-  const idP = `mc-${reactId.replace(/[^a-z0-9]/gi, '')}-${variant.kind}`
-
-  return (
-    <svg
-      className="tower-house-svg"
-      viewBox={`0 0 ${W} ${H}`}
-      width={W}
-      height={H}
-      shapeRendering="crispEdges"
-      aria-hidden="true"
-    >
-      <HousePatterns idPrefix={idP} />
-
-      {/* Wall body (full width). Drawn first so corners + roof + foundation overlay it. */}
-      <rect x="0" y={wallTop} width={W} height={wallH} fill={`url(#${idP}-${wall})`} />
-
-      {/* Corner pillars (logs) — left and right edges of the wall band. */}
-      <rect x="0"           y={wallTop} width={BLOCK} height={wallH} fill={`url(#${idP}-${corner})`} />
-      <rect x={W - BLOCK}   y={wallTop} width={BLOCK} height={wallH} fill={`url(#${idP}-${corner})`} />
-
-      {/* Windows */}
-      {windows.map(([cx, cy], i) => {
-        const x = cx * BLOCK, y = cy * BLOCK
-        return (
-          <g key={`w${i}`}>
-            <rect x={x} y={y} width={BLOCK} height={BLOCK} fill="#7cc1e6" />
-            <rect x={x} y={y} width={BLOCK} height={BLOCK} fill="none" stroke="#1c1c1c" strokeWidth="1.5" />
-            <rect x={x + BLOCK / 2 - 0.5} y={y + 1} width="1" height={BLOCK - 2} fill="#1c1c1c" />
-            <rect x={x + 1} y={y + BLOCK / 2 - 0.5} width={BLOCK - 2} height="1" fill="#1c1c1c" />
-            {/* tiny highlight on the top-left pane */}
-            <rect x={x + 2} y={y + 2} width="3" height="2" fill="#d6f0ff" />
-          </g>
-        )
-      })}
-
-      {/* Doors */}
-      {doors.map(([cx, cy], i) => {
-        const x = cx * BLOCK, y = cy * BLOCK
-        return (
-          <g key={`d${i}`}>
-            <rect x={x} y={y} width={BLOCK} height={BLOCK} fill={`url(#${idP}-oak_plank)`} />
-            <rect x={x} y={y} width={BLOCK} height={BLOCK} fill="none" stroke="#1c0e05" strokeWidth="1.5" />
-            <rect x={x + BLOCK / 2 - 0.5} y={y + 1} width="1" height={BLOCK - 2} fill="#1c0e05" />
-            <rect x={x + BLOCK - 4} y={y + BLOCK / 2 - 1} width="2" height="2" fill="#d4af37" />
-          </g>
-        )
-      })}
-
-      {/* Foundation slab — cobblestone runs the whole width below the wall. */}
-      <rect x="0" y={H - BLOCK} width={W} height={BLOCK} fill={`url(#${idP}-${foundation})`} />
-
-      {/* Flat roof slab — overhangs the wall by 2 px each side for a stair-cap look. */}
-      <rect x="-2" y="0" width={W + 4} height={BLOCK} fill={`url(#${idP}-${roof})`} />
-      <rect x="-2" y="0" width={W + 4} height={BLOCK} fill="none" stroke="#1d1410" strokeWidth="2" />
-      {/* Roof trim — single dark line at the bottom edge of the roof slab. */}
-      <rect x="-2" y={BLOCK - 2} width={W + 4} height="2" fill="#1d1410" />
-
-      {/* Optional chimney sticking above the roof */}
-      {chimney && (
-        <g>
-          <rect
-            x={chimney.x * BLOCK}
-            y={-(chimney.h * BLOCK)}
-            width={BLOCK}
-            height={chimney.h * BLOCK + BLOCK}
-            fill={`url(#${idP}-cobble)`}
-          />
-          <rect
-            x={chimney.x * BLOCK}
-            y={-(chimney.h * BLOCK)}
-            width={BLOCK}
-            height={chimney.h * BLOCK + BLOCK}
-            fill="none"
-            stroke="#1d1410"
-            strokeWidth="1.5"
-          />
-        </g>
-      )}
-
-      {/* Outer black outline — sells the "Minecraft sketch" look. */}
-      <rect x="0" y="0" width={W} height={H} fill="none" stroke="#1d1410" strokeWidth="2" />
-    </svg>
+    <>
+      <span className="tower-house-roof" />
+      <span className="tower-house-body">
+        {kind === 'cottage' && (
+          <>
+            <span className="tower-house-window" />
+            <span className="tower-house-door" />
+          </>
+        )}
+        {kind === 'townhouse' && (
+          <>
+            <span className="tower-house-window tower-house-window--left" />
+            <span className="tower-house-window tower-house-window--right" />
+            <span className="tower-house-door" />
+          </>
+        )}
+        {kind === 'shop' && (
+          <>
+            <span className="tower-house-awning" />
+            <span className="tower-house-shop-window" />
+            <span className="tower-house-door tower-house-door--shop" />
+          </>
+        )}
+        {kind === 'apartment' && (
+          <>
+            <span className="tower-house-window tower-house-window--apt tower-house-window--apt-tl" />
+            <span className="tower-house-window tower-house-window--apt tower-house-window--apt-tr" />
+            <span className="tower-house-window tower-house-window--apt tower-house-window--apt-bl" />
+            <span className="tower-house-window tower-house-window--apt tower-house-window--apt-br" />
+          </>
+        )}
+      </span>
+    </>
   )
 }
 
@@ -373,14 +108,17 @@ export default function TowerStackSlot() {
   // variant + width so the crane shows the SAME house from idle through
   // swing, drop and landing — only after the round completes does it
   // swap to a new preview.
-  // Pick the next house from the variants list. Each variant has a
-  // fixed width / height baked into its pixel-art layout — that's the
-  // gameplay variability now (no random width swing on top).
   function pickNextHouse(blocksList, prevSeed) {
     const level = blocksList.length
     const seed = blocksList[0]?._seed ?? prevSeed ?? Math.floor(Math.random() * HOUSE_VARIANTS.length)
     const variant = HOUSE_VARIANTS[(level + seed) % HOUSE_VARIANTS.length]
-    return { ...variant, _seed: seed }
+    const previousWidth = blocksList.at(-1)?.width ?? BASE_HOUSE_WIDTH
+    const widthSwing = rand(-30, 14)
+    const narrowingTrend = level * 1.4
+    const width = level === 0
+      ? Math.round(BASE_HOUSE_WIDTH - rand(0, 18))
+      : clamp(Math.round(previousWidth + widthSwing - narrowingTrend), 72, BASE_HOUSE_WIDTH)
+    return { ...variant, width, _seed: seed }
   }
 
   const [stake, setStake] = useState(initialStake)
@@ -415,7 +153,7 @@ export default function TowerStackSlot() {
     if (projected.length <= visibleStories) return 0
     let sum = 0
     for (let i = 0; i < projected.length - visibleStories; i++) {
-      sum += (projected[i].bodyH ?? BLOCK * 7)
+      sum += (projected[i].bodyH + projected[i].roofH - 6)
     }
     return sum
   }, [blocks, fallingBlock, phase])
@@ -658,11 +396,10 @@ export default function TowerStackSlot() {
       offset: releaseOffset,
       accuracy: Math.round(accuracy * 100),
       kind: preset.kind,
-      cfg: preset.cfg,
+      color: preset.color,
       bodyH: preset.bodyH,
-      // Tiny random tilt (sub-degree) — barely visible but adds
-      // a touch of human imperfection to the stack.
-      tilt: rand(-0.4, 0.4).toFixed(2),
+      roofH: preset.roofH,
+      tilt: rand(-1.6, 1.6).toFixed(1),
       doomed: willFall,
       // Direction the new house overshot the previous floor (-1 left,
       // +1 right) — drives the doomed-fall side later in CSS.
@@ -672,32 +409,33 @@ export default function TowerStackSlot() {
 
     setCraneTarget(releaseOffset)
     setFallingBlock(nextBlock)
-    // Skip the swing-and-jiggle phase — the crane just instantly
-    // moves to the release column and the house drops. User asked
-    // for "no jump", "just falls".
-    setPhase('dropping')
+    setPhase('swinging')
 
     dropTimerRef.current = window.setTimeout(() => {
-      setFallingBlock(null)
-      const newBlocks = [...blocks, nextBlock]
-      setBlocks(newBlocks)
-      setCraneTarget(0)
-      // Generate the NEXT preview now that this house has landed —
-      // user sees the new variant pop onto the crane only after a
-      // round outcome, not when they click Play.
-      setCraneNext(pickNextHouse(newBlocks, preset._seed))
+      setPhase('dropping')
 
-      if (willFall) {
-        haptic('error')
-        setPhase('fallen')
-        // Server: finalize round as 'fallen' (no payout).
-        const fallMult = Number((1 + newBlocks.length * 0.3).toFixed(1))
-        callFinishRound('fallen', 0, newBlocks.length, fallMult)
-      } else {
-        haptic('success')
-        setPhase('ready')
-      }
-    }, 720)
+      dropTimerRef.current = window.setTimeout(() => {
+        setFallingBlock(null)
+        const newBlocks = [...blocks, nextBlock]
+        setBlocks(newBlocks)
+        setCraneTarget(0)
+        // Generate the NEXT preview now that this house has landed —
+        // user sees the new variant pop onto the crane only after a
+        // round outcome, not when they click Play.
+        setCraneNext(pickNextHouse(newBlocks, preset._seed))
+
+        if (willFall) {
+          haptic('error')
+          setPhase('fallen')
+          // Server: finalize round as 'fallen' (no payout).
+          const fallMult = Number((1 + newBlocks.length * 0.3).toFixed(1))
+          callFinishRound('fallen', 0, newBlocks.length, fallMult)
+        } else {
+          haptic('success')
+          setPhase('ready')
+        }
+      }, 720)
+    }, 980)
   }
 
   function cashOut() {
@@ -742,9 +480,6 @@ export default function TowerStackSlot() {
           <span className="tower-cloud tower-cloud--two" />
           <span className="tower-cloud tower-cloud--three" />
           <span className="tower-cloud tower-cloud--four" />
-          <span className="tower-cloud tower-cloud--five" />
-          <span className="tower-cloud tower-cloud--six" />
-          <span className="tower-cloud tower-cloud--seven" />
         </div>
 
         <main ref={stageRef} className="tower-slot-stage" aria-label="Tower Stack Bet">
@@ -771,17 +506,18 @@ export default function TowerStackSlot() {
                 <span className="tower-crane-hook-line tower-crane-hook-line--right" />
               </span>
               <span
-                className={`tower-crane-load tower-house tower-house--${craneHouse.kind}`}
+                className={`tower-crane-load tower-house tower-house--${craneHouse.color} tower-house--${craneHouse.kind}`}
                 style={{
                   '--load-width': `${craneHouseWidth}px`,
                   '--body-h': `${craneHouse.bodyH}px`,
+                  '--roof-h': `${craneHouse.roofH}px`,
                   // Hide while the in-stack falling house is animating —
                   // the falling element is the "same" house, so showing
                   // both at once makes them detach visually.
                   visibility: isDropping ? 'hidden' : 'visible',
                 }}
               >
-                <HouseSilhouette variant={craneHouse} />
+                <HouseSilhouette kind={craneHouse.kind} />
               </span>
             </span>
           </div>
@@ -803,6 +539,7 @@ export default function TowerStackSlot() {
                   key={block.id}
                   className={[
                     'tower-house',
+                    `tower-house--${block.color}`,
                     `tower-house--${block.kind}`,
                     fallingBlock?.id === block.id ? 'is-falling' : '',
                     phase === 'fallen' && index === visibleBlocks.length - 1 ? 'is-doomed' : '',
@@ -812,12 +549,13 @@ export default function TowerStackSlot() {
                     bottom: `${bottomFor(visibleBlocks, index)}px`,
                     transform: `translateX(calc(-50% + ${block.offset}px)) rotate(${phase === 'fallen' && index === visibleBlocks.length - 1 ? (block.fallDir ?? 1) * 17 : block.tilt}deg)`,
                     '--body-h': `${block.bodyH}px`,
+                    '--roof-h': `${block.roofH}px`,
                     '--accuracy': `${block.accuracy}%`,
                     '--fall-start-y': fallingBlock?.id === block.id ? `${fallStartY}px` : undefined,
                     '--fall-dir': block.fallDir ?? 1,
                   }}
                 >
-                  <HouseSilhouette variant={block} />
+                  <HouseSilhouette kind={block.kind} />
                 </div>
               ))}
             </div>
