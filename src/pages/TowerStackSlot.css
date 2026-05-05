@@ -1271,14 +1271,14 @@
   overflow: visible !important;
 }
 
-/* The SVG itself is the whole house — anchor it to the wrapper bottom
- * so the house "sits on" the floor below it. */
+/* The SVG IS the whole house — flow it normally inside the wrapper.
+ * The wrapper has its own absolute position (bottom = bottomFor for
+ * stack houses, top = 142 for the crane load), so a normal-flow SVG
+ * with a known pixel size fills the wrapper exactly. Anchoring the
+ * SVG with position:absolute would collapse the wrapper to 0 height
+ * and detach the SVG from the magnet above it. */
 .tower-house-svg {
   display: block;
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
   pointer-events: none;
 }
 
@@ -1362,31 +1362,14 @@
 .tower-cloud--four {
   display: block !important;
   width: 70px !important;  height: 20px !important;
-  top: 110px !important;   left: 152px !important;
+  top: 108px !important;   left: 158px !important;
   animation-duration: 10s !important;
   animation-delay: -3s !important;
 }
-.tower-cloud--five {
-  display: block !important;
-  width: 54px !important;  height: 18px !important;
-  top: 50px !important;    left: 220px !important;
-  animation-duration: 12s !important;
-  animation-delay: -1s !important;
-}
-.tower-cloud--six {
-  display: block !important;
-  width: 80px !important;  height: 22px !important;
-  top: 178px !important;   left: 30px !important;
-  animation-duration: 14s !important;
-  animation-delay: -4s !important;
-}
-.tower-cloud--seven {
-  display: block !important;
-  width: 46px !important;  height: 18px !important;
-  top: 264px !important;   left: 234px !important;
-  animation-duration: 8s !important;
-  animation-delay: -6s !important;
-}
+/* User asked for fewer clouds; keep four in the sky and hide the rest. */
+.tower-cloud--five,
+.tower-cloud--six,
+.tower-cloud--seven { display: none !important; }
 
 /* Distant hills + grass band → pixelated dirt + grass strip. */
 .tower-far-hills {
@@ -1463,56 +1446,25 @@
   width: 3px !important;
 }
 
-/* Magnet block — replaces the corner-line "socket" look. Solid
- * steel-grey block with a red live face on its bottom edge that
- * touches the roof of the house below it. */
+/* Magnet block — solid steel-grey block, no red strip, sits flush
+ * on the roof of the house below it. The .tower-crane-load wrapper
+ * has top: 142 px and the magnet ends at 144 px (top 128 + height 16),
+ * so they overlap by 2 px → no visible gap between them. */
 .tower-crane-hook {
   border-radius: 0 !important;
-  background: #6e6e6e !important;
+  background: #7a7a7a !important;
   border: 2px solid #1d1410 !important;
   box-shadow:
-    inset 0 4px 0 #909090,
-    inset 0 -6px 0 #c93b2a,            /* red live face */
-    inset 0 -8px 0 #6e2018,            /* darker red shadow */
-    inset 0 4px 0 0 #909090 !important;
-  width: 32px !important;
-  margin-left: -16px !important;
+    inset 0 3px 0 #9a9a9a,
+    inset 0 -3px 0 #4e4e4e !important;
+  width: 36px !important;
+  margin-left: -18px !important;
   height: 16px !important;
+  top: 128px !important;
 }
 .tower-crane-hook-line {
   display: none !important;
 }
 
-/* Idle sway — the magnet+house gently rock left/right when nothing
- * else is happening. The .is-swinging / .is-dropping classes apply
- * their own animations and override this. */
-.tower-crane-load {
-  animation: towerIdleSway 4.6s ease-in-out infinite !important;
-}
-.tower-crane.is-swinging .tower-crane-load,
-.tower-crane.is-dropping .tower-crane-load {
-  animation: none !important;
-}
-
-@keyframes towerIdleSway {
-  0%, 100% { transform: translateX(-50%) rotate(-1.2deg); }
-  50%      { transform: translateX(-50%) rotate( 1.2deg); }
-}
-
-/* Pair the cable + hook so they sway together with the load. */
-.tower-crane-cable,
-.tower-crane-hook {
-  transform-origin: 50% 0% !important;
-  animation: towerIdleSwayCable 4.6s ease-in-out infinite !important;
-}
-.tower-crane.is-swinging .tower-crane-cable,
-.tower-crane.is-swinging .tower-crane-hook,
-.tower-crane.is-dropping .tower-crane-cable,
-.tower-crane.is-dropping .tower-crane-hook {
-  animation: none !important;
-}
-
-@keyframes towerIdleSwayCable {
-  0%, 100% { transform: rotate(-1.2deg); }
-  50%      { transform: rotate( 1.2deg); }
-}
+/* No idle sway. The crane and the house above it stay still until a
+ * real swing/drop animation kicks in via .is-swinging / .is-dropping. */
