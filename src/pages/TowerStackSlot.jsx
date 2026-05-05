@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import useGameStore from '../store/useGameStore'
@@ -13,134 +13,86 @@ const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
 const MIN_BALANCE_RUB = 10
 const SLOT_ID = 'tower-stack'
 
-// ── Minecraft pixel-art houses ──
-// Each house is a 2-D character grid; one character = one 14 × 14 px
-// block. The HouseSilhouette component renders it as an inline SVG
-// with one <rect> stack per block (fill + 1-px shadow + 1-px highlight)
-// for that classic blocky-block look.
+// ── Minecraft houses ──
+// Each variant is a high-level config (size + materials + window /
+// door positions). HouseSilhouette renders it as an inline SVG with
+// real Minecraft-ish texture patterns (cobblestone noise, plank
+// stripes, log grain), a flat plank roof and a black outline — the
+// same general look as a real village house.
 const BLOCK = 14
-const BASE_HOUSE_WIDTH = 84  // median across variants (6 cols × 14)
+const BASE_HOUSE_WIDTH = 98  // median across variants (7 cols × 14)
 
-// Block palette. Each entry { fill, dark, light } draws as a filled
-// 14 × 14 square with a 1 px right/bottom shadow and a 1 px top/left
-// highlight, mimicking Minecraft block bevel without using textures.
-const BLOCKS = {
-  // ── wood ──
-  L:  { fill: '#7a5634', dark: '#3d2814', light: '#a3784e' },  // oak log
-  B:  { fill: '#d8d1ad', dark: '#7a7553', light: '#f0eccd' },  // birch log
-  D:  { fill: '#3a2c1d', dark: '#1a1308', light: '#574028' },  // dark-oak log
-  S:  { fill: '#4a3b25', dark: '#22190d', light: '#6c5535' },  // spruce log
-  A:  { fill: '#a04a26', dark: '#5a2811', light: '#cc6638' },  // acacia log
-  p:  { fill: '#b58a55', dark: '#7a5634', light: '#d3aa78' },  // oak plank
-  b:  { fill: '#efe6c2', dark: '#a89968', light: '#fff7d8' },  // birch plank
-  d:  { fill: '#5b4128', dark: '#241906', light: '#7a5a37' },  // dark-oak plank
-  s:  { fill: '#7d6038', dark: '#3d2c16', light: '#9b7a4c' },  // spruce plank
-  a:  { fill: '#c47148', dark: '#5a2811', light: '#dd9266' },  // acacia plank
-  // ── stone ──
-  C:  { fill: '#7a7a7a', dark: '#3e3e3e', light: '#9a9a9a' },  // cobblestone
-  T:  { fill: '#8a8a8a', dark: '#4a4a4a', light: '#a8a8a8' },  // stone bricks
-  M:  { fill: '#6a8a5a', dark: '#3a4f30', light: '#88a878' },  // mossy cobble
-  // ── windows / doors ──
-  g:  { fill: '#7cc1e6', dark: '#2f6e96', light: '#a8dffc', frame: '#1c1c1c' },
-  r:  { fill: '#5a3a1f', dark: '#231408', light: '#7a512c', frame: '#181818' },
-  // ── roof tints ──
-  R:  { fill: '#bb3d2c', dark: '#6e2018', light: '#dc5a48' },  // red wool roof
-  O:  { fill: '#9d6738', dark: '#5a3920', light: '#bb8657' },  // oak slab roof
-  K:  { fill: '#3a2615', dark: '#1a0f06', light: '#5a3f25' },  // dark roof
-  W:  { fill: '#dadada', dark: '#a8a8a8', light: '#f5f5f5' },  // white wool
-}
-
-// Layouts. Each row is one character per block, top → bottom.
-// Width = row length, height = number of rows. Rows must all have
-// equal length. '.' = empty cell.
+// 8 distinct village houses. cols × rows includes the roof row at top
+// and the foundation (cobblestone) row at bottom. Walls are everything
+// in between.
 const HOUSES = {
-  oak_cottage: [
-    '..OOO..',
-    '.OOOOO.',
-    'LpppppL',
-    'LgpppgL',
-    'LpppppL',
-    'LpprppL',
-    'CCCCCCC',
-  ],
-  birch_house: [
-    '..OOOO..',
-    '.OOOOOO.',
-    'BbbbbbbB',
-    'BgbbbbgB',
-    'BbbbbbbB',
-    'BbbrrbbB',
-    'CCCCCCCC',
-  ],
-  spruce_lodge: [
-    '...KKK...',
-    '..KKKKK..',
-    '.KKKKKKK.',
-    'SsgsssgsS',
-    'SsssssssS',
-    'SsssrsssS',
-    'SsssssssS',
-    'CCCCCCCCC',
-  ],
-  dark_oak_tall: [
-    '..KKKK..',
-    '.KKKKKK.',
-    'DddddddD',
-    'DgddddgD',
-    'DddddddD',
-    'DgddddgD',
-    'DddrrddD',
-    'CCCCCCCC',
-  ],
-  acacia_hut: [
-    '..OOO..',
-    '.OOOOO.',
-    'AaaaaaA',
-    'AagagaA',
-    'AaaraaA',
-    'CCCCCCC',
-  ],
-  stone_house: [
-    '..WWWW..',
-    '.WWWWWW.',
-    'TTTTTTTT',
-    'TgTTgTgT',
-    'TTTTTTTT',
-    'TTrTrTTT',
-    'CCCCCCCC',
-  ],
-  cobble_smith: [
-    '..OOO.C',
-    '.OOOOOC',
-    'LpppppC',
-    'LgpgpgC',
-    'LpppppC',
-    'LpprppC',
-    'CCCCCCC',
-  ],
-  big_library: [
-    '...RRR...',
-    '..RRRRR..',
-    '.RRRRRRR.',
-    'pdddddddp',
-    'pdgdgdgdp',
-    'pdddddddp',
-    'pdgdgdgdp',
-    'pddrrrddp',
-    'CCCCCCCCC',
-  ],
+  oak_cottage: {
+    cols: 6, rows: 6,
+    wall: 'oak_plank', corner: 'oak_log',
+    roof: 'oak_plank', foundation: 'cobble',
+    windows: [[1, 2], [4, 2]],
+    doors:   [[2, 4], [3, 4]],
+  },
+  birch_house: {
+    cols: 7, rows: 6,
+    wall: 'birch_plank', corner: 'birch_log',
+    roof: 'birch_plank', foundation: 'cobble',
+    windows: [[1, 2], [5, 2]],
+    doors:   [[3, 4]],
+  },
+  spruce_lodge: {
+    cols: 8, rows: 7,
+    wall: 'spruce_plank', corner: 'spruce_log',
+    roof: 'dark_plank', foundation: 'cobble',
+    windows: [[1, 2], [3, 2], [6, 2]],
+    doors:   [[4, 5]],
+  },
+  dark_oak_tall: {
+    cols: 6, rows: 8,
+    wall: 'dark_plank', corner: 'dark_log',
+    roof: 'dark_plank', foundation: 'cobble',
+    windows: [[1, 2], [4, 2], [1, 4], [4, 4]],
+    doors:   [[2, 6], [3, 6]],
+  },
+  acacia_hut: {
+    cols: 5, rows: 5,
+    wall: 'acacia_plank', corner: 'acacia_log',
+    roof: 'oak_plank', foundation: 'cobble',
+    windows: [[1, 1], [3, 1]],
+    doors:   [[2, 3]],
+  },
+  stone_house: {
+    cols: 7, rows: 6,
+    wall: 'stone_brick', corner: 'oak_log',
+    roof: 'oak_plank', foundation: 'cobble',
+    windows: [[1, 2], [3, 2], [5, 2]],
+    doors:   [[3, 4]],
+  },
+  cobble_smith: {
+    cols: 6, rows: 6,
+    wall: 'cobble', corner: 'oak_log',
+    roof: 'oak_plank', foundation: 'cobble',
+    windows: [[1, 2], [4, 2]],
+    doors:   [[2, 4]],
+    chimney: { x: 4, h: 1 }, // 1-block chimney sticking above the roof
+  },
+  big_library: {
+    cols: 8, rows: 8,
+    wall: 'oak_plank', corner: 'dark_log',
+    roof: 'dark_plank', foundation: 'cobble',
+    windows: [[1, 2], [3, 2], [6, 2], [1, 4], [3, 4], [6, 4]],
+    doors:   [[3, 6], [4, 6]],
+  },
 }
 
-// Pre-computed metadata for each variant — width / height in pixels,
-// derived from the layout shape. Used by the stacking layout math.
 function variantFromKey(key) {
-  const layout = HOUSES[key]
+  const cfg = HOUSES[key]
   return {
     kind: key,
-    layout,
-    width: layout[0].length * BLOCK,
-    bodyH: layout.length * BLOCK,
-    roofH: 0,  // roof is baked into the layout
+    cfg,
+    width: cfg.cols * BLOCK,
+    bodyH: cfg.rows * BLOCK,
+    roofH: 0,
   }
 }
 
@@ -173,73 +125,143 @@ function bottomFor(blocks, index) {
   return bottom
 }
 
-// Renders a Minecraft-style pixel-art house from a layout grid.
-// Each cell is BLOCK × BLOCK px with a tiny shadow + highlight to
-// give every block its own bevel. Glass cells get a window cross,
-// door cells get a vertical handle line.
-function HouseSilhouette({ layout }) {
-  if (!layout) return null
-  const cols = layout[0].length
-  const rows = layout.length
+// Reusable Minecraft-ish texture patterns. Each pattern is a single
+// SVG <pattern> definition that tiles to fill any sized rect. The
+// caller passes a unique idPrefix so multiple house instances on the
+// page don't fight over pattern IDs.
+function HousePatterns({ idPrefix }) {
+  return (
+    <defs>
+      {/* Cobblestone — irregular grey blocks with darker mortar */}
+      <pattern id={`${idPrefix}-cobble`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#7c7c7c" />
+        <rect width="14" height="14" fill="none" stroke="#3a3a3a" strokeWidth="1" />
+        <rect x="2"  y="2"  width="3" height="3" fill="#a0a0a0" />
+        <rect x="8"  y="3"  width="3" height="2" fill="#9a9a9a" />
+        <rect x="3"  y="8"  width="2" height="3" fill="#909090" />
+        <rect x="9"  y="9"  width="3" height="2" fill="#a8a8a8" />
+        <rect x="6"  y="5"  width="1" height="1" fill="#5a5a5a" />
+        <rect x="11" y="6"  width="1" height="1" fill="#5a5a5a" />
+        <rect x="2"  y="11" width="1" height="1" fill="#5a5a5a" />
+      </pattern>
+
+      {/* Stone bricks — uniform grid */}
+      <pattern id={`${idPrefix}-stone_brick`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#8a8a8a" />
+        <rect width="14" height="14" fill="none" stroke="#454545" strokeWidth="1" />
+        <rect x="0" y="6" width="14" height="2" fill="#454545" />
+        <rect x="6" y="0" width="2" height="6"  fill="#454545" />
+        <rect x="0" y="8" width="2" height="6"  fill="#454545" />
+        <rect x="2" y="8" width="2" height="2"  fill="#a0a0a0" />
+        <rect x="8" y="2" width="2" height="2"  fill="#a0a0a0" />
+      </pattern>
+
+      {/* Oak planks — horizontal woodgrain */}
+      <pattern id={`${idPrefix}-oak_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
+        <rect width="28" height="14" fill="#b58a55" />
+        <rect width="28" height="2"  y="0"  fill="#7a5a30" />
+        <rect width="14" height="2"  y="7"  x="0"  fill="#9d7644" />
+        <rect width="14" height="2"  y="7"  x="14" fill="#9d7644" />
+        <rect width="14" height="1"  y="3"  x="2"  fill="#cba074" />
+        <rect width="10" height="1"  y="11" x="14" fill="#cba074" />
+      </pattern>
+
+      {/* Birch planks — pale, fine horizontal grain */}
+      <pattern id={`${idPrefix}-birch_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
+        <rect width="28" height="14" fill="#efe6c2" />
+        <rect width="28" height="1"  y="0" fill="#a89968" />
+        <rect width="28" height="1"  y="7" fill="#cdbe87" />
+        <rect width="28" height="1"  y="13" fill="#a89968" />
+        <rect width="2"  height="14" x="6"  fill="#cdbe87" />
+        <rect width="2"  height="14" x="20" fill="#cdbe87" />
+      </pattern>
+
+      {/* Spruce planks — darker brown grain */}
+      <pattern id={`${idPrefix}-spruce_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
+        <rect width="28" height="14" fill="#7d6038" />
+        <rect width="28" height="2"  y="0" fill="#3d2c16" />
+        <rect width="28" height="1"  y="7" fill="#5a4326" />
+        <rect width="2"  height="14" x="10" fill="#5a4326" />
+        <rect width="2"  height="14" x="22" fill="#5a4326" />
+      </pattern>
+
+      {/* Dark oak planks */}
+      <pattern id={`${idPrefix}-dark_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
+        <rect width="28" height="14" fill="#4a341e" />
+        <rect width="28" height="2"  y="0"  fill="#22150a" />
+        <rect width="28" height="1"  y="7"  fill="#321f10" />
+        <rect width="14" height="1"  y="3"  x="2"  fill="#5e4527" />
+        <rect width="2"  height="14" x="13" fill="#22150a" />
+      </pattern>
+
+      {/* Acacia planks — orange-red */}
+      <pattern id={`${idPrefix}-acacia_plank`} x="0" y="0" width="28" height="14" patternUnits="userSpaceOnUse">
+        <rect width="28" height="14" fill="#c47148" />
+        <rect width="28" height="2"  y="0"  fill="#5a2811" />
+        <rect width="28" height="1"  y="7"  fill="#823a1a" />
+        <rect width="2"  height="14" x="9"  fill="#823a1a" />
+        <rect width="2"  height="14" x="21" fill="#823a1a" />
+      </pattern>
+
+      {/* Oak log — vertical strips with annual rings */}
+      <pattern id={`${idPrefix}-oak_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#7a5634" />
+        <rect width="14" height="14" fill="none" stroke="#3d2814" strokeWidth="1" />
+        <rect x="2"  y="0" width="2" height="14" fill="#5a3d20" />
+        <rect x="9"  y="0" width="2" height="14" fill="#5a3d20" />
+        <rect x="6"  y="0" width="1" height="14" fill="#9a734a" />
+      </pattern>
+
+      {/* Dark oak log */}
+      <pattern id={`${idPrefix}-dark_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#3a2c1d" />
+        <rect width="14" height="14" fill="none" stroke="#16100a" strokeWidth="1" />
+        <rect x="2" y="0" width="2" height="14" fill="#22180e" />
+        <rect x="9" y="0" width="2" height="14" fill="#22180e" />
+      </pattern>
+
+      {/* Spruce log */}
+      <pattern id={`${idPrefix}-spruce_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#4a3b25" />
+        <rect width="14" height="14" fill="none" stroke="#1d1408" strokeWidth="1" />
+        <rect x="2" y="0" width="2" height="14" fill="#2a200f" />
+        <rect x="9" y="0" width="2" height="14" fill="#2a200f" />
+      </pattern>
+
+      {/* Birch log — pale with dark stripes */}
+      <pattern id={`${idPrefix}-birch_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#dad2af" />
+        <rect width="14" height="14" fill="none" stroke="#7a7553" strokeWidth="1" />
+        <rect x="2" y="2" width="3" height="2" fill="#3a3a3a" />
+        <rect x="9" y="9" width="3" height="2" fill="#3a3a3a" />
+      </pattern>
+
+      {/* Acacia log */}
+      <pattern id={`${idPrefix}-acacia_log`} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect width="14" height="14" fill="#a04a26" />
+        <rect width="14" height="14" fill="none" stroke="#3d1f0c" strokeWidth="1" />
+        <rect x="2" y="0" width="2" height="14" fill="#7a3617" />
+        <rect x="9" y="0" width="2" height="14" fill="#7a3617" />
+      </pattern>
+    </defs>
+  )
+}
+
+// Renders a single Minecraft house using SVG patterns + a flat roof.
+// Walls are one big <rect> with a pattern fill (real plank / stone /
+// cobble texture, not an obvious 14-px grid). Corners are darker log
+// pillars. Roof is a flat plank slab with a black outline.
+function HouseSilhouette({ variant }) {
+  const reactId = useId()
+  if (!variant?.cfg) return null
+  const { cols, rows, wall, corner, roof, foundation, windows = [], doors = [], chimney } = variant.cfg
   const W = cols * BLOCK
   const H = rows * BLOCK
-  const pieces = []
-  for (let y = 0; y < rows; y++) {
-    const row = layout[y]
-    for (let x = 0; x < cols; x++) {
-      const ch = row[x]
-      if (ch === '.') continue
-      const def = BLOCKS[ch]
-      if (!def) continue
-      const px = x * BLOCK
-      const py = y * BLOCK
-      // base block with bevel
-      pieces.push(
-        <g key={`${x}-${y}`}>
-          <rect x={px} y={py} width={BLOCK} height={BLOCK} fill={def.fill} />
-          {/* highlight (top + left, 1 px) */}
-          <rect x={px} y={py} width={BLOCK} height={1} fill={def.light} />
-          <rect x={px} y={py} width={1} height={BLOCK} fill={def.light} />
-          {/* shadow (right + bottom, 1 px) */}
-          <rect x={px + BLOCK - 1} y={py} width={1} height={BLOCK} fill={def.dark} />
-          <rect x={px} y={py + BLOCK - 1} width={BLOCK} height={1} fill={def.dark} />
-        </g>
-      )
-      // glass: window cross
-      if (ch === 'g') {
-        pieces.push(
-          <g key={`${x}-${y}-w`}>
-            <rect x={px + 6} y={py + 1} width={2} height={BLOCK - 2} fill={def.frame} />
-            <rect x={px + 1} y={py + 6} width={BLOCK - 2} height={2} fill={def.frame} />
-          </g>
-        )
-      }
-      // door: handle dot + vertical seam
-      if (ch === 'r') {
-        pieces.push(
-          <g key={`${x}-${y}-d`}>
-            <rect x={px + 1} y={py + 1} width={BLOCK - 2} height={1} fill={def.dark} />
-            <rect x={px + BLOCK / 2} y={py + 1} width={1} height={BLOCK - 2} fill={def.dark} />
-            <rect x={px + BLOCK - 4} y={py + BLOCK / 2} width={2} height={2} fill="#d4af37" />
-          </g>
-        )
-      }
-      // cobblestone / stone bricks: subtle inner notches
-      if (ch === 'C' || ch === 'M') {
-        pieces.push(
-          <rect key={`${x}-${y}-n1`} x={px + 3} y={py + 4} width={2} height={2} fill={def.dark} />
-        )
-        pieces.push(
-          <rect key={`${x}-${y}-n2`} x={px + BLOCK - 5} y={py + BLOCK - 6} width={2} height={2} fill={def.dark} />
-        )
-      }
-      if (ch === 'T') {
-        pieces.push(
-          <rect key={`${x}-${y}-tb`} x={px} y={py + Math.floor(BLOCK / 2)} width={BLOCK} height={1} fill={def.dark} />
-        )
-      }
-    }
-  }
+  const wallTop = BLOCK            // the roof eats the top row
+  const wallBottom = H - BLOCK     // the foundation eats the bottom row
+  const wallH = wallBottom - wallTop
+  const idP = `mc-${reactId.replace(/[^a-z0-9]/gi, '')}-${variant.kind}`
+
   return (
     <svg
       className="tower-house-svg"
@@ -249,7 +271,76 @@ function HouseSilhouette({ layout }) {
       shapeRendering="crispEdges"
       aria-hidden="true"
     >
-      {pieces}
+      <HousePatterns idPrefix={idP} />
+
+      {/* Wall body (full width). Drawn first so corners + roof + foundation overlay it. */}
+      <rect x="0" y={wallTop} width={W} height={wallH} fill={`url(#${idP}-${wall})`} />
+
+      {/* Corner pillars (logs) — left and right edges of the wall band. */}
+      <rect x="0"           y={wallTop} width={BLOCK} height={wallH} fill={`url(#${idP}-${corner})`} />
+      <rect x={W - BLOCK}   y={wallTop} width={BLOCK} height={wallH} fill={`url(#${idP}-${corner})`} />
+
+      {/* Windows */}
+      {windows.map(([cx, cy], i) => {
+        const x = cx * BLOCK, y = cy * BLOCK
+        return (
+          <g key={`w${i}`}>
+            <rect x={x} y={y} width={BLOCK} height={BLOCK} fill="#7cc1e6" />
+            <rect x={x} y={y} width={BLOCK} height={BLOCK} fill="none" stroke="#1c1c1c" strokeWidth="1.5" />
+            <rect x={x + BLOCK / 2 - 0.5} y={y + 1} width="1" height={BLOCK - 2} fill="#1c1c1c" />
+            <rect x={x + 1} y={y + BLOCK / 2 - 0.5} width={BLOCK - 2} height="1" fill="#1c1c1c" />
+            {/* tiny highlight on the top-left pane */}
+            <rect x={x + 2} y={y + 2} width="3" height="2" fill="#d6f0ff" />
+          </g>
+        )
+      })}
+
+      {/* Doors */}
+      {doors.map(([cx, cy], i) => {
+        const x = cx * BLOCK, y = cy * BLOCK
+        return (
+          <g key={`d${i}`}>
+            <rect x={x} y={y} width={BLOCK} height={BLOCK} fill={`url(#${idP}-oak_plank)`} />
+            <rect x={x} y={y} width={BLOCK} height={BLOCK} fill="none" stroke="#1c0e05" strokeWidth="1.5" />
+            <rect x={x + BLOCK / 2 - 0.5} y={y + 1} width="1" height={BLOCK - 2} fill="#1c0e05" />
+            <rect x={x + BLOCK - 4} y={y + BLOCK / 2 - 1} width="2" height="2" fill="#d4af37" />
+          </g>
+        )
+      })}
+
+      {/* Foundation slab — cobblestone runs the whole width below the wall. */}
+      <rect x="0" y={H - BLOCK} width={W} height={BLOCK} fill={`url(#${idP}-${foundation})`} />
+
+      {/* Flat roof slab — overhangs the wall by 2 px each side for a stair-cap look. */}
+      <rect x="-2" y="0" width={W + 4} height={BLOCK} fill={`url(#${idP}-${roof})`} />
+      <rect x="-2" y="0" width={W + 4} height={BLOCK} fill="none" stroke="#1d1410" strokeWidth="2" />
+      {/* Roof trim — single dark line at the bottom edge of the roof slab. */}
+      <rect x="-2" y={BLOCK - 2} width={W + 4} height="2" fill="#1d1410" />
+
+      {/* Optional chimney sticking above the roof */}
+      {chimney && (
+        <g>
+          <rect
+            x={chimney.x * BLOCK}
+            y={-(chimney.h * BLOCK)}
+            width={BLOCK}
+            height={chimney.h * BLOCK + BLOCK}
+            fill={`url(#${idP}-cobble)`}
+          />
+          <rect
+            x={chimney.x * BLOCK}
+            y={-(chimney.h * BLOCK)}
+            width={BLOCK}
+            height={chimney.h * BLOCK + BLOCK}
+            fill="none"
+            stroke="#1d1410"
+            strokeWidth="1.5"
+          />
+        </g>
+      )}
+
+      {/* Outer black outline — sells the "Minecraft sketch" look. */}
+      <rect x="0" y="0" width={W} height={H} fill="none" stroke="#1d1410" strokeWidth="2" />
     </svg>
   )
 }
@@ -563,7 +654,7 @@ export default function TowerStackSlot() {
       offset: releaseOffset,
       accuracy: Math.round(accuracy * 100),
       kind: preset.kind,
-      layout: preset.layout,
+      cfg: preset.cfg,
       bodyH: preset.bodyH,
       tilt: rand(-1.6, 1.6).toFixed(1),
       doomed: willFall,
@@ -682,7 +773,7 @@ export default function TowerStackSlot() {
                   visibility: isDropping ? 'hidden' : 'visible',
                 }}
               >
-                <HouseSilhouette layout={craneHouse.layout} />
+                <HouseSilhouette variant={craneHouse} />
               </span>
             </span>
           </div>
@@ -718,7 +809,7 @@ export default function TowerStackSlot() {
                     '--fall-dir': block.fallDir ?? 1,
                   }}
                 >
-                  <HouseSilhouette layout={block.layout} />
+                  <HouseSilhouette variant={block} />
                 </div>
               ))}
             </div>
