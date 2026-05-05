@@ -1085,7 +1085,15 @@ export default function TetrisCascadeSlot() {
                     : coin ? 'tetris-cell--coin'
                     : wild ? 'tetris-cell--wild'
                     : `tetris-cell--${cell.color}`
-                  const showMul = filled && !coin && cell.mul > 1
+                  // Bonus cells carry small fractional muls (BONUS_PIECE_MULS
+                  // averages 0.05625). Show them as integers ×N where N is
+                  // round(mul × 100) so the player sees the familiar ×3 / ×5 /
+                  // ×10 etc. — actual payout still uses the fractional cell.mul
+                  // internally (stake × Σ cell.mul over cleared cells in bonus).
+                  const mulDisplay = filled && !coin && cell.mul > 0
+                    ? (cell.mul >= 1 ? cell.mul : Math.round(cell.mul * 100))
+                    : 0
+                  const showMul = mulDisplay > 1
                   return (
                     <div
                       key={`${r}-${c}`}
@@ -1107,7 +1115,7 @@ export default function TetrisCascadeSlot() {
                           </svg>
                         </span>
                       )}
-                      {showMul && <span className="tetris-cell-mul">×{cell.mul}</span>}
+                      {showMul && <span className="tetris-cell-mul">×{mulDisplay}</span>}
                     </div>
                   )
                 })}
