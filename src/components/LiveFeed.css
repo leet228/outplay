@@ -52,37 +52,26 @@
   border-radius: 14px;
   background: var(--surface, #1c1c1e);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  /* Slide-in runs once on mount. `both` keeps the start frame so the
-   * row never flashes at full opacity before animating. */
-  animation: live-feed-slide-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  will-change: transform, opacity;
+  /* Smooth fade-in on mount. Pure opacity, no translate — feels
+   * calmer than a slide. `both` keeps the start frame so the row
+   * never flashes fully opaque before animating. */
+  animation: live-feed-fade-in 0.7s ease-out both;
+  will-change: opacity;
 }
 
-@keyframes live-feed-slide-in {
-  from {
-    transform: translateY(-12px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+@keyframes live-feed-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .live-feed-row.is-leaving {
-  animation: live-feed-fade-out 0.42s ease forwards;
+  animation: live-feed-fade-out 0.7s ease-out forwards;
   pointer-events: none;
 }
 
 @keyframes live-feed-fade-out {
-  from {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateY(8px);
-    opacity: 0;
-  }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 .live-feed-row.is-win {
