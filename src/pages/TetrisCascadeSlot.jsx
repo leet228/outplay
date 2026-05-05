@@ -22,18 +22,18 @@ const MAX_CASCADES = 6
 
 // Special piece spawn rates.
 const WILD_RATE = 0.08         // colour wildcard cells
-const BOMB_RATE = 0.04         // 1×1 bombs that explode 3×3 on landing
-const COIN_RATE = 0.045        // 1×1 scatter coins
+const COIN_RATE = 0.045        // 1×1 scatter coins (trigger the bonus)
 const COINS_TO_TRIGGER = 5     // coins on grid after initial drop → bonus
 
 // Bonus configuration.
 const BONUS_FREE_SPINS = 10
 const BONUS_PIECE_MULS = [2, 3, 5, 10] // each cell carries one of these in bonus
 const RAGE_MAX = 6              // line clears in bonus to fill the rage meter
-// Lowered from 5000 → 1000 to match v2 SQL — RTP-balanced jackpot.
-// The spin-time absolute cap (LEAST(stake × 1000, 200_000)) further
-// limits the visual reveal at very high stakes.
-const PERFECT_CLEAR_WIN_MUL = 1000
+// Visual reveal multiplier for the jackpot bonus tier. Matches v3
+// SQL: jackpot mul = 800. The spin-time absolute cap
+// (LEAST(stake × 1000, 200 000 ₽)) keeps payouts bounded at very
+// high stakes.
+const PERFECT_CLEAR_WIN_MUL = 800
 const BUY_BONUS_COST_MUL = 100  // buy-in price = stake × this
 // Single-spin payout cap mirroring the SQL hard cap.
 const SINGLE_SPIN_PAYOUT_CAP = 200000
@@ -72,23 +72,17 @@ function cellColor(cell) {
   return cell.color
 }
 function isCellWild(cell)   { return cell && cell.kind === 'wild' }
-function isCellBomb(cell)   { return cell && cell.kind === 'bomb' }
 function isCellCoin(cell)   { return cell && cell.kind === 'coin' }
 function cellMul(cell)      { return cell?.mul || 1 }
 
 function pickRandomPiece(opts = {}) {
   const { forceI, bonus, noSpecial } = opts
-  // Specials only spawn outside the bonus round (kept simple — bonus uses
-  // multipliers instead). Dud rounds also opt out via noSpecial: a bomb
-  // would detonate after placement and gravity could accidentally pull
-  // surviving cells into a row match — i.e. a "phantom" cascade on a
-  // 0-payout spin.
+  // Specials only spawn outside the bonus round (kept simple — bonus
+  // uses per-cell multipliers instead). noSpecial suppresses scatter
+  // coins on dud / zero-pay spins so they can't accidentally trigger
+  // the bonus during a no-payout round.
   if (!bonus && !forceI && !noSpecial) {
-    const r = Math.random()
-    if (r < BOMB_RATE) {
-      return { kind: 'bomb', cells: [[0,0]], color: 'bomb' }
-    }
-    if (r < BOMB_RATE + COIN_RATE) {
+    if (Math.random() < COIN_RATE) {
       return { kind: 'coin', cells: [[0,0]], color: 'coin' }
     }
   }
@@ -204,40 +198,41 @@ function pickColumn(grid, piece, opts = {}) {
 function decideTetrisOutcomeDev(stake, isBought) {
   const roll = Math.random()
   let outcome_kind, bonus_kind = null
+  // Distribution mirrors migration_tetris_rtp_v3.sql exactly:
+  //   dud 74.6 %, small 18 %, medium 5 %, big 1.5 %, huge 0.8 %, bonus 0.1 %
+  // Inside bonus: small 55 %, medium 28 %, big 14 %, jackpot 3 %.
   if (isBought) {
     outcome_kind = 'bonus'
-    if      (roll < 0.35)  bonus_kind = 'empty'
-    else if (roll < 0.70)  bonus_kind = 'small'
-    else if (roll < 0.90)  bonus_kind = 'medium'
-    else if (roll < 0.985) bonus_kind = 'big'
-    else                   bonus_kind = 'jackpot'
+    if      (roll < 0.55) bonus_kind = 'small'
+    else if (roll < 0.83) bonus_kind = 'medium'
+    else if (roll < 0.97) bonus_kind = 'big'
+    else                  bonus_kind = 'jackpot'
   } else {
-    if      (roll < 0.700)  outcome_kind = 'dud'
-    else if (roll < 0.920)  outcome_kind = 'small'
-    else if (roll < 0.980)  outcome_kind = 'medium'
-    else if (roll < 0.995)  outcome_kind = 'big'
-    else if (roll < 0.9993) outcome_kind = 'huge'
+    if      (roll < 0.746)                                outcome_kind = 'dud'
+    else if (roll < 0.746 + 0.180)                        outcome_kind = 'small'
+    else if (roll < 0.746 + 0.180 + 0.050)                outcome_kind = 'medium'
+    else if (roll < 0.746 + 0.180 + 0.050 + 0.015)        outcome_kind = 'big'
+    else if (roll < 0.746 + 0.180 + 0.050 + 0.015 + 0.008) outcome_kind = 'huge'
     else {
       outcome_kind = 'bonus'
       const r2 = Math.random()
-      if      (r2 < 0.35) bonus_kind = 'small'
-      else if (r2 < 0.80) bonus_kind = 'medium'
+      if      (r2 < 0.55) bonus_kind = 'small'
+      else if (r2 < 0.83) bonus_kind = 'medium'
       else if (r2 < 0.97) bonus_kind = 'big'
       else                bonus_kind = 'jackpot'
     }
   }
   let mul = 0
   if (outcome_kind === 'dud') mul = 0
-  else if (outcome_kind === 'small')  mul = 1 + Math.floor(Math.random() * 2)         // 1-2
-  else if (outcome_kind === 'medium') mul = 3 + Math.floor(Math.random() * 4)         // 3-6
-  else if (outcome_kind === 'big')    mul = 7 + Math.floor(Math.random() * 7)         // 7-13
-  else if (outcome_kind === 'huge')   mul = 20 + Math.floor(Math.random() * 13)       // 20-32
+  else if (outcome_kind === 'small')  mul = 1  + Math.floor(Math.random() * 2)        // 1-2
+  else if (outcome_kind === 'medium') mul = 3  + Math.floor(Math.random() * 4)        // 3-6
+  else if (outcome_kind === 'big')    mul = 7  + Math.floor(Math.random() * 7)        // 7-13
+  else if (outcome_kind === 'huge')   mul = 18 + Math.floor(Math.random() * 12)       // 18-29
   else if (outcome_kind === 'bonus') {
-    if      (bonus_kind === 'empty')   mul = 1 + Math.floor(Math.random() * 15)       // 1-15
-    else if (bonus_kind === 'small')   mul = 25 + Math.floor(Math.random() * 36)      // 25-60
-    else if (bonus_kind === 'medium')  mul = 75 + Math.floor(Math.random() * 76)      // 75-150
+    if      (bonus_kind === 'small')   mul = 25  + Math.floor(Math.random() * 36)     // 25-60
+    else if (bonus_kind === 'medium')  mul = 70  + Math.floor(Math.random() * 81)     // 70-150
     else if (bonus_kind === 'big')     mul = 200 + Math.floor(Math.random() * 201)    // 200-400
-    else if (bonus_kind === 'jackpot') mul = 1000
+    else if (bonus_kind === 'jackpot') mul = 800
   }
   // Mirror the SQL hard cap: LEAST(stake × mul, stake × 1000, 200_000)
   const target = Math.min(stake * mul, stake * 1000, SINGLE_SPIN_PAYOUT_CAP)
@@ -299,9 +294,9 @@ function distributeBonusPayout(totalPayout, spinCount, bonusKind) {
 }
 
 // ── Match detection ──
-// Bombs / coins block placement (isFilled === true) but neither participates
-// in colour matches, and coins never count towards full row / column
-// completions either — they are inert obstacles.
+// Coins block placement (isFilled === true) but never participate in
+// matches: they don't complete rows / columns, and they don't extend
+// colour runs.
 function isFilled(cell) {
   return cell !== null && cell !== 'CLEARING'
 }
@@ -314,9 +309,9 @@ function isLineFiller(cell) {
 
 function colourOf(cell) {
   if (!isFilled(cell)) return null
-  // Bombs and scatter coins are inert — they break colour runs and never
-  // participate in colour matches.
-  if (isCellBomb(cell) || isCellCoin(cell)) return null
+  // Coins are inert — they break colour runs and never participate in
+  // colour matches.
+  if (isCellCoin(cell)) return null
   return cell.color
 }
 
@@ -470,20 +465,6 @@ function countCoins(grid) {
   return n
 }
 
-// 3×3 explosion centred on a bomb at (bx, by). Returns the cell-key set
-// to clear (excluding the bomb itself, which is always cleared too).
-function bombExplosionCells(bx, by) {
-  const set = new Set()
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const x = bx + dx, y = by + dy
-      if (x < 0 || x >= COLS || y < 0 || y >= ROWS) continue
-      set.add(`${x},${y}`)
-    }
-  }
-  return set
-}
-
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
 export default function TetrisCascadeSlot() {
@@ -587,23 +568,6 @@ export default function TetrisCascadeSlot() {
     setStake(BETS[nextIndex])
   }
 
-  // ── Bomb explosions (run AFTER all initial drops, before match check) ──
-  function handleBombExplosions(g) {
-    // Find all bombs on the grid
-    const explosions = []
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        if (isCellBomb(g[r][c])) explosions.push([c, r])
-      }
-    }
-    if (explosions.length === 0) return { grid: g, exploded: false }
-    const cellSet = new Set()
-    for (const [bx, by] of explosions) {
-      for (const k of bombExplosionCells(bx, by)) cellSet.add(k)
-    }
-    return { grid: g, cellSet, exploded: true }
-  }
-
   // ── Drop initial pieces ──
   // clearWeight controls the smart-drop AI:
   //   12  → default, prefers placements that clear lines
@@ -687,38 +651,6 @@ export default function TetrisCascadeSlot() {
     if (rowCount === 3) return { kind: 'triple', mul: top.mul, label: t.slotTetrisTriple }
     if (rowCount === 2) return { kind: 'double', mul: top.mul, label: t.slotTetrisDouble }
     return { kind: 'line', mul: top.mul, label: t.slotTetrisLineWin }
-  }
-
-  async function explodeBombsIfAny(g) {
-    const bombs = []
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        if (isCellBomb(g[r][c])) bombs.push([c, r])
-      }
-    }
-    if (bombs.length === 0) return g
-
-    // Build the explosion cellSet, but SKIP any scatter coins — coins are
-    // inert and survive bomb blasts that hit them.
-    const cellSet = new Set()
-    for (const [bx, by] of bombs) {
-      for (const k of bombExplosionCells(bx, by)) {
-        const [x, y] = k.split(',').map(Number)
-        if (isCellCoin(g[y][x])) continue
-        cellSet.add(k)
-      }
-    }
-    if (cellSet.size === 0) return g
-
-    setBigText({ kind: 'boom', label: t.slotTetrisBoom, mul: 0 })
-    setGrid(markClearing(g, cellSet))
-    haptic('error')
-    await sleep(420)
-    g = applyGravity(g, cellSet)
-    setGrid(g.map(row => [...row]))
-    await sleep(360)
-    setBigText(null)
-    return g
   }
 
   // ── Main spin (RTP-driven) ──
@@ -808,9 +740,9 @@ export default function TetrisCascadeSlot() {
     // cascades worth a lot); 30 for paid wins so cascades are likely
     // to fire and the RTP target is hit.
     const clearWeight = isZeroPaySpin ? -50 : (inBonus ? 12 : 30)
-    // Suppress bombs / coins / wilds on zero-pay paid-side spins so a
-    // bomb explosion + gravity can't accidentally form a row match.
-    // (In bonus rounds pickRandomPiece already excludes specials.)
+    // Suppress coins / wilds on zero-pay paid-side spins so they can't
+    // accidentally trigger the bonus or extend a colour run during a
+    // round whose payout is fixed at zero.
     const noSpecialThisSpin = !inBonus && isZeroPaySpin
 
     // Capture rage-buff state once; consumed after we commit to a script.
@@ -839,31 +771,6 @@ export default function TetrisCascadeSlot() {
         const { grid: ng } = dropPiece(sg, piece, x, mulProvider)
         script.push({ kind: 'place', gap: 110, gridAfter: ng })
         sg = ng
-      }
-
-      // Initial bombs
-      {
-        const bombs = []
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            if (isCellBomb(sg[r][c])) bombs.push([c, r])
-          }
-        }
-        if (bombs.length > 0) {
-          const cellSet = new Set()
-          for (const [bx, by] of bombs) {
-            for (const k of bombExplosionCells(bx, by)) {
-              const [x, y] = k.split(',').map(Number)
-              if (isCellCoin(sg[y][x])) continue
-              cellSet.add(k)
-            }
-          }
-          if (cellSet.size > 0) {
-            const after = applyGravity(sg, cellSet)
-            script.push({ kind: 'bomb', cellSet, gridAfter: after })
-            sg = after
-          }
-        }
       }
 
       // Cascades
@@ -914,28 +821,6 @@ export default function TetrisCascadeSlot() {
           sg = ng
         }
 
-        // Bombs after refill
-        const bombs2 = []
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            if (isCellBomb(sg[r][c])) bombs2.push([c, r])
-          }
-        }
-        if (bombs2.length > 0) {
-          const cellSet2 = new Set()
-          for (const [bx, by] of bombs2) {
-            for (const k of bombExplosionCells(bx, by)) {
-              const [x, y] = k.split(',').map(Number)
-              if (isCellCoin(sg[y][x])) continue
-              cellSet2.add(k)
-            }
-          }
-          if (cellSet2.size > 0) {
-            const after2 = applyGravity(sg, cellSet2)
-            script.push({ kind: 'bomb', cellSet: cellSet2, gridAfter: after2 })
-            sg = after2
-          }
-        }
       }
 
       return { script, totalNatural, cascadeNum }
@@ -980,16 +865,6 @@ export default function TetrisCascadeSlot() {
         g = step.gridAfter
         setGrid(g.map(row => [...row]))
         await sleep(step.gap || 110)
-      } else if (step.kind === 'bomb') {
-        setBigText({ kind: 'boom', label: t.slotTetrisBoom, mul: 0 })
-        setGrid(markClearing(g, step.cellSet))
-        haptic('error')
-        await sleep(420)
-        if (cancelRef.current) return
-        g = step.gridAfter
-        setGrid(g.map(row => [...row]))
-        await sleep(360)
-        setBigText(null)
       } else if (step.kind === 'cascade') {
         setCascadeStep(step.cascadeNum)
         setPhase('clearing')
@@ -1372,32 +1247,24 @@ export default function TetrisCascadeSlot() {
                   const isClearing = cell === 'CLEARING'
                   const filled = !isClearing && cell !== null
                   const wild  = filled && isCellWild(cell)
-                  const bomb  = filled && isCellBomb(cell)
                   const coin  = filled && isCellCoin(cell)
                   const colorClass = !filled
                     ? ''
-                    : bomb ? 'tetris-cell--bomb'
                     : coin ? 'tetris-cell--coin'
                     : wild ? 'tetris-cell--wild'
                     : `tetris-cell--${cell.color}`
-                  const showMul = filled && !bomb && !coin && cell.mul > 1
+                  const showMul = filled && !coin && cell.mul > 1
                   return (
                     <div
                       key={`${r}-${c}`}
                       className={`tetris-cell ${filled ? 'is-filled' : ''} ${isClearing ? 'is-clearing' : ''} ${colorClass}`}
                     >
-                      {filled && !wild && !bomb && !coin && <span className="tetris-cell-shine" />}
+                      {filled && !wild && !coin && <span className="tetris-cell-shine" />}
                       {wild && (
                         <span className="tetris-cell-wild-mark">
                           <svg viewBox="0 0 24 24" fill="none">
                             <path d="M12 2l2.4 6.8 7.6.4-5.7 4.6 1.9 7.2-6.2-4.2-6.2 4.2 1.9-7.2L2 9.2l7.6-.4z" fill="#fff" />
                           </svg>
-                        </span>
-                      )}
-                      {bomb && (
-                        <span className="tetris-cell-bomb-mark">
-                          <span className="tetris-cell-bomb-fuse" />
-                          <span className="tetris-cell-bomb-spark" />
                         </span>
                       )}
                       {coin && (
