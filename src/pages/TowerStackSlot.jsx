@@ -269,13 +269,20 @@ export default function TowerStackSlot() {
   // Returns the fall_at_level on success, or null on failure.
   async function callStartRound() {
     if (isDev) {
-      // Dev mode: simulate without DB. Geometric distribution
-      // (p=0.73 survival → ~95% RTP for level-1 cash-out).
+      // Dev mode: simulate without DB using the same honest Pareto-style
+      // sampler the SQL uses (migration_tower_honest.sql). Constant
+      // 95 % RTP across all cashout strategies.
+      //   T = R / (1 - U), fall = max(1, ceil((T - 1) / step))
       if (balance < stake) return null
       setBalance(balance - stake)
       setRoundId(`dev-${Date.now()}`)
-      let level = 1
-      while (Math.random() < 0.73 && level < 50) level++
+      const R = 0.95, STEP = 0.30, MAX_LEVEL = 50
+      let u = Math.random()
+      if (u >= 1) u = 0.999999
+      const t = R / (1 - u)
+      let level = Math.ceil((t - 1) / STEP)
+      if (level < 1)         level = 1
+      if (level > MAX_LEVEL) level = MAX_LEVEL
       setFallAtLevel(level)
       return level
     }
