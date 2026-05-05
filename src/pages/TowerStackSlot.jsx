@@ -12,19 +12,147 @@ import './TowerStackSlot.css'
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
 const MIN_BALANCE_RUB = 10
 const SLOT_ID = 'tower-stack'
-const BASE_HOUSE_WIDTH = 168
 
-// Houses share a flat roof; bodies vary by inner detailing (windows/doors).
-// Heights are normalized so the camera moves cleanly per story.
+// ── Minecraft pixel-art houses ──
+// Each house is a 2-D character grid; one character = one 14 × 14 px
+// block. The HouseSilhouette component renders it as an inline SVG
+// with one <rect> stack per block (fill + 1-px shadow + 1-px highlight)
+// for that classic blocky-block look.
+const BLOCK = 14
+const BASE_HOUSE_WIDTH = 84  // median across variants (6 cols × 14)
+
+// Block palette. Each entry { fill, dark, light } draws as a filled
+// 14 × 14 square with a 1 px right/bottom shadow and a 1 px top/left
+// highlight, mimicking Minecraft block bevel without using textures.
+const BLOCKS = {
+  // ── wood ──
+  L:  { fill: '#7a5634', dark: '#3d2814', light: '#a3784e' },  // oak log
+  B:  { fill: '#d8d1ad', dark: '#7a7553', light: '#f0eccd' },  // birch log
+  D:  { fill: '#3a2c1d', dark: '#1a1308', light: '#574028' },  // dark-oak log
+  S:  { fill: '#4a3b25', dark: '#22190d', light: '#6c5535' },  // spruce log
+  A:  { fill: '#a04a26', dark: '#5a2811', light: '#cc6638' },  // acacia log
+  p:  { fill: '#b58a55', dark: '#7a5634', light: '#d3aa78' },  // oak plank
+  b:  { fill: '#efe6c2', dark: '#a89968', light: '#fff7d8' },  // birch plank
+  d:  { fill: '#5b4128', dark: '#241906', light: '#7a5a37' },  // dark-oak plank
+  s:  { fill: '#7d6038', dark: '#3d2c16', light: '#9b7a4c' },  // spruce plank
+  a:  { fill: '#c47148', dark: '#5a2811', light: '#dd9266' },  // acacia plank
+  // ── stone ──
+  C:  { fill: '#7a7a7a', dark: '#3e3e3e', light: '#9a9a9a' },  // cobblestone
+  T:  { fill: '#8a8a8a', dark: '#4a4a4a', light: '#a8a8a8' },  // stone bricks
+  M:  { fill: '#6a8a5a', dark: '#3a4f30', light: '#88a878' },  // mossy cobble
+  // ── windows / doors ──
+  g:  { fill: '#7cc1e6', dark: '#2f6e96', light: '#a8dffc', frame: '#1c1c1c' },
+  r:  { fill: '#5a3a1f', dark: '#231408', light: '#7a512c', frame: '#181818' },
+  // ── roof tints ──
+  R:  { fill: '#bb3d2c', dark: '#6e2018', light: '#dc5a48' },  // red wool roof
+  O:  { fill: '#9d6738', dark: '#5a3920', light: '#bb8657' },  // oak slab roof
+  K:  { fill: '#3a2615', dark: '#1a0f06', light: '#5a3f25' },  // dark roof
+  W:  { fill: '#dadada', dark: '#a8a8a8', light: '#f5f5f5' },  // white wool
+}
+
+// Layouts. Each row is one character per block, top → bottom.
+// Width = row length, height = number of rows. Rows must all have
+// equal length. '.' = empty cell.
+const HOUSES = {
+  oak_cottage: [
+    '..OOO..',
+    '.OOOOO.',
+    'LpppppL',
+    'LgpppgL',
+    'LpppppL',
+    'LpprppL',
+    'CCCCCCC',
+  ],
+  birch_house: [
+    '..OOOO..',
+    '.OOOOOO.',
+    'BbbbbbbB',
+    'BgbbbbgB',
+    'BbbbbbbB',
+    'BbbrrbbB',
+    'CCCCCCCC',
+  ],
+  spruce_lodge: [
+    '...KKK...',
+    '..KKKKK..',
+    '.KKKKKKK.',
+    'SsgsssgsS',
+    'SsssssssS',
+    'SsssrsssS',
+    'SsssssssS',
+    'CCCCCCCCC',
+  ],
+  dark_oak_tall: [
+    '..KKKK..',
+    '.KKKKKK.',
+    'DddddddD',
+    'DgddddgD',
+    'DddddddD',
+    'DgddddgD',
+    'DddrrddD',
+    'CCCCCCCC',
+  ],
+  acacia_hut: [
+    '..OOO..',
+    '.OOOOO.',
+    'AaaaaaA',
+    'AagagaA',
+    'AaaraaA',
+    'CCCCCCC',
+  ],
+  stone_house: [
+    '..WWWW..',
+    '.WWWWWW.',
+    'TTTTTTTT',
+    'TgTTgTgT',
+    'TTTTTTTT',
+    'TTrTrTTT',
+    'CCCCCCCC',
+  ],
+  cobble_smith: [
+    '..OOO.C',
+    '.OOOOOC',
+    'LpppppC',
+    'LgpgpgC',
+    'LpppppC',
+    'LpprppC',
+    'CCCCCCC',
+  ],
+  big_library: [
+    '...RRR...',
+    '..RRRRR..',
+    '.RRRRRRR.',
+    'pdddddddp',
+    'pdgdgdgdp',
+    'pdddddddp',
+    'pdgdgdgdp',
+    'pddrrrddp',
+    'CCCCCCCCC',
+  ],
+}
+
+// Pre-computed metadata for each variant — width / height in pixels,
+// derived from the layout shape. Used by the stacking layout math.
+function variantFromKey(key) {
+  const layout = HOUSES[key]
+  return {
+    kind: key,
+    layout,
+    width: layout[0].length * BLOCK,
+    bodyH: layout.length * BLOCK,
+    roofH: 0,  // roof is baked into the layout
+  }
+}
+
 const HOUSE_VARIANTS = [
-  { kind: 'cottage',   color: 'red',    bodyH: 58, roofH: 10 },
-  { kind: 'townhouse', color: 'blue',   bodyH: 60, roofH: 10 },
-  { kind: 'shop',      color: 'mint',   bodyH: 56, roofH: 10 },
-  { kind: 'apartment', color: 'purple', bodyH: 64, roofH: 10 },
-  { kind: 'cottage',   color: 'amber',  bodyH: 58, roofH: 10 },
-  { kind: 'townhouse', color: 'green',  bodyH: 60, roofH: 10 },
-  { kind: 'shop',      color: 'pink',   bodyH: 56, roofH: 10 },
-  { kind: 'apartment', color: 'sky',    bodyH: 64, roofH: 10 },
+  variantFromKey('oak_cottage'),
+  variantFromKey('birch_house'),
+  variantFromKey('spruce_lodge'),
+  variantFromKey('dark_oak_tall'),
+  variantFromKey('acacia_hut'),
+  variantFromKey('stone_house'),
+  variantFromKey('cobble_smith'),
+  variantFromKey('big_library'),
 ]
 
 function clamp(value, min, max) {
@@ -36,51 +164,93 @@ function rand(min, max) {
 }
 
 // Cumulative bottom offset (px) for the house at given index in the stack.
+// Heights are pure layout heights now; no roof-tuck overlap.
 function bottomFor(blocks, index) {
   let bottom = 42 // foundation top
   for (let i = 0; i < index; i++) {
-    const h = (blocks[i]?.bodyH ?? 56) + (blocks[i]?.roofH ?? 14) - 6 // -6 = roof tucks behind
-    bottom += h
+    bottom += (blocks[i]?.bodyH ?? BLOCK * 7)
   }
   return bottom
 }
 
-// Decorations inside a house: roof, body, windows, door — driven by `kind`.
-function HouseSilhouette({ kind }) {
+// Renders a Minecraft-style pixel-art house from a layout grid.
+// Each cell is BLOCK × BLOCK px with a tiny shadow + highlight to
+// give every block its own bevel. Glass cells get a window cross,
+// door cells get a vertical handle line.
+function HouseSilhouette({ layout }) {
+  if (!layout) return null
+  const cols = layout[0].length
+  const rows = layout.length
+  const W = cols * BLOCK
+  const H = rows * BLOCK
+  const pieces = []
+  for (let y = 0; y < rows; y++) {
+    const row = layout[y]
+    for (let x = 0; x < cols; x++) {
+      const ch = row[x]
+      if (ch === '.') continue
+      const def = BLOCKS[ch]
+      if (!def) continue
+      const px = x * BLOCK
+      const py = y * BLOCK
+      // base block with bevel
+      pieces.push(
+        <g key={`${x}-${y}`}>
+          <rect x={px} y={py} width={BLOCK} height={BLOCK} fill={def.fill} />
+          {/* highlight (top + left, 1 px) */}
+          <rect x={px} y={py} width={BLOCK} height={1} fill={def.light} />
+          <rect x={px} y={py} width={1} height={BLOCK} fill={def.light} />
+          {/* shadow (right + bottom, 1 px) */}
+          <rect x={px + BLOCK - 1} y={py} width={1} height={BLOCK} fill={def.dark} />
+          <rect x={px} y={py + BLOCK - 1} width={BLOCK} height={1} fill={def.dark} />
+        </g>
+      )
+      // glass: window cross
+      if (ch === 'g') {
+        pieces.push(
+          <g key={`${x}-${y}-w`}>
+            <rect x={px + 6} y={py + 1} width={2} height={BLOCK - 2} fill={def.frame} />
+            <rect x={px + 1} y={py + 6} width={BLOCK - 2} height={2} fill={def.frame} />
+          </g>
+        )
+      }
+      // door: handle dot + vertical seam
+      if (ch === 'r') {
+        pieces.push(
+          <g key={`${x}-${y}-d`}>
+            <rect x={px + 1} y={py + 1} width={BLOCK - 2} height={1} fill={def.dark} />
+            <rect x={px + BLOCK / 2} y={py + 1} width={1} height={BLOCK - 2} fill={def.dark} />
+            <rect x={px + BLOCK - 4} y={py + BLOCK / 2} width={2} height={2} fill="#d4af37" />
+          </g>
+        )
+      }
+      // cobblestone / stone bricks: subtle inner notches
+      if (ch === 'C' || ch === 'M') {
+        pieces.push(
+          <rect key={`${x}-${y}-n1`} x={px + 3} y={py + 4} width={2} height={2} fill={def.dark} />
+        )
+        pieces.push(
+          <rect key={`${x}-${y}-n2`} x={px + BLOCK - 5} y={py + BLOCK - 6} width={2} height={2} fill={def.dark} />
+        )
+      }
+      if (ch === 'T') {
+        pieces.push(
+          <rect key={`${x}-${y}-tb`} x={px} y={py + Math.floor(BLOCK / 2)} width={BLOCK} height={1} fill={def.dark} />
+        )
+      }
+    }
+  }
   return (
-    <>
-      <span className="tower-house-roof" />
-      <span className="tower-house-body">
-        {kind === 'cottage' && (
-          <>
-            <span className="tower-house-window" />
-            <span className="tower-house-door" />
-          </>
-        )}
-        {kind === 'townhouse' && (
-          <>
-            <span className="tower-house-window tower-house-window--left" />
-            <span className="tower-house-window tower-house-window--right" />
-            <span className="tower-house-door" />
-          </>
-        )}
-        {kind === 'shop' && (
-          <>
-            <span className="tower-house-awning" />
-            <span className="tower-house-shop-window" />
-            <span className="tower-house-door tower-house-door--shop" />
-          </>
-        )}
-        {kind === 'apartment' && (
-          <>
-            <span className="tower-house-window tower-house-window--apt tower-house-window--apt-tl" />
-            <span className="tower-house-window tower-house-window--apt tower-house-window--apt-tr" />
-            <span className="tower-house-window tower-house-window--apt tower-house-window--apt-bl" />
-            <span className="tower-house-window tower-house-window--apt tower-house-window--apt-br" />
-          </>
-        )}
-      </span>
-    </>
+    <svg
+      className="tower-house-svg"
+      viewBox={`0 0 ${W} ${H}`}
+      width={W}
+      height={H}
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+    >
+      {pieces}
+    </svg>
   )
 }
 
@@ -108,17 +278,14 @@ export default function TowerStackSlot() {
   // variant + width so the crane shows the SAME house from idle through
   // swing, drop and landing — only after the round completes does it
   // swap to a new preview.
+  // Pick the next house from the variants list. Each variant has a
+  // fixed width / height baked into its pixel-art layout — that's the
+  // gameplay variability now (no random width swing on top).
   function pickNextHouse(blocksList, prevSeed) {
     const level = blocksList.length
     const seed = blocksList[0]?._seed ?? prevSeed ?? Math.floor(Math.random() * HOUSE_VARIANTS.length)
     const variant = HOUSE_VARIANTS[(level + seed) % HOUSE_VARIANTS.length]
-    const previousWidth = blocksList.at(-1)?.width ?? BASE_HOUSE_WIDTH
-    const widthSwing = rand(-30, 14)
-    const narrowingTrend = level * 1.4
-    const width = level === 0
-      ? Math.round(BASE_HOUSE_WIDTH - rand(0, 18))
-      : clamp(Math.round(previousWidth + widthSwing - narrowingTrend), 72, BASE_HOUSE_WIDTH)
-    return { ...variant, width, _seed: seed }
+    return { ...variant, _seed: seed }
   }
 
   const [stake, setStake] = useState(initialStake)
@@ -153,7 +320,7 @@ export default function TowerStackSlot() {
     if (projected.length <= visibleStories) return 0
     let sum = 0
     for (let i = 0; i < projected.length - visibleStories; i++) {
-      sum += (projected[i].bodyH + projected[i].roofH - 6)
+      sum += (projected[i].bodyH ?? BLOCK * 7)
     }
     return sum
   }, [blocks, fallingBlock, phase])
@@ -396,9 +563,8 @@ export default function TowerStackSlot() {
       offset: releaseOffset,
       accuracy: Math.round(accuracy * 100),
       kind: preset.kind,
-      color: preset.color,
+      layout: preset.layout,
       bodyH: preset.bodyH,
-      roofH: preset.roofH,
       tilt: rand(-1.6, 1.6).toFixed(1),
       doomed: willFall,
       // Direction the new house overshot the previous floor (-1 left,
@@ -506,18 +672,17 @@ export default function TowerStackSlot() {
                 <span className="tower-crane-hook-line tower-crane-hook-line--right" />
               </span>
               <span
-                className={`tower-crane-load tower-house tower-house--${craneHouse.color} tower-house--${craneHouse.kind}`}
+                className={`tower-crane-load tower-house tower-house--${craneHouse.kind}`}
                 style={{
                   '--load-width': `${craneHouseWidth}px`,
                   '--body-h': `${craneHouse.bodyH}px`,
-                  '--roof-h': `${craneHouse.roofH}px`,
                   // Hide while the in-stack falling house is animating —
                   // the falling element is the "same" house, so showing
                   // both at once makes them detach visually.
                   visibility: isDropping ? 'hidden' : 'visible',
                 }}
               >
-                <HouseSilhouette kind={craneHouse.kind} />
+                <HouseSilhouette layout={craneHouse.layout} />
               </span>
             </span>
           </div>
@@ -539,7 +704,6 @@ export default function TowerStackSlot() {
                   key={block.id}
                   className={[
                     'tower-house',
-                    `tower-house--${block.color}`,
                     `tower-house--${block.kind}`,
                     fallingBlock?.id === block.id ? 'is-falling' : '',
                     phase === 'fallen' && index === visibleBlocks.length - 1 ? 'is-doomed' : '',
@@ -549,13 +713,12 @@ export default function TowerStackSlot() {
                     bottom: `${bottomFor(visibleBlocks, index)}px`,
                     transform: `translateX(calc(-50% + ${block.offset}px)) rotate(${phase === 'fallen' && index === visibleBlocks.length - 1 ? (block.fallDir ?? 1) * 17 : block.tilt}deg)`,
                     '--body-h': `${block.bodyH}px`,
-                    '--roof-h': `${block.roofH}px`,
                     '--accuracy': `${block.accuracy}%`,
                     '--fall-start-y': fallingBlock?.id === block.id ? `${fallStartY}px` : undefined,
                     '--fall-dir': block.fallDir ?? 1,
                   }}
                 >
-                  <HouseSilhouette kind={block.kind} />
+                  <HouseSilhouette layout={block.layout} />
                 </div>
               ))}
             </div>
