@@ -1298,11 +1298,6 @@ export default function TetrisCascadeSlot() {
               {bigText.subLabel && (
                 <span className="tetris-big-sublabel">{bigText.subLabel}</span>
               )}
-              {bigText.mul > 0 && (
-                <span className="tetris-big-mul">
-                  ×{bigText.mul}{cascadeStep > 1 && bigText.kind !== 'bonus' && bigText.kind !== 'perfect' ? ` × c${cascadeStep}` : ''}
-                </span>
-              )}
             </div>
           )}
         </main>
@@ -1332,9 +1327,6 @@ export default function TetrisCascadeSlot() {
           <strong className="tetris-winbar-value">
             {winLabel ?? formatCurrency(0, currency, rates)}
           </strong>
-          {cascadeStep > 1 && (
-            <span className="tetris-winbar-cascade">×{cascadeStep}</span>
-          )}
         </div>
 
         <section className="tetris-controls">
