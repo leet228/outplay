@@ -116,9 +116,13 @@ function rand(min, max) {
 }
 
 // Cumulative bottom offset (px) for the house at given index in the stack.
-// Heights are pure layout heights now; no roof-tuck overlap.
+// Heights are pure layout heights now; no roof-tuck overlap. The
+// foundation slab is 46 px tall and sits at bottom: 0 of the stack,
+// so the very first house has to start above it (bottom: 46) — not
+// 42, otherwise the house's own bottom row sinks 4 px into the
+// foundation slab.
 function bottomFor(blocks, index) {
-  let bottom = 42 // foundation top
+  let bottom = 46 // foundation top
   for (let i = 0; i < index; i++) {
     bottom += (blocks[i]?.bodyH ?? BLOCK * 7)
   }
@@ -656,7 +660,9 @@ export default function TowerStackSlot() {
       kind: preset.kind,
       cfg: preset.cfg,
       bodyH: preset.bodyH,
-      tilt: rand(-1.6, 1.6).toFixed(1),
+      // Tiny random tilt (sub-degree) — barely visible but adds
+      // a touch of human imperfection to the stack.
+      tilt: rand(-0.4, 0.4).toFixed(2),
       doomed: willFall,
       // Direction the new house overshot the previous floor (-1 left,
       // +1 right) — drives the doomed-fall side later in CSS.
@@ -666,33 +672,32 @@ export default function TowerStackSlot() {
 
     setCraneTarget(releaseOffset)
     setFallingBlock(nextBlock)
-    setPhase('swinging')
+    // Skip the swing-and-jiggle phase — the crane just instantly
+    // moves to the release column and the house drops. User asked
+    // for "no jump", "just falls".
+    setPhase('dropping')
 
     dropTimerRef.current = window.setTimeout(() => {
-      setPhase('dropping')
+      setFallingBlock(null)
+      const newBlocks = [...blocks, nextBlock]
+      setBlocks(newBlocks)
+      setCraneTarget(0)
+      // Generate the NEXT preview now that this house has landed —
+      // user sees the new variant pop onto the crane only after a
+      // round outcome, not when they click Play.
+      setCraneNext(pickNextHouse(newBlocks, preset._seed))
 
-      dropTimerRef.current = window.setTimeout(() => {
-        setFallingBlock(null)
-        const newBlocks = [...blocks, nextBlock]
-        setBlocks(newBlocks)
-        setCraneTarget(0)
-        // Generate the NEXT preview now that this house has landed —
-        // user sees the new variant pop onto the crane only after a
-        // round outcome, not when they click Play.
-        setCraneNext(pickNextHouse(newBlocks, preset._seed))
-
-        if (willFall) {
-          haptic('error')
-          setPhase('fallen')
-          // Server: finalize round as 'fallen' (no payout).
-          const fallMult = Number((1 + newBlocks.length * 0.3).toFixed(1))
-          callFinishRound('fallen', 0, newBlocks.length, fallMult)
-        } else {
-          haptic('success')
-          setPhase('ready')
-        }
-      }, 720)
-    }, 980)
+      if (willFall) {
+        haptic('error')
+        setPhase('fallen')
+        // Server: finalize round as 'fallen' (no payout).
+        const fallMult = Number((1 + newBlocks.length * 0.3).toFixed(1))
+        callFinishRound('fallen', 0, newBlocks.length, fallMult)
+      } else {
+        haptic('success')
+        setPhase('ready')
+      }
+    }, 720)
   }
 
   function cashOut() {
