@@ -1318,68 +1318,103 @@
 }
 
 /* Solid Minecraft-style cloud — flat white slab with sharp 90°
- * corners, a brighter top edge and a darker bottom edge. No
- * sub-block stamping; reads as a single chunky cloud, not as a
- * composite of mini-blocks. */
+ * corners, a brighter top edge and a darker bottom edge. They drift
+ * gently left ↔ right; each has its own duration / phase so they
+ * don't all sway in lock-step. */
 .tower-cloud {
   background: #ffffff !important;
   filter: none !important;
   border-radius: 0 !important;
-  animation: none !important;
+  border: 0 !important;
   box-shadow:
     inset 0 4px 0 #ffffff,
     inset 0 -4px 0 #cdd6e0,
     0 0 0 2px #1d1410 !important;
-  border: 0 !important;
+  animation-name: tower-cloud-drift !important;
+  animation-timing-function: ease-in-out !important;
+  animation-iteration-count: infinite !important;
+  animation-direction: alternate !important;
 }
+
+@keyframes tower-cloud-drift {
+  from { transform: translateX(-22px); }
+  to   { transform: translateX( 22px); }
+}
+
 .tower-cloud--one {
-  width: 88px !important;
-  height: 24px !important;
-  top: 80px !important;
-  left: 26px !important;
+  width: 88px !important;  height: 24px !important;
+  top: 76px !important;    left: 18px !important;
+  animation-duration: 11s !important;
+  animation-delay: 0s !important;
 }
 .tower-cloud--two {
-  width: 60px !important;
-  height: 20px !important;
-  top: 150px !important;
-  left: 244px !important;
+  width: 60px !important;  height: 20px !important;
+  top: 144px !important;   left: 250px !important;
+  animation-duration: 9s !important;
+  animation-delay: -2s !important;
 }
 .tower-cloud--three {
-  width: 100px !important;
-  height: 22px !important;
-  top: 220px !important;
-  left: 96px !important;
+  width: 102px !important; height: 22px !important;
+  top: 214px !important;   left: 84px !important;
+  animation-duration: 13s !important;
+  animation-delay: -5s !important;
 }
-.tower-cloud--four  { display: none !important; }
+.tower-cloud--four {
+  display: block !important;
+  width: 70px !important;  height: 20px !important;
+  top: 110px !important;   left: 152px !important;
+  animation-duration: 10s !important;
+  animation-delay: -3s !important;
+}
+.tower-cloud--five {
+  display: block !important;
+  width: 54px !important;  height: 18px !important;
+  top: 50px !important;    left: 220px !important;
+  animation-duration: 12s !important;
+  animation-delay: -1s !important;
+}
+.tower-cloud--six {
+  display: block !important;
+  width: 80px !important;  height: 22px !important;
+  top: 178px !important;   left: 30px !important;
+  animation-duration: 14s !important;
+  animation-delay: -4s !important;
+}
+.tower-cloud--seven {
+  display: block !important;
+  width: 46px !important;  height: 18px !important;
+  top: 264px !important;   left: 234px !important;
+  animation-duration: 8s !important;
+  animation-delay: -6s !important;
+}
 
 /* Distant hills + grass band → pixelated dirt + grass strip. */
 .tower-far-hills {
   display: none !important;
 }
-/* Ground band: a thin grass + dirt strip sitting BELOW the
- * cobblestone foundation, so houses sit on the cobble and the cobble
- * sits in the grass. Foundation lives inside .tower-stack which is
- * positioned bottom: 54px of .tower-world; foundation height is 46;
- * so foundation BOTTOM in world coords = 54. Anchor the grass so its
- * TOP edge lines up with the foundation BOTTOM. */
+/* Ground band: a thick grass + dirt strip running ALL the way to the
+ * bottom of the stage. The cobblestone foundation sits ON the grass
+ * (foundation BOTTOM = 54 px in world coords), so we put the grass
+ * top right at that 54-px line and let the rest stretch down to the
+ * very bottom of the stage. */
 .tower-grass {
   position: absolute !important;
   left: 0 !important;
   right: 0 !important;
-  bottom: 32px !important;
-  height: 22px !important;
+  bottom: 0 !important;
+  height: 60px !important;
   display: block !important;
   background:
     linear-gradient(
       180deg,
-      #5fbd35 0%, #5fbd35 32%,        /* grass top */
-      #4a9a28 32%, #4a9a28 50%,
-      #7a4f24 50%, #7a4f24 78%,       /* dirt */
-      #5e3a18 78%, #5e3a18 100%
+      #5fbd35 0%,  #5fbd35 16%,        /* grass top */
+      #4a9a28 16%, #4a9a28 26%,
+      #7a4f24 26%, #7a4f24 60%,        /* dirt mid */
+      #5e3a18 60%, #5e3a18 100%        /* dirt deep */
     ) !important;
   border-top: 3px solid #18260c !important;
   border-radius: 0 !important;
-  box-shadow: 0 3px 0 #18260c, 0 -2px 0 #88d34a !important;
+  box-shadow: 0 -2px 0 #88d34a !important;
 }
 .tower-grass span {
   display: none !important;
@@ -1427,7 +1462,57 @@
   background: #1d1410 !important;
   width: 3px !important;
 }
-.tower-crane-hook,
-.tower-crane-hook-line {
+
+/* Magnet block — replaces the corner-line "socket" look. Solid
+ * steel-grey block with a red live face on its bottom edge that
+ * touches the roof of the house below it. */
+.tower-crane-hook {
   border-radius: 0 !important;
+  background: #6e6e6e !important;
+  border: 2px solid #1d1410 !important;
+  box-shadow:
+    inset 0 4px 0 #909090,
+    inset 0 -6px 0 #c93b2a,            /* red live face */
+    inset 0 -8px 0 #6e2018,            /* darker red shadow */
+    inset 0 4px 0 0 #909090 !important;
+  width: 32px !important;
+  margin-left: -16px !important;
+  height: 16px !important;
+}
+.tower-crane-hook-line {
+  display: none !important;
+}
+
+/* Idle sway — the magnet+house gently rock left/right when nothing
+ * else is happening. The .is-swinging / .is-dropping classes apply
+ * their own animations and override this. */
+.tower-crane-load {
+  animation: towerIdleSway 4.6s ease-in-out infinite !important;
+}
+.tower-crane.is-swinging .tower-crane-load,
+.tower-crane.is-dropping .tower-crane-load {
+  animation: none !important;
+}
+
+@keyframes towerIdleSway {
+  0%, 100% { transform: translateX(-50%) rotate(-1.2deg); }
+  50%      { transform: translateX(-50%) rotate( 1.2deg); }
+}
+
+/* Pair the cable + hook so they sway together with the load. */
+.tower-crane-cable,
+.tower-crane-hook {
+  transform-origin: 50% 0% !important;
+  animation: towerIdleSwayCable 4.6s ease-in-out infinite !important;
+}
+.tower-crane.is-swinging .tower-crane-cable,
+.tower-crane.is-swinging .tower-crane-hook,
+.tower-crane.is-dropping .tower-crane-cable,
+.tower-crane.is-dropping .tower-crane-hook {
+  animation: none !important;
+}
+
+@keyframes towerIdleSwayCable {
+  0%, 100% { transform: rotate(-1.2deg); }
+  50%      { transform: rotate( 1.2deg); }
 }

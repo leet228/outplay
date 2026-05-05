@@ -737,6 +737,9 @@ export default function TowerStackSlot() {
           <span className="tower-cloud tower-cloud--two" />
           <span className="tower-cloud tower-cloud--three" />
           <span className="tower-cloud tower-cloud--four" />
+          <span className="tower-cloud tower-cloud--five" />
+          <span className="tower-cloud tower-cloud--six" />
+          <span className="tower-cloud tower-cloud--seven" />
         </div>
 
         <main ref={stageRef} className="tower-slot-stage" aria-label="Tower Stack Bet">
