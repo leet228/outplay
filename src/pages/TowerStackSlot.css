@@ -312,21 +312,6 @@
   transform-origin: 50% -88px;
 }
 
-.tower-crane-hook-line {
-  position: absolute;
-  top: 12px;
-  left: 6px;
-  width: 2px;
-  height: 12px;
-  background: linear-gradient(180deg, #334155, #0f172a);
-  border-radius: 999px;
-}
-
-.tower-crane-hook-line--right {
-  left: auto;
-  right: 6px;
-}
-
 .tower-crane-load {
   position: absolute;
   top: 142px;

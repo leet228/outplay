@@ -501,10 +501,7 @@ export default function TowerStackSlot() {
                 <span className="tower-crane-cabin-window" />
               </span>
               <span className="tower-crane-cable" />
-              <span className="tower-crane-hook">
-                <span className="tower-crane-hook-line" />
-                <span className="tower-crane-hook-line tower-crane-hook-line--right" />
-              </span>
+              <span className="tower-crane-hook" />
               <span
                 className={`tower-crane-load tower-house tower-house--${craneHouse.color} tower-house--${craneHouse.kind}`}
                 style={{
