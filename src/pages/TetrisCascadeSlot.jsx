@@ -18,7 +18,10 @@ const ROWS = 8
 
 const INITIAL_PIECES = 12
 const COLOR_LINE_MIN = 7
-const MAX_CASCADES = 4
+// No MAX_CASCADES — cascades chain until findMatches returns []. The
+// final board state is GUARANTEED to have no qualifying matches by the
+// rules. Refill keeps the chain alive but the cascade always terminates
+// because RNG eventually fails to produce more matches.
 
 // Special piece spawn rates.
 const WILD_RATE = 0.06         // colour wildcard cells
@@ -27,7 +30,7 @@ const COINS_TO_TRIGGER = 5     // coins on grid after initial drop → bonus
 
 // Bonus configuration.
 const BONUS_FREE_SPINS = 6
-const BONUS_PIECE_MULS = [0.5, 1, 1, 2] // each cell carries one of these in bonus (avg 1.125)
+const BONUS_PIECE_MULS = [0.025, 0.05, 0.05, 0.1] // each cell carries one of these in bonus (avg 0.05625)
 const RAGE_MAX = 6              // line clears in bonus to fill the rage meter
 const BUY_BONUS_COST_MUL = 100  // buy-in price = stake × this
 // Single-spin payout cap mirroring the SQL hard cap.
@@ -49,15 +52,17 @@ const PIECE_KEYS = Object.keys(PIECES)
 // All values × stake. Sum of these — across all matches found in all
 // cascades of one paid spin — is the natural win the client claims at
 // finalize. Verified by scripts/tetris-honest-sim.js to long-run at
-// ≈91 % RTP (under 95 % by design — house edge ~9 % over millions of
-// spins). Keep these in sync with the simulator.
+// ≈92 % RTP (under 95 % by design — house edge ~8 % over millions of
+// spins). Cascades chain until no matches, with no artificial cap, so
+// the final board state always has zero qualifying matches. Keep these
+// in sync with the simulator.
 const PAY = {
-  fullRow: 0.20,   // full row of 10 cells, any colour mix
-  fullCol: 0.08,   // full column of 8 cells, any colour mix
-  run7:    0.45,   // colour run length 7 (horizontal OR vertical)
-  run8:    1.60,   // colour run length 8
-  run9:    5.20,   // colour run length 9
-  run10:  21.00,   // colour run length 10 (full same-colour row)
+  fullRow: 0.07,   // full row of 10 cells, any colour mix
+  fullCol: 0.03,   // full column of 8 cells, any colour mix
+  run7:    0.15,   // colour run length 7 (horizontal OR vertical)
+  run8:    0.55,   // colour run length 8
+  run9:    1.75,   // colour run length 9
+  run10:   7.00,   // colour run length 10 (full same-colour row)
 }
 
 function payMulFor(match) {
@@ -566,7 +571,7 @@ export default function TetrisCascadeSlot() {
   //      and pre-decides NOTHING about the outcome.
   //   2. Client runs a natural spin: 12 random tetrominoes (+ scatter coins
   //      and wild cells per spawn rates) fall, matches are detected,
-  //      cascades chain up to MAX_CASCADES. Each match pays stake × PAY[type]
+  //      cascades chain until no more matches. Each match pays stake × PAY[type]
   //      (or stake × Σ cell.mul for bonus cells). Wins accumulate naturally.
   //   3. Bonus is triggered when ≥ COINS_TO_TRIGGER coins are present on the
   //      grid AFTER all cascades complete — purely a function of how the
@@ -653,10 +658,14 @@ export default function TetrisCascadeSlot() {
       }
 
       // Cascades — natural, payout = stake × payMulFor(m) per match
-      // for regular spins, stake × Σ cell.mul for bonus spins.
+      // for regular spins, stake × Σ cell.mul for bonus spins. NO
+      // artificial cascade limit — the loop terminates only when
+      // findMatches returns []. The board's final state is always
+      // match-free per the rules. Refill keeps the chain alive but
+      // RNG eventually fails to produce another qualifying line.
       let totalNatural = 0
       let cascadeNum = 0
-      while (cascadeNum < MAX_CASCADES) {
+      while (true) {
         const matches = findMatches(sg)
         if (matches.length === 0) break
         cascadeNum++

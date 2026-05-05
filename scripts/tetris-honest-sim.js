@@ -14,12 +14,12 @@ const COLS              = 10
 const ROWS              = 8
 const INITIAL_PIECES    = 12
 const COLOR_LINE_MIN    = 7
-const MAX_CASCADES      = 4
+// (no MAX_CASCADES — cascades run until no matches remain)
 const WILD_RATE         = 0.06
 const COIN_RATE         = 0.040
 const COINS_TO_TRIGGER  = 5
 const BONUS_FREE_SPINS  = 6
-const BONUS_PIECE_MULS  = [0.5, 1, 1, 2]   // avg = 1.125
+const BONUS_PIECE_MULS  = [0.025, 0.05, 0.05, 0.1]   // avg = 0.05625
 const RAGE_MAX          = 6
 
 const PIECES = {
@@ -38,12 +38,12 @@ const PIECE_KEYS = Object.keys(PIECES)
 // receives 100 ₽ for that match (additive across simultaneous matches
 // in one cascade step).
 const PAY = {
-  fullRow: 0.20,   // 10 cells in a single row cleared (any colour mix)
-  fullCol: 0.08,   // 8 cells in a single column cleared (any colour mix)
-  run7:    0.45,   // colour run length 7 (horizontal OR vertical)
-  run8:    1.60,
-  run9:    5.20,
-  run10:  21.00,
+  fullRow: 0.07,   // 10 cells in a single row cleared (any colour mix)
+  fullCol: 0.03,   // 8 cells in a single column cleared (any colour mix)
+  run7:    0.15,   // colour run length 7 (horizontal OR vertical)
+  run8:    0.55,
+  run9:    1.75,
+  run10:   7.00,
 }
 // Bonus mode pays stake × Σ(cell.mul) over all cleared cells, where
 // each cell's mul is uniform random from BONUS_PIECE_MULS. So the
@@ -292,12 +292,14 @@ function runRegularSpin(stake, breakdown) {
   }
 
   let win = 0
-  let cascadeNum = 0
 
-  while (cascadeNum < MAX_CASCADES) {
+  // Cascade until findMatches returns []. Small refill (REFILL_PIECES)
+  // per cascade keeps the chain alive but is less than what gets
+  // cleared, so the board steadily depletes and cascades terminate
+  // within a handful of rounds — guaranteed no-match final state.
+  while (true) {
     const matches = findMatches(g)
     if (matches.length === 0) break
-    cascadeNum++
 
     const cellSet = new Set()
     for (const m of matches) for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
@@ -350,11 +352,10 @@ function runBonusRound(stake) {
       if (placed) g = ng
     }
 
-    let cascadeNum = 0
-    while (cascadeNum < MAX_CASCADES) {
+    // Cascade until no matches. Same small REFILL_PIECES as regular.
+    while (true) {
       const matches = findMatches(g)
       if (matches.length === 0) break
-      cascadeNum++
 
       const cellSet = new Set()
       for (const m of matches) for (const [x, y] of m.cells) cellSet.add(`${x},${y}`)
@@ -467,13 +468,20 @@ console.log('\n── Variance — 30 runs of 1 000 spins ──')
 }
 
 // Long-run truth: average over multiple 100k batches.
-console.log('\n── True mean — 5 runs of 100 000 spins ──')
+console.log('\n── True mean — 10 runs of 100 000 spins ──')
 {
   const trials = []
-  for (let i = 0; i < 5; i++) trials.push(simulate(100_000))
+  for (let i = 0; i < 10; i++) trials.push(simulate(100_000))
   const rtps = trials.map(t => t.rtp)
   const avg  = rtps.reduce((a, b) => a + b, 0) / rtps.length
   const min  = Math.min(...rtps), max = Math.max(...rtps)
   console.log(`  RTP avg ${fmtPct(avg)}  min ${fmtPct(min)}  max ${fmtPct(max)}`)
   console.log(`  per-run: ${rtps.map(fmtPct).join('  ')}`)
+}
+
+// Single 1M-spin run for the final answer.
+console.log('\n── 1 000 000 spins ──')
+{
+  const r = simulate(1_000_000)
+  console.log(`  RTP = ${fmtPct(r.rtp)}   bonus rate = ${fmtPct(r.bonusRate)}   maxWin = ${r.maxWinX.toFixed(0)}× stake`)
 }
