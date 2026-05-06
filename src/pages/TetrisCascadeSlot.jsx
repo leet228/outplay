@@ -459,6 +459,12 @@ export default function TetrisCascadeSlot() {
   // For bonus free spins this stays set across all free spins until the
   // round closes via finishTetrisRound() with the natural total win.
   const currentRoundRef = useRef(null)
+  // True while a finishTetrisRound RPC is mid-flight. Buy-bonus and
+  // spin actions are blocked until it resolves so the previous round's
+  // payout actually lands on the server before a new round can abort
+  // it (start_tetris_round aborts any pending round on the same user).
+  const finalizingRef = useRef(false)
+  const [finalizing, setFinalizing] = useState(false)
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current = stake }, [stake])
   useEffect(() => { autoRef.current = autoSpin }, [autoSpin])
@@ -877,36 +883,61 @@ export default function TetrisCascadeSlot() {
       // total credited may be LESS than what the client optimistically
       // displayed during bonus spins. Reconcile balanceRef from the
       // server's authoritative `balance` so the next spin works against
-      // the correct number (otherwise: deduct stake from inflated client
-      // balance → server returns true balance after debit → client jumps
-      // down → user sees "money disappeared").
-      if (currentRoundRef.current) {
-        const rid = currentRoundRef.current.round_id
+      // the correct number.
+      //
+      // CRITICAL: spin / buy-bonus must be blocked while this RPC is
+      // in flight. Otherwise a new start_tetris_round would ABORT the
+      // still-pending round and the bonus payout would be lost on the
+      // server side (client already credited optimistically).
+      const myRound = currentRoundRef.current
+      if (myRound) {
+        const rid = myRound.round_id
         if (typeof rid === 'string' && !rid.startsWith('dev-')) {
-          const res = await finishTetrisRound(rid, total)
-          if (res && typeof res.balance === 'number' && !cancelRef.current) {
-            setBalance(res.balance)
-            balanceRef.current = res.balance
+          finalizingRef.current = true
+          setFinalizing(true)
+          try {
+            const res = await finishTetrisRound(rid, total)
+            if (res && typeof res.balance === 'number' && !cancelRef.current) {
+              setBalance(res.balance)
+              balanceRef.current = res.balance
+            }
+          } finally {
+            finalizingRef.current = false
+            setFinalizing(false)
           }
         }
-        currentRoundRef.current = null
+        // Only clear if it's still ours — a new round may have been
+        // assigned by then if the user managed to slip through.
+        if (currentRoundRef.current === myRound) {
+          currentRoundRef.current = null
+        }
       }
       return
     }
 
     // ── End of a paid (non-bonus, non-trigger) spin: finalize ──
     if (!inBonus && !triggeredBonus && currentRoundRef.current) {
-      const rid = currentRoundRef.current.round_id
+      const myRound = currentRoundRef.current
+      const rid = myRound.round_id
       if (typeof rid === 'string' && !rid.startsWith('dev-')) {
-        const res = await finishTetrisRound(rid, spinPayout)
-        // Reconcile balance from server (cap / deficit breaker may have
-        // shaved some off the client's optimistic credit).
-        if (res && typeof res.balance === 'number' && !cancelRef.current) {
-          setBalance(res.balance)
-          balanceRef.current = res.balance
+        finalizingRef.current = true
+        setFinalizing(true)
+        try {
+          const res = await finishTetrisRound(rid, spinPayout)
+          // Reconcile balance from server (cap / deficit breaker may
+          // have shaved some off the client's optimistic credit).
+          if (res && typeof res.balance === 'number' && !cancelRef.current) {
+            setBalance(res.balance)
+            balanceRef.current = res.balance
+          }
+        } finally {
+          finalizingRef.current = false
+          setFinalizing(false)
         }
       }
-      currentRoundRef.current = null
+      if (currentRoundRef.current === myRound) {
+        currentRoundRef.current = null
+      }
     }
 
     // ── Auto-spin chain ──
@@ -923,6 +954,7 @@ export default function TetrisCascadeSlot() {
   function onSpinClick() {
     if (isBusy) return
     if (isBonus) return // Bonus drives itself
+    if (finalizingRef.current) return // wait for previous finalize RPC
     if (autoSpin) {
       setAutoSpin(false); autoRef.current = false
       return
@@ -933,6 +965,7 @@ export default function TetrisCascadeSlot() {
 
   function onAutoSpinClick() {
     if (isBusy || isBonus) return
+    if (finalizingRef.current) return // wait for previous finalize RPC
     if (autoSpin) {
       setAutoSpin(false); autoRef.current = false
       return
@@ -953,6 +986,7 @@ export default function TetrisCascadeSlot() {
   // ── Buy bonus ──
   function onBuyBonusClick() {
     if (isBusy || isBonus || autoSpin) return
+    if (finalizingRef.current) return // wait for previous finalize RPC
     if (balance < stake * BUY_BONUS_COST_MUL) return
     haptic('light')
     setBuyBonusOpen(true)
@@ -961,6 +995,17 @@ export default function TetrisCascadeSlot() {
   async function confirmBuyBonus() {
     const cost = stakeRef.current * BUY_BONUS_COST_MUL
     if (balanceRef.current < cost) return
+    // Defensive: if a previous round is still being finalized, wait it
+    // out before starting a new one (otherwise start_tetris_round would
+    // abort the pending finalize and the previous payout would be lost).
+    if (finalizingRef.current) {
+      let waited = 0
+      while (finalizingRef.current && waited < 10000 && !cancelRef.current) {
+        await sleep(100)
+        waited += 100
+      }
+      if (finalizingRef.current || cancelRef.current) return
+    }
     haptic('success')
     setBuyBonusOpen(false)
     await runBoughtBonus()
@@ -1063,7 +1108,7 @@ export default function TetrisCascadeSlot() {
   const stakeDownDisabled = isBusy || isBonus || stakeIndex <= 0
   const winLabel = totalWin > 0 ? `+${formatCurrency(totalWin, currency, rates)}` : null
   const buyBonusCost = stake * BUY_BONUS_COST_MUL
-  const canBuyBonus = !isBusy && !isBonus && !autoSpin && balance >= buyBonusCost
+  const canBuyBonus = !isBusy && !isBonus && !autoSpin && !finalizing && balance >= buyBonusCost
 
   return (
     <div className={`tetris-slot-page tetris-slot-page--${phase} ${isBonus ? 'tetris-slot-page--bonus' : ''}`}>
