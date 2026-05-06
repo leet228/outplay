@@ -866,21 +866,30 @@ export default function TetrisCascadeSlot() {
       const total = bonusAccruedRef.current
       bonusAccruedRef.current = 0
 
-      // Finalize the round on the server. Server caps + applies deficit
-      // breaker; client already credited optimistically. Dev rounds skip
-      // the RPC.
+      // Show the summary IMMEDIATELY — don't make the user wait for the
+      // network round-trip. The server reconciliation happens in the
+      // background and is patched into balanceRef on response.
+      setBonusSummary({ totalWin: total })
+      haptic('success')
+
+      // Finalize the round on the server. Server caps payout at
+      // (stake × 1000 / 200 000 ₽) and applies the deficit breaker — the
+      // total credited may be LESS than what the client optimistically
+      // displayed during bonus spins. Reconcile balanceRef from the
+      // server's authoritative `balance` so the next spin works against
+      // the correct number (otherwise: deduct stake from inflated client
+      // balance → server returns true balance after debit → client jumps
+      // down → user sees "money disappeared").
       if (currentRoundRef.current) {
         const rid = currentRoundRef.current.round_id
         if (typeof rid === 'string' && !rid.startsWith('dev-')) {
-          await finishTetrisRound(rid, total)
+          const res = await finishTetrisRound(rid, total)
+          if (res && typeof res.balance === 'number' && !cancelRef.current) {
+            setBalance(res.balance)
+            balanceRef.current = res.balance
+          }
         }
         currentRoundRef.current = null
-      }
-
-      await sleep(700)
-      if (!cancelRef.current) {
-        setBonusSummary({ totalWin: total })
-        haptic('success')
       }
       return
     }
@@ -889,7 +898,13 @@ export default function TetrisCascadeSlot() {
     if (!inBonus && !triggeredBonus && currentRoundRef.current) {
       const rid = currentRoundRef.current.round_id
       if (typeof rid === 'string' && !rid.startsWith('dev-')) {
-        await finishTetrisRound(rid, spinPayout)
+        const res = await finishTetrisRound(rid, spinPayout)
+        // Reconcile balance from server (cap / deficit breaker may have
+        // shaved some off the client's optimistic credit).
+        if (res && typeof res.balance === 'number' && !cancelRef.current) {
+          setBalance(res.balance)
+          balanceRef.current = res.balance
+        }
       }
       currentRoundRef.current = null
     }
