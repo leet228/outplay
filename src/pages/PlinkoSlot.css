@@ -67,11 +67,13 @@
   pointer-events: none;
 }
 
-/* Board area — pegs + ball + slot row sit in here. Slots get pinned
- * to the bottom strip so the peg field uses the rest of the height. */
+/* Board area — pegs + ball + slot row sit in here. Bottom inset is
+ * just the page padding now (was 56 px reserving room for the slot
+ * row OUTSIDE the board); the slot row lives INSIDE the board pinned
+ * to its bottom edge so it sits directly under the last peg row. */
 .plinko-board {
   position: absolute;
-  inset: 16px 14px 56px;
+  inset: 16px 10px 14px;
   pointer-events: none;
 }
 
@@ -119,16 +121,17 @@
   pointer-events: none;
 }
 
-/* ── Landing slots row — pinned to the bottom of the board. ── */
+/* ── Landing slots row — pinned to the bottom of the board, inside
+ * the same coordinate space as the pegs so they line up under the
+ * last peg row's gaps without any free-space gap below the pegs. */
 .plinko-slots {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -50px;
+  bottom: 0;
   display: grid;
   grid-template-columns: repeat(17, 1fr);
-  gap: 2px;
-  padding: 0 2px;
+  gap: 1px;
 }
 
 .plinko-slot {

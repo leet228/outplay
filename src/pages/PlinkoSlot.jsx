@@ -72,9 +72,14 @@ function rollPath() {
 }
 
 // Geometry — ball / peg positions are board-space percentages, scaled
-// at render time by the actual stage box.
+// at render time by the actual stage box. The slot row lives inside
+// the board pinned to bottom: 0 with a fixed pixel height, so we
+// stretch the peg distribution across (ROWS + 1) instead of (ROWS + 2)
+// — last peg row lands just above the slots and the ball's final
+// rowNormY(ROWS - 0.5) puts it visually in the centre of the slot it
+// landed in.
 function ballNormX(r, k) { return 0.5 + (k - r / 2) / (ROWS + 1) }
-function rowNormY(r)     { return (r + 1) / (ROWS + 2) }
+function rowNormY(r)     { return (r + 1) / (ROWS + 1) }
 function pegNormX(r, p)  { return 0.5 + (p - r / 2) / (ROWS + 1) }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
@@ -207,11 +212,9 @@ export default function PlinkoSlot() {
     const mul = MULTIPLIERS[currentRisk][landing]
     const win = Math.round(currentStake * mul)
     if (win > 0) {
-      setBalance(prev => {
-        const next = prev + win
-        balanceRef.current = next
-        return next
-      })
+      const next = balanceRef.current + win
+      balanceRef.current = next
+      setBalance(next)
       setBalanceBounce(true)
       setTimeout(() => setBalanceBounce(false), 500)
     }
@@ -238,11 +241,11 @@ export default function PlinkoSlot() {
       return
     }
 
-    setBalance(prev => {
-      const next = prev - cost
+    {
+      const next = balanceRef.current - cost
       balanceRef.current = next
-      return next
-    })
+      setBalance(next)
+    }
     setLaunchWin(0)
     haptic('light')
 
@@ -348,6 +351,15 @@ export default function PlinkoSlot() {
           </div>
         </main>
 
+        {/* Win bar — sits directly above the launch selector so the win
+            number is the user's first focal point after the stage. */}
+        <div className={`plinko-winbar ${launchWin > 0 ? 'is-win' : ''}`}>
+          <span className="plinko-winbar-label">{t.slotPotential}</span>
+          <strong className="plinko-winbar-value">
+            {winLabel ?? formatCurrency(0, currency, rates)}
+          </strong>
+        </div>
+
         {/* Balls-per-launch selector — choose how many balls per drop. */}
         <div className="plinko-launch-row">
           <div className="plinko-launch-row-head">
@@ -369,13 +381,6 @@ export default function PlinkoSlot() {
               </button>
             ))}
           </div>
-        </div>
-
-        <div className={`plinko-winbar ${launchWin > 0 ? 'is-win' : ''}`}>
-          <span className="plinko-winbar-label">{t.slotPotential}</span>
-          <strong className="plinko-winbar-value">
-            {winLabel ?? formatCurrency(0, currency, rates)}
-          </strong>
         </div>
 
         <section className="plinko-controls">
