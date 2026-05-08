@@ -36,14 +36,17 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* 3D rolodex-style stage. Perspective + preserve-3d on the parent
-   * lets each row use its own rotateX without flattening, so new rows
-   * "wheel in" from above and exiting rows "fall away" downward — the
-   * iOS picker / slot-reel feel the user asked for. */
-  perspective: 720px;
+  /* Cylindrical-list stage — rows are 3D planes on the front face of
+   * an imaginary cylinder rotating top → bottom. New rows enter from
+   * above tipped face-up-and-back, roll down + flatten into place,
+   * then much later tip face-down-and-back as they leave the bottom.
+   * Both halves of the animation share the SAME rotation direction
+   * around the cylinder's axis, so the eye reads it as one continuous
+   * downward roll. */
+  perspective: 760px;
+  perspective-origin: 50% 50%;
   transform-style: preserve-3d;
-  /* Promote to its own compositor layer so child transforms don't
-   * bubble up into expensive parent repaints. */
+  /* Promote to its own compositor layer. */
   transform: translateZ(0);
 }
 
@@ -58,32 +61,36 @@
   border-radius: 14px;
   background: var(--surface, #1c1c1e);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  /* Each row is its own 3D plane on the wheel. transform-origin at
-   * the TOP edge — newcomers pivot down out of the upper rim, exiting
-   * rows pivot down past the lower rim. */
-  transform-origin: 50% 0%;
+  /* Pivot through the row's centre so the rotation matches a band on
+   * the cylinder rolling past. translateY moves the row up/down its
+   * own height to "carry" it across the visible window. */
+  transform-origin: 50% 50%;
   backface-visibility: hidden;
-  animation: live-feed-wheel-in 0.55s cubic-bezier(0.32, 1.4, 0.4, 1) both;
+  animation: live-feed-wheel-in 0.55s cubic-bezier(0.32, 1.2, 0.4, 1) both;
   will-change: transform, opacity;
 }
 
+/* New row rolls in: starts ABOVE its target, tilted so the face
+ * points up-and-back (rotateX positive = bottom forward). Cylinder
+ * rotates downward → row drops + flattens into place. */
 @keyframes live-feed-wheel-in {
-  0%   { opacity: 0; transform: translateZ(-40px) rotateX(-78deg); }
-  60%  { opacity: 1; transform: translateZ(0)     rotateX(8deg); }
-  100% { opacity: 1; transform: translateZ(0)     rotateX(0deg); }
+  0%   { opacity: 0; transform: translateY(-58px) rotateX(70deg); }
+  55%  { opacity: 1; transform: translateY(-6px)  rotateX(12deg); }
+  100% { opacity: 1; transform: translateY(0)     rotateX(0deg); }
 }
 
 .live-feed-row.is-leaving {
   animation: live-feed-wheel-out 0.55s cubic-bezier(0.5, 0, 0.7, 0.6) forwards;
   pointer-events: none;
-  /* Pivot from the BOTTOM edge for exit — looks like the row tips
-   * forward and falls behind the stage. */
-  transform-origin: 50% 100%;
 }
 
+/* Old row rolls OUT in the same downward direction: from flat, tips
+ * face-down-and-back (rotateX negative = top forward) while
+ * translating BELOW its target — same cylinder rotation continuing
+ * past the bottom rim. */
 @keyframes live-feed-wheel-out {
-  0%   { opacity: 1; transform: translateZ(0)     rotateX(0deg); }
-  100% { opacity: 0; transform: translateZ(-40px) rotateX(78deg); }
+  0%   { opacity: 1; transform: translateY(0)    rotateX(0deg); }
+  100% { opacity: 0; transform: translateY(58px) rotateX(-70deg); }
 }
 
 .live-feed-row.is-win {
