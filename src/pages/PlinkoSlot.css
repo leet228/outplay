@@ -96,6 +96,13 @@
   pointer-events: none;
   /* allow pegs / slot row to overflow horizontally for more spread */
   overflow: visible;
+  /* CSS containment isolates this subtree's style/layout/paint from
+   * the rest of the page — critical when 50-100 balls in flight are
+   * mutating their position styles every ~180 ms. Without it the
+   * browser invalidates large parts of the document on each ball
+   * step. `paint` alone is enough; `layout` is implied because we
+   * have a positioned ancestor. */
+  contain: layout paint;
 }
 
 /* ── Pegs container — the upper strip of the GAME-AREA (not the
@@ -129,6 +136,12 @@
   height: 7px;
   margin-left: -3.5px;
   margin-top:  -3.5px;
+  /* GPU layer hint — animating left/top per row-step on up to 100
+   * balls; will-change forces compositor promotion so the browser
+   * skips full layout/paint per step. translateZ(0) is a fallback
+   * for older WebKit that doesn't honour will-change reliably. */
+  will-change: left, top;
+  transform: translateZ(0);
   border-radius: 50%;
   z-index: 5;
   background:

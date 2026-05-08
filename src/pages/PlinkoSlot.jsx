@@ -95,6 +95,33 @@ function ballNormX(r, k) {
   return compressX(local, r === ROWS ? SLOT_HFRAC : PEG_HFRAC)
 }
 
+// Memoised single-ball renderer. With 100 balls in flight, animateBall()
+// fires a setBalls() per row-step per ball — without React.memo each
+// step diffs all 100 nodes. Memoised on (id, row, col), so when one
+// ball updates, the other 99 skip reconciliation entirely. Big perf
+// win on phones once ballsPerLaunch hits 50+.
+const PlinkoBall = React.memo(function PlinkoBall({ row, col }) {
+  let topCss
+  if (row === 0) {
+    topCss = '0px'
+  } else if (row === ROWS) {
+    topCss = 'calc(100% - var(--plinko-slot-row-h, 4%) / 2)'
+  } else {
+    const frac = rowNormY(row - 0.5)
+    topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 4%)))`
+  }
+  return (
+    <span
+      className="plinko-ball"
+      style={{
+        left: `${ballNormX(row, col) * 100}%`,
+        top:  topCss,
+      }}
+      aria-hidden="true"
+    />
+  )
+})
+
 // rowNormY — fraction of the PEGS container height (the upper strip
 // of game-area, minus the slot row strip pinned to its bottom).
 function rowNormY(r) { return r / (ROWS - 1) }
@@ -459,28 +486,9 @@ export default function PlinkoSlot() {
              * On the final row (r = ROWS), the ball is positioned
              * IN the slot row (calc(100% − slot-h / 2)) — a nice
              * "drop into slot" landing once the funnel has done its job. */}
-            {balls.map(ball => {
-              let topCss
-              if (ball.row === 0) {
-                topCss = '0px'
-              } else if (ball.row === ROWS) {
-                topCss = 'calc(100% - var(--plinko-slot-row-h, 4%) / 2)'
-              } else {
-                const frac = rowNormY(ball.row - 0.5)
-                topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 4%)))`
-              }
-              return (
-                <span
-                  key={ball.id}
-                  className="plinko-ball"
-                  style={{
-                    left: `${ballNormX(ball.row, ball.col) * 100}%`,
-                    top:  topCss,
-                  }}
-                  aria-hidden="true"
-                />
-              )
-            })}
+            {balls.map(ball => (
+              <PlinkoBall key={ball.id} row={ball.row} col={ball.col} />
+            ))}
 
             {/* Landing slots — one row of multiplier buckets. */}
             <div className="plinko-slots" aria-hidden="true">
