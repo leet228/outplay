@@ -77,7 +77,8 @@
   position: absolute;
   inset: 16px 6px 14px;
   pointer-events: none;
-  --plinko-slot-row-h: 22px;
+  --plinko-slot-row-h: 12px;
+  --plinko-slot-w: 16px;
 }
 
 /* Compact game-area — peg field box. The slot row at its bottom is
@@ -144,18 +145,19 @@
  * label. Pinned to bottom: 0 with a fixed height matching the JS
  * --plinko-slot-row-h so the peg container above caps at the same
  * line. */
-/* Slot row pinned to the bottom of game-area but stretched WIDER
- * than the peg field above (negative left / right). That gives each
- * slot enough horizontal room for an "×number" label without the peg
- * field needing to be wide too. */
+/* Slot row centred under the peg field with FIXED-pixel cells (16 × 12)
+ * — this gives the horizontal-rectangle look the user asked for and
+ * keeps every slot the same physical size regardless of game-area size.
+ * Total width = 17 × 16 + 16 × 1 px gaps = 288 px; centred via
+ * left: 50% / transform: translateX(-50%). */
 .plinko-slots {
   position: absolute;
-  left: -15%;
-  right: -15%;
+  left: 50%;
   bottom: 0;
-  height: var(--plinko-slot-row-h, 22px);
+  transform: translateX(-50%);
+  height: var(--plinko-slot-row-h, 12px);
   display: grid;
-  grid-template-columns: repeat(17, 1fr);
+  grid-template-columns: repeat(17, var(--plinko-slot-w, 16px));
   gap: 1px;
   align-items: stretch;
 }
@@ -165,34 +167,33 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  border-radius: 4px;
-  font-size: clamp(6px, 1.6vw, 9px);
+  border-radius: 3px;
+  /* 16 × 12 px slot → tightest font for "×110" worst-case is 6 px. */
+  font-size: 6px;
   font-weight: 800;
   color: #fff;
   border: 1px solid rgba(0, 0, 0, 0.45);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
     0 1px 0 rgba(0, 0, 0, 0.30);
   transition: transform 0.18s ease-out, box-shadow 0.18s ease-out, background 0.18s ease, filter 0.18s ease;
   overflow: hidden;
   padding: 0;
+  line-height: 1;
 }
 
 .plinko-slot-mul {
-  letter-spacing: -0.05em;
+  letter-spacing: -0.06em;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
   white-space: nowrap;
   max-width: 100%;
   text-align: center;
 }
-/* "×" prefix as a small pseudo so labels read as multipliers
- * ("×110" / "×0.5") even on the phone. Slot row is wider than the peg
- * field above so the digits + this small × all fit horizontally. */
 .plinko-slot-mul::before {
   content: '×';
-  font-size: 0.7em;
-  margin-right: 0.5px;
+  font-size: 0.65em;
+  margin-right: 0.3px;
   opacity: 0.7;
 }
 

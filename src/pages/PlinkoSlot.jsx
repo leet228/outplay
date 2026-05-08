@@ -72,15 +72,13 @@ function rollPath() {
 }
 
 // ─── Geometry ───────────────────────────────────────────────────
-// Peg field is COMPRESSED to ~64 % of the game-area width (so the
-// triangle stays a small funnel) but the slot row underneath is
-// visually WIDER (positioned in CSS with negative left/right). For
-// the ball's final landing on row = ROWS, x is mapped from the narrow
-// peg-field grid to the wider slot grid — visually the ball "spreads
-// outward" into its slot. Same pattern as the 1W / Stake reference
-// where the slot row is the widest element on the card.
-const PEG_HFRAC  = 0.64   // peg/ball span (fraction of game-area width)
-const SLOT_HFRAC = 1.30   // slot row span relative to game-area (>1 → wider)
+// Peg field is compressed so the funnel stays narrow, but every row
+// has r + 3 pegs (so the very top row shows 3 pegs like the spec
+// photo, not 2). PEG_HFRAC gives the pegs more breathing room — at
+// 0.85 the gaps between pegs in any row are visibly wider than the
+// previous tight 0.64 layout.
+const PEG_HFRAC  = 0.85   // peg/ball span (fraction of game-area width)
+const SLOT_HFRAC = 1.05   // slot row span relative to game-area
 
 function compressX(local, frac) {
   return 0.5 + (local - 0.5) * frac
@@ -334,7 +332,9 @@ export default function PlinkoSlot() {
              * → slots visually sit "in the gaps" between pegs. */}
             <div className="plinko-pegs" aria-hidden="true">
               {Array.from({ length: ROWS }).map((_, r) => {
-                const pegsInRow = r === ROWS - 1 ? r + 3 : r + 2
+                // Every row has r + 3 pegs so row 0 shows 3 pegs (the
+                // spec photo opens with a 3-dot top row, not 2).
+                const pegsInRow = r + 3
                 const pegArg    = pegsInRow - 1
                 return (
                   <React.Fragment key={`prow-${r}`}>
