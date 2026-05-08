@@ -1,59 +1,59 @@
 -- =============================================
--- Live feed diagnostic — runs a few checks to see why the feed
--- isn't moving. Each block returns a tiny result; read top-down.
+-- Live feed diagnostic (single-result version)
+-- Supabase SQL Editor shows only the LAST result of a multi-statement
+-- script, so we squash everything into one UNION result.
 -- =============================================
 
--- 1. Is pg_cron extension installed at all?
-SELECT
-  CASE WHEN EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')
-    THEN '✅ pg_cron is installed'
-    ELSE '❌ pg_cron is NOT installed — go to Database → Extensions → enable pg_cron'
-  END AS pg_cron_check;
-
--- 2. Is the live-feed-fake job scheduled?
-SELECT
-  jobid, schedule, command, active, jobname
-FROM cron.job
-WHERE jobname IN ('live-feed-fake', 'live-feed-cleanup');
-
--- 3. Did it actually run recently? (last 10 runs)
-SELECT
-  jobid, status, return_message, start_time, end_time
-FROM cron.job_run_details
-WHERE jobid IN (SELECT jobid FROM cron.job WHERE jobname = 'live-feed-fake')
-ORDER BY start_time DESC
-LIMIT 10;
-
--- 4. Are NEW events landing in the table? (last 60 seconds)
-SELECT
-  COUNT(*) FILTER (WHERE is_fake = true)  AS fakes_last_minute,
-  COUNT(*) FILTER (WHERE is_fake = false) AS reals_last_minute,
-  MAX(created_at) AS most_recent_event
-FROM live_feed_events
-WHERE created_at > NOW() - INTERVAL '60 seconds';
-
--- 5. Latest 5 events period (any age)
-SELECT id, game_id, game_label, amount_rub, is_fake, created_at
-FROM live_feed_events
-ORDER BY created_at DESC
-LIMIT 5;
-
--- 6. Is the trigger function the v6 one (returns gross payout, not -stake)?
-SELECT
-  CASE WHEN prosrc LIKE '%v_amount := NEW.payout_rub;%'
-    AND prosrc NOT LIKE '%v_amount := NEW.payout_rub - NEW.stake_rub%'
-    THEN '✅ v6 trigger applied (shows gross payout)'
-    ELSE '❌ OLD trigger still active — re-run migration_live_feed_v6.sql'
-  END AS trigger_version
-FROM pg_proc
-WHERE proname = 'feed_on_slot_round_change';
-
--- 7. Is Realtime enabled for live_feed_events?
-SELECT
-  CASE WHEN EXISTS (
-    SELECT 1 FROM pg_publication_tables
-    WHERE pubname = 'supabase_realtime' AND tablename = 'live_feed_events'
+WITH
+  cron_installed AS (
+    SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') AS yes
+  ),
+  cron_job AS (
+    SELECT
+      (SELECT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'live-feed-fake')) AS scheduled,
+      (SELECT schedule FROM cron.job WHERE jobname = 'live-feed-fake' LIMIT 1) AS sched
+  ),
+  last_run AS (
+    SELECT
+      MAX(start_time) AS last_start,
+      (ARRAY_AGG(status ORDER BY start_time DESC))[1] AS last_status,
+      (ARRAY_AGG(return_message ORDER BY start_time DESC))[1] AS last_msg
+    FROM cron.job_run_details
+    WHERE jobid IN (SELECT jobid FROM cron.job WHERE jobname = 'live-feed-fake')
+  ),
+  recent_events AS (
+    SELECT
+      COUNT(*) FILTER (WHERE is_fake = true)  AS fakes_60s,
+      COUNT(*) FILTER (WHERE is_fake = false) AS reals_60s,
+      MAX(created_at) AS most_recent
+    FROM live_feed_events
+    WHERE created_at > NOW() - INTERVAL '60 seconds'
+  ),
+  trigger_check AS (
+    SELECT
+      CASE WHEN prosrc LIKE '%v_amount := NEW.payout_rub;%'
+        AND prosrc NOT LIKE '%NEW.payout_rub - NEW.stake_rub%'
+        THEN 'v6 (correct)'
+        ELSE 'OLD (re-run migration_live_feed_v6.sql)'
+      END AS version
+    FROM pg_proc
+    WHERE proname = 'feed_on_slot_round_change'
+  ),
+  realtime_check AS (
+    SELECT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime' AND tablename = 'live_feed_events'
+    ) AS published
   )
-    THEN '✅ Realtime is publishing live_feed_events'
-    ELSE '❌ Realtime NOT enabled — Database → Replication → enable for live_feed_events'
-  END AS realtime_check;
+SELECT
+  (SELECT yes FROM cron_installed)               AS pg_cron_installed,
+  (SELECT scheduled FROM cron_job)               AS cron_job_scheduled,
+  (SELECT sched     FROM cron_job)               AS cron_schedule,
+  (SELECT last_start  FROM last_run)             AS cron_last_start,
+  (SELECT last_status FROM last_run)             AS cron_last_status,
+  (SELECT last_msg    FROM last_run)             AS cron_last_msg,
+  (SELECT fakes_60s   FROM recent_events)        AS fakes_in_last_60s,
+  (SELECT reals_60s   FROM recent_events)        AS reals_in_last_60s,
+  (SELECT most_recent FROM recent_events)        AS most_recent_event,
+  (SELECT version     FROM trigger_check)        AS trigger_version,
+  (SELECT published   FROM realtime_check)       AS realtime_publishing;
