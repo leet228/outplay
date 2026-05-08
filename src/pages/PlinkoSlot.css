@@ -1,13 +1,8 @@
 /* ─────────────────────────────────────────────────────────────
- * Plinko slot — pure CSS / DOM (no canvas). Triangular peg grid,
- * a falling ball with smooth CSS transition between waypoints, a
- * row of coloured multiplier buckets at the bottom.
+ * Plinko — Stake-style 16-row board: nearly-black stage, gray
+ * pegs, blue rectangular slot row, multi-ball drops.
  * ───────────────────────────────────────────────────────────── */
 
-/* Same window-in-a-window envelope pattern as Rocket / Tower / Tetris:
- * full-page background gradient, fixed 64 px top padding for the
- * Telegram nav, and the slot itself sits inside a rounded panel that
- * fills the centered max-width column. */
 .plinko-slot-page {
   position: fixed;
   inset: 0;
@@ -24,29 +19,27 @@
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
   background:
-    radial-gradient(ellipse at 50% 0%,  #2a1568 0%, transparent 55%),
-    radial-gradient(ellipse at 20% 90%, #4a1432 0%, transparent 60%),
-    linear-gradient(180deg, #07021a 0%, #190735 50%, #2c0a40 100%);
+    radial-gradient(ellipse at 50% 0%,  #1a1d2e 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 90%, #1c0a2e 0%, transparent 60%),
+    linear-gradient(180deg, #060812 0%, #0a0d18 50%, #0c0a18 100%);
 }
 
 .plinko-game-window {
   position: relative;
   width: min(100%, 560px);
-  height: min(754px, calc(100svh - var(--safe-top, 0px) - var(--safe-bottom, 0px) - 86px));
-  min-height: 610px;
+  height: min(820px, calc(100svh - var(--safe-top, 0px) - var(--safe-bottom, 0px) - 86px));
+  min-height: 660px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border-radius: 32px;
   background:
-    radial-gradient(ellipse at 50% 0%,  #2d1259 0%, transparent 55%),
-    radial-gradient(ellipse at 20% 90%, #3a0d3d 0%, transparent 60%),
-    linear-gradient(180deg, #160438 0%, #2a0a45 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+    radial-gradient(ellipse at 50% 0%,  rgba(60, 80, 130, 0.18) 0%, transparent 65%),
+    linear-gradient(180deg, #0d101c 0%, #06070d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    0 30px 90px rgba(0, 0, 0, 0.58),
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    0 30px 90px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
   isolation: isolate;
   padding: 14px 14px 18px;
 }
@@ -58,27 +51,27 @@
   border-radius: 22px;
   overflow: hidden;
   background:
-    radial-gradient(60% 40% at 50% 12%, rgba(168, 85, 247, 0.18) 0%, transparent 65%),
-    linear-gradient(180deg, rgba(38, 16, 86, 0.55) 0%, rgba(11, 8, 32, 0.95) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+    radial-gradient(60% 35% at 50% 5%, rgba(120, 140, 200, 0.12) 0%, transparent 70%),
+    linear-gradient(180deg, #080a14 0%, #04050a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 12px 40px rgba(0, 0, 0, 0.35);
+    0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
 .plinko-bg {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(60% 40% at 50% 12%, rgba(99, 102, 241, 0.32) 0%, transparent 60%),
-    radial-gradient(80% 50% at 50% 100%, rgba(236, 72, 153, 0.18) 0%, transparent 70%);
+    radial-gradient(40% 25% at 50% 5%, rgba(120, 140, 200, 0.10) 0%, transparent 80%);
   pointer-events: none;
 }
 
-/* ── Board area where pegs / ball / slots live ── */
+/* Board area — pegs + ball + slot row sit in here. Slots get pinned
+ * to the bottom strip so the peg field uses the rest of the height. */
 .plinko-board {
   position: absolute;
-  inset: 18px 18px 80px;
+  inset: 16px 14px 56px;
   pointer-events: none;
 }
 
@@ -90,144 +83,191 @@
 
 .plinko-peg {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  margin-left: -4px;
-  margin-top: -4px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  margin-top:  -2.5px;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 30%, #fff 0%, #d6dcff 60%, #8d92cf 100%);
+  background: radial-gradient(circle at 30% 30%, #b0b6c4 0%, #8088a0 60%, #4a5060 100%);
   box-shadow:
-    0 0 6px rgba(255, 255, 255, 0.45),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+    0 0 3px rgba(255, 255, 255, 0.20),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
 }
 
 /* ── Ball ──
- * White marble, ~10 px, with a subtle gradient + outer glow to read
- * cleanly on the dark stage. CSS transitions split horizontal / vertical
- * so the motion FEELS gravity-driven:
- *   - top  uses ease-in (cubic-bezier 0.55, 0, 1, 0.55) → accelerates
- *     while falling, which is what real gravity does between pegs.
- *   - left uses a snappy ease-in-out so the lateral kick happens
- *     during the early part of the fall and the ball "settles" by
- *     the next peg.
- *   - duration is matched to dropOne()'s sleep (220 ms / step) so the
- *     visual motion completes just before the next waypoint is set —
- *     same idea as Stake.com Plinko ball physics. */
+ * White ~10 px marble. Split CSS transitions: vertical accelerates
+ * (gravity), lateral eases in-out (peg redirect). Per-step duration
+ * matches animateBall()'s sleep so the move completes just before
+ * the next waypoint dispatches. */
 .plinko-ball {
   position: absolute;
-  width: 11px;
-  height: 11px;
-  margin-left: -5.5px;
-  margin-top: -5.5px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  margin-top:  -5px;
   border-radius: 50%;
   z-index: 5;
   background:
     radial-gradient(circle at 32% 28%, #ffffff 0%, #f3f4f6 55%, #c7cad1 100%);
   box-shadow:
-    0 0 10px rgba(255, 255, 255, 0.55),
+    0 0 8px rgba(255, 255, 255, 0.55),
     0 0 3px rgba(255, 255, 255, 0.85),
     inset 0 -2px 2px rgba(0, 0, 0, 0.18);
   transition:
-    left 0.22s cubic-bezier(0.42, 0.0, 0.58, 1.0),
-    top  0.22s cubic-bezier(0.55, 0.0, 1.0, 0.55);
+    left 0.18s cubic-bezier(0.42, 0.0, 0.58, 1.0),
+    top  0.18s cubic-bezier(0.55, 0.0, 1.0, 0.55);
   pointer-events: none;
 }
 
-/* ── Landing slots row ── */
+/* ── Landing slots row — pinned to the bottom of the board. ── */
 .plinko-slots {
   position: absolute;
   left: 0;
   right: 0;
   bottom: -50px;
   display: grid;
-  grid-template-columns: repeat(13, 1fr);
-  gap: 3px;
-  padding: 0 4px;
+  grid-template-columns: repeat(17, 1fr);
+  gap: 2px;
+  padding: 0 2px;
 }
 
 .plinko-slot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  border-radius: 8px;
-  font-size: 11px;
+  height: 30px;
+  border-radius: 6px;
+  font-size: 10px;
   font-weight: 800;
   color: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(0, 0, 0, 0.45);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 2px 0 rgba(0, 0, 0, 0.25);
-  transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    0 2px 0 rgba(0, 0, 0, 0.30);
+  transition: transform 0.18s ease-out, box-shadow 0.18s ease-out, background 0.18s ease, filter 0.18s ease;
 }
 
 .plinko-slot-mul {
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+  white-space: nowrap;
 }
 
-/* Tier colours — 0 (sub-1× danger) … 5 (jackpot) */
-.plinko-slot--tier0 { background: linear-gradient(180deg, #6b7280, #374151); }
-.plinko-slot--tier1 { background: linear-gradient(180deg, #fbbf24, #b45309); }
-.plinko-slot--tier2 { background: linear-gradient(180deg, #f97316, #9a3412); }
-.plinko-slot--tier3 { background: linear-gradient(180deg, #ef4444, #7f1d1d); }
-.plinko-slot--tier4 { background: linear-gradient(180deg, #ec4899, #831843); }
-.plinko-slot--tier5 { background: linear-gradient(180deg, #a855f7, #4c1d95); }
-
-.plinko-slot.is-hit {
-  transform: translateY(-4px) scale(1.06);
+/* All-blue tier palette. Brightness climbs with the multiplier; the
+ * jackpot tier gets a soft outer glow so the eye locks on it. */
+.plinko-slot--tier0 { background: linear-gradient(180deg, #1e3a8a, #0e1f4d); }
+.plinko-slot--tier1 { background: linear-gradient(180deg, #2553c7, #1a3a8e); }
+.plinko-slot--tier2 { background: linear-gradient(180deg, #3b82f6, #1d4ed8); }
+.plinko-slot--tier3 { background: linear-gradient(180deg, #60a5fa, #2563eb); }
+.plinko-slot--tier4 {
+  background: linear-gradient(180deg, #93c5fd, #3b82f6);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    0 0 18px rgba(255, 255, 255, 0.55),
-    0 6px 0 rgba(0, 0, 0, 0.25);
-  animation: plinko-slot-pop 0.55s ease-out;
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 0 8px rgba(96, 165, 250, 0.35),
+    0 2px 0 rgba(0, 0, 0, 0.25);
 }
-@keyframes plinko-slot-pop {
+.plinko-slot--tier5 {
+  background: linear-gradient(180deg, #ffffff, #93c5fd);
+  color: #0c1d4d;
+  border-color: rgba(147, 197, 253, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 14px rgba(147, 197, 253, 0.7),
+    0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* Hit animation — slot pops up + lights up white-bright when a ball
+ * lands. Re-triggerable per landing (handled in JS via timestamps). */
+.plinko-slot.is-hit {
+  animation: plinko-slot-flash 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 22px rgba(147, 197, 253, 0.95),
+    0 0 6px rgba(255, 255, 255, 0.6),
+    0 4px 0 rgba(0, 0, 0, 0.25);
+  filter: brightness(1.45);
+  z-index: 6;
+}
+
+@keyframes plinko-slot-flash {
   0%   { transform: translateY(0)    scale(1.00); }
-  35%  { transform: translateY(-7px) scale(1.10); }
-  70%  { transform: translateY(-3px) scale(1.04); }
-  100% { transform: translateY(-4px) scale(1.06); }
+  20%  { transform: translateY(-10px) scale(1.22); filter: brightness(1.6); }
+  60%  { transform: translateY(-3px) scale(1.08); }
+  100% { transform: translateY(-5px) scale(1.05); filter: brightness(1.25); }
 }
 
-/* ── Recent-results column on the right edge of the stage ── */
-.plinko-recent {
-  position: absolute;
-  top: 14px;
-  right: 6px;
+/* ── Balls-per-launch row ── */
+.plinko-launch-row {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.plinko-launch-row-head {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  pointer-events: none;
-  z-index: 4;
-}
-
-.plinko-recent-item {
+  justify-content: space-between;
+  align-items: center;
   font-size: 11px;
-  font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.35);
-  color: #fff;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
-  font-variant-numeric: tabular-nums;
-  animation: plinko-recent-in 0.4s ease-out both;
-}
-@keyframes plinko-recent-in {
-  from { opacity: 0; transform: translateX(8px); }
-  to   { opacity: 1; transform: translateX(0); }
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
 }
 
-.plinko-recent-item--tier0 { background: linear-gradient(180deg, #6b7280, #374151); }
-.plinko-recent-item--tier1 { background: linear-gradient(180deg, #fbbf24, #b45309); }
-.plinko-recent-item--tier2 { background: linear-gradient(180deg, #f97316, #9a3412); }
-.plinko-recent-item--tier3 { background: linear-gradient(180deg, #ef4444, #7f1d1d); }
-.plinko-recent-item--tier4 { background: linear-gradient(180deg, #ec4899, #831843); }
-.plinko-recent-item--tier5 { background: linear-gradient(180deg, #a855f7, #4c1d95); }
+.plinko-launch-label {
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 700;
+}
+
+.plinko-launch-total {
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 700;
+}
+
+.plinko-launch-total strong {
+  color: #fff;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+}
+
+.plinko-launch-buttons {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.plinko-launch-btn {
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.plinko-launch-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.plinko-launch-btn:active:not(:disabled) { transform: translateY(1px); }
+
+.plinko-launch-btn.is-active {
+  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+  border-color: #60a5fa;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 4px 12px rgba(59, 130, 246, 0.45);
+}
+
+.plinko-launch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Win bar ── */
 .plinko-winbar {
@@ -237,8 +277,8 @@
   justify-content: space-between;
   padding: 10px 16px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
@@ -261,11 +301,9 @@
   color: #fff;
 }
 
-.plinko-winbar.is-win .plinko-winbar-value {
-  color: #34d399;
-}
+.plinko-winbar.is-win .plinko-winbar-value { color: #34d399; }
 
-/* ── Controls strip ── */
+/* ── Controls row ── */
 .plinko-controls {
   margin-top: 12px;
   display: grid;
@@ -279,15 +317,17 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  padding: 6px 10px;
-  border-radius: 12px;
+  padding: 8px 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .plinko-balance span {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.5);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
+  font-weight: 700;
 }
 .plinko-balance strong {
   font-size: 16px;
@@ -312,19 +352,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, #6366f1, #4338ca);
+  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
   color: #fff;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    0 6px 14px rgba(99, 102, 241, 0.45);
-  transition: transform 0.14s ease, box-shadow 0.14s ease;
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 6px 14px rgba(59, 130, 246, 0.45);
+  transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
 }
-.plinko-drop-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.plinko-drop-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.06); }
 .plinko-drop-btn:active:not(:disabled) { transform: translateY(1px); }
 .plinko-drop-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .plinko-drop-btn.is-auto { background: linear-gradient(180deg, #ec4899, #be185d); }
-.plinko-drop-btn .spinning { animation: plinko-spin 0.9s linear infinite; }
-@keyframes plinko-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 .plinko-auto-btn {
   font-size: 11px;
@@ -335,7 +373,7 @@
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.78);
   cursor: pointer;
 }
 .plinko-auto-btn.is-on {
@@ -358,6 +396,7 @@
   justify-content: space-between;
   gap: 4px;
   background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   padding: 4px;
 }
@@ -379,7 +418,7 @@
 .plinko-risk-label {
   flex: 1;
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -392,20 +431,24 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 4px;
 }
 
 .plinko-stake-step {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: none;
   background: rgba(255, 255, 255, 0.04);
   color: #fff;
   font-size: 18px;
   font-weight: 800;
   cursor: pointer;
 }
-.plinko-stake-step:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
+.plinko-stake-step:hover:not(:disabled) { background: rgba(255, 255, 255, 0.10); }
 .plinko-stake-step:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .plinko-stake {
@@ -413,16 +456,18 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 1px;
+  padding-right: 4px;
 }
 .plinko-stake span {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.5);
   text-transform: uppercase;
   letter-spacing: 0.07em;
+  font-weight: 700;
 }
 .plinko-stake strong {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   color: #fff;
   font-variant-numeric: tabular-nums;
@@ -430,8 +475,6 @@
 
 /* ─────────────────────────────────────────────────────────────
  * Card art used on the home grid + the slot preview modal.
- * Mirrors the in-game palette but compresses the triangular peg
- * field into ~6 rows so the preview reads at thumbnail size.
  * ───────────────────────────────────────────────────────────── */
 .plinko-slot-card-art {
   position: absolute;
@@ -439,15 +482,15 @@
   border-radius: inherit;
   overflow: hidden;
   background:
-    radial-gradient(120% 80% at 50% 0%, #2a1568 0%, #0f0a30 60%, #050211 100%);
+    radial-gradient(120% 80% at 50% 0%, #1e2742 0%, #08091a 60%, #04050b 100%);
 }
 
 .plinko-card-glow {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(60% 50% at 50% 8%, rgba(168, 85, 247, 0.55) 0%, transparent 70%),
-    radial-gradient(70% 50% at 50% 100%, rgba(236, 72, 153, 0.35) 0%, transparent 70%);
+    radial-gradient(60% 50% at 50% 8%, rgba(96, 165, 250, 0.40) 0%, transparent 70%),
+    radial-gradient(70% 50% at 50% 100%, rgba(59, 130, 246, 0.25) 0%, transparent 70%);
   pointer-events: none;
 }
 
@@ -462,8 +505,8 @@
   margin-left: -2.5px;
   margin-top:  -2.5px;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fff 0%, #d6dcff 60%, #8d92cf 100%);
-  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+  background: radial-gradient(circle at 30% 30%, #b0b6c4 0%, #6e7588 60%, #404652 100%);
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.30);
 }
 .plinko-slot-card-art--animated .plinko-card-peg {
   animation: plinko-card-peg-twinkle 2.4s ease-in-out infinite both;
@@ -482,10 +525,10 @@
   left: 56%;
   top: 42%;
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fde68a 0%, #f59e0b 55%, #b45309 100%);
+  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #f3f4f6 55%, #c7cad1 100%);
   box-shadow:
-    0 0 10px rgba(245, 158, 11, 0.8),
-    0 0 3px rgba(255, 220, 120, 0.95);
+    0 0 10px rgba(255, 255, 255, 0.7),
+    0 0 3px rgba(255, 255, 255, 0.95);
   z-index: 2;
 }
 .plinko-slot-card-art--animated .plinko-card-ball {
@@ -522,16 +565,10 @@
   border: 1px solid rgba(0, 0, 0, 0.35);
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
 }
-.plinko-card-slot--hot  { background: linear-gradient(180deg, #a855f7, #4c1d95); }
-.plinko-card-slot--warm { background: linear-gradient(180deg, #ef4444, #7f1d1d); }
-.plinko-card-slot--cold { background: linear-gradient(180deg, #f97316, #9a3412); }
+.plinko-card-slot--hot  { background: linear-gradient(180deg, #ffffff, #93c5fd); color: #1e3a8a; }
+.plinko-card-slot--warm { background: linear-gradient(180deg, #60a5fa, #2563eb); }
+.plinko-card-slot--cold { background: linear-gradient(180deg, #2553c7, #1a3a8e); }
 
-/* Larger preview-modal variant — pegs + ball scale up.
- * Mirrors Rocket: in `--large` the artwork sits inside a fixed-size
- * .slot-preview-visual box (instead of being absolutely positioned over
- * the home-grid card), so we drop the absolute fill and let it occupy
- * its parent normally. Without this the SVG/ball/slots stack over the
- * preview modal's title + button. */
 .plinko-slot-card-art--large {
   position: relative;
   inset: auto;
@@ -542,4 +579,3 @@
 .plinko-slot-card-art--large .plinko-card-peg { width: 7px; height: 7px; margin-left: -3.5px; margin-top: -3.5px; }
 .plinko-slot-card-art--large .plinko-card-ball { width: 16px; height: 16px; margin-left: -8px; margin-top: -8px; }
 .plinko-slot-card-art--large .plinko-card-slot { height: 26px; font-size: 11px; }
-

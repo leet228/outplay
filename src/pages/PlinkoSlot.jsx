@@ -8,58 +8,59 @@ import { haptic } from '../lib/telegram'
 import './PlinkoSlot.css'
 
 // ─────────────────────────────────────────────────────────────
-// PLINKO — pure dev/visual build (no RTP enforcement yet).
+// PLINKO — Stake.com-style 16-row board, multi-ball launches.
 //
-// Mechanic:
-//   - Ball drops from the top centre.
-//   - At each of ROWS peg rows, ball bounces left (k stays) or right
-//     (k increments) — 50 / 50 per peg.
-//   - After ROWS bounces, ball lands in slot k ∈ [0, ROWS]. There are
-//     SLOTS = ROWS + 1 slots at the bottom, each with a fixed payout
-//     multiplier (symmetric — middle = small, edges = huge).
-//   - Payout = stake × MULTIPLIERS[k].
-//
-// Distribution is binomial(ROWS, 0.5) so the ball lands in the centre
-// most of the time — matches real Plinko machines / Stake.com.
-//
-// For dev mode the math is honest fair coin per peg; we'll bolt on the
-// RTP-shaped weighting + deficit breaker later (same way Tetris &
-// Tower Stack do it).
+//   - 16 peg rows, 17 landing slots
+//   - 3 risk modes (low / medium / high) — different multiplier tables
+//   - Up to 100 balls per click ("balls per launch")
+//   - Ball physics: split CSS transitions with ease-in for vertical
+//     (gravity) and ease-in-out for lateral (peg redirection)
+//   - Slot lights up when a ball lands (pop scale + bright glow)
+//   - Currently dev/visual only: no Supabase round, no RTP server
+//     enforcement. Math is honest binomial(16, 0.5) on the client.
 // ─────────────────────────────────────────────────────────────
 
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
 const MIN_BALANCE_RUB = 10
 const SLOT_ID = 'plinko'
 
-const ROWS = 12
-const SLOTS = ROWS + 1                  // 13 landing slots
+const ROWS = 16
+const SLOTS = ROWS + 1            // 17 landing slots
 const RISK_LEVELS = ['low', 'medium', 'high']
+const BALLS_PER_LAUNCH = [1, 10, 20, 50, 100]
 
-// Multiplier tables borrowed from Stake.com 12-row Plinko (industry
-// reference). Symmetric around the centre. Centre slot is the most
-// probable (~22 %) and pays the lowest mul; edges are super rare
-// (~0.024 %) and pay the jackpot tier.
+// Multiplier tables for 16-row board. Symmetric around the centre.
+//   low / medium  — Stake.com standard reference values
+//   high          — extreme jackpot variant from the spec screenshot
+//                   (×10000 edges, ×0.1 centre — RTP ≈ 94 %)
 const MULTIPLIERS = {
-  low:    [10,  3,   1.6, 1.4, 1.1, 1,   0.5, 1,   1.1, 1.4, 1.6, 3,  10 ],
-  medium: [24,  5,   2,   1.4, 1.1, 1,   0.5, 1,   1.1, 1.4, 2,   5,  24 ],
-  high:   [110, 41,  10,  5,   3,   1.5, 0.3, 1.5, 3,   5,   10,  41, 110],
+  low:    [16,    9,   2,   1.4, 1.4, 1.2, 1.1, 1,   0.5, 1,   1.1, 1.2, 1.4, 1.4, 2,   9,   16   ],
+  medium: [110,   41,  10,  5,   3,   1.5, 1,   0.5, 0.3, 0.5, 1,   1.5, 3,   5,   10,  41,  110  ],
+  high:   [10000, 211, 21,  5,   1.8, 0.8, 0.3, 0.2, 0.1, 0.2, 0.3, 0.8, 1.8, 5,   21,  211, 10000],
 }
 
-// Slot colour tier, used by CSS to colour each landing bucket.
-// Higher tier = more saturated / hotter colour. Tiers based on mul
-// magnitude relative to 1× stake.
+// Slot tier (0..5) maps to a CSS gradient brightness level. All blues —
+// just darker for sub-1× "danger zone" buckets, brighter for jackpot.
 function tierFor(mul) {
-  if (mul >= 25) return 5
-  if (mul >= 10) return 4
-  if (mul >= 3)  return 3
-  if (mul >= 1.4) return 2
-  if (mul >= 1)   return 1
-  return 0   // sub-1× = "danger zone"
+  if (mul >= 1000) return 5
+  if (mul >= 100)  return 4
+  if (mul >= 10)   return 3
+  if (mul >= 2)    return 2
+  if (mul >= 1)    return 1
+  return 0
 }
 
-// Run a single ball drop using fair coin per row. Returns:
-//   path    — array of column indices (length ROWS + 1, starting at 0)
-//   landing — final slot index ∈ [0, ROWS]
+// Compact display: 10000 → "10K", 211 → "211", 1.8 → "1.8", 0.1 → "0.1"
+function formatMul(mul) {
+  if (mul >= 1000) {
+    const k = mul / 1000
+    return Number.isInteger(k) ? `${k}K` : `${k.toFixed(1)}K`
+  }
+  if (Number.isInteger(mul)) return `${mul}`
+  return `${mul}`
+}
+
+// One ball drop — fair coin per row. Returns the column path + landing.
 function rollPath() {
   let k = 0
   const path = [k]
@@ -70,16 +71,11 @@ function rollPath() {
   return { path, landing: k }
 }
 
-// Geometry helpers — ball / peg positions are computed in board-space
-// percentages (0..1) and multiplied by the measured stage box at render
-// time. Lets the layout fluidly resize across phones / desktop.
-//
-// Ball at row r in column k:        x = 0.5 + (k − r/2) / (ROWS + 1)
-// Peg in row r at column p ∈ [0..r+1]:  same formula with k = p
-// Row r vertical position:           y = (r + 1) / (ROWS + 2)
-function ballNormX(r, k)        { return 0.5 + (k - r / 2) / (ROWS + 1) }
-function rowNormY(r)            { return (r + 1) / (ROWS + 2) }
-function pegNormX(r, p)         { return 0.5 + (p - r / 2) / (ROWS + 1) }
+// Geometry — ball / peg positions are board-space percentages, scaled
+// at render time by the actual stage box.
+function ballNormX(r, k) { return 0.5 + (k - r / 2) / (ROWS + 1) }
+function rowNormY(r)     { return (r + 1) / (ROWS + 2) }
+function pegNormX(r, p)  { return 0.5 + (p - r / 2) / (ROWS + 1) }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
@@ -97,56 +93,60 @@ export default function PlinkoSlot() {
     return BETS[0]
   }, [])
 
-  const [stake, setStake] = useState(initialStake)
-  const [risk, setRisk] = useState('medium')
-  const [dropping, setDropping] = useState(false)
-  const [autoSpin, setAutoSpin] = useState(false)
-  const [ball, setBall] = useState(null) // { row, col, justLanded?: boolean } | null
-  const [highlightSlot, setHighlightSlot] = useState(null)
-  const [lastWin, setLastWin] = useState(0)
-  const [recentResults, setRecentResults] = useState([]) // last few mul × stake values for the side rail
+  const [stake, setStake]                   = useState(initialStake)
+  const [risk, setRisk]                     = useState('medium')
+  const [ballsPerLaunch, setBallsPerLaunch] = useState(1)
+  const [autoSpin, setAutoSpin]             = useState(false)
+  // Each in-flight ball: { id, row, col }. May contain many at once
+  // when ballsPerLaunch > 1.
+  const [balls, setBalls]                   = useState([])
+  // Slot index → timestamp of last ball landing in it. Cleared by
+  // a setTimeout after each flash so multiple balls can hit the same
+  // slot in succession and re-trigger the animation.
+  const [hitSlots, setHitSlots]             = useState({})
+  // Total winnings of the current launch (sum across all balls).
+  const [launchWin, setLaunchWin]           = useState(0)
 
-  const balanceRef = useRef(balance)
-  const stakeRef = useRef(stake)
-  const autoRef = useRef(autoSpin)
-  const cancelRef = useRef(false)
-  useEffect(() => { balanceRef.current = balance }, [balance])
-  useEffect(() => { stakeRef.current = stake }, [stake])
-  useEffect(() => { autoRef.current = autoSpin }, [autoSpin])
-  useEffect(() => () => { cancelRef.current = true }, [])
+  const balanceRef        = useRef(balance)
+  const stakeRef          = useRef(stake)
+  const riskRef           = useRef(risk)
+  const ballsPerLaunchRef = useRef(ballsPerLaunch)
+  const autoRef           = useRef(autoSpin)
+  const cancelRef         = useRef(false)
+
+  useEffect(() => { balanceRef.current        = balance },        [balance])
+  useEffect(() => { stakeRef.current          = stake },          [stake])
+  useEffect(() => { riskRef.current           = risk },           [risk])
+  useEffect(() => { ballsPerLaunchRef.current = ballsPerLaunch }, [ballsPerLaunch])
+  useEffect(() => { autoRef.current           = autoSpin },       [autoSpin])
+  useEffect(() => () => { cancelRef.current   = true }, [])
 
   const stakeIndex = BETS.indexOf(stake)
-  const mults = MULTIPLIERS[risk]
-  const isBusy = dropping
-  const canPlay = balance >= MIN_BALANCE_RUB && balance >= stake
+  const mults      = MULTIPLIERS[risk]
+  const totalBet   = stake * ballsPerLaunch
+  const canAfford  = balance >= totalBet
 
   // ── Telegram BackButton ──
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return
     tg.BackButton.show()
-    const back = () => {
-      haptic('light')
-      navigate('/')
-    }
+    const back = () => { haptic('light'); navigate('/') }
     tg.BackButton.onClick(back)
-    return () => {
-      tg.BackButton.offClick(back)
-      tg.BackButton.hide()
-    }
+    return () => { tg.BackButton.offClick(back); tg.BackButton.hide() }
   }, [navigate])
 
-  // Auto-clamp stake to max affordable when balance drops.
+  // Auto-clamp stake when balance drops.
   useEffect(() => {
-    if (isBusy) return
+    if (autoSpin) return
     if (stake <= balance) return
     for (let i = BETS.length - 1; i >= 0; i--) {
       if (BETS[i] <= balance) { setStake(BETS[i]); return }
     }
-  }, [balance, stake, isBusy])
+  }, [balance, stake, autoSpin])
 
   function changeStake(direction) {
-    if (isBusy) return
+    if (autoSpin) return
     const nextIndex = Math.max(0, Math.min(BETS.length - 1, stakeIndex + direction))
     if (nextIndex === stakeIndex) return
     if (direction > 0 && BETS[nextIndex] > balance) return
@@ -155,123 +155,147 @@ export default function PlinkoSlot() {
   }
 
   function changeRisk(direction) {
-    if (isBusy || autoSpin) return
+    if (autoSpin) return
     const idx = RISK_LEVELS.indexOf(risk)
     const next = (idx + direction + RISK_LEVELS.length) % RISK_LEVELS.length
     haptic('light')
     setRisk(RISK_LEVELS[next])
   }
 
-  // ── Drop one ball ──
-  async function dropOne() {
+  function chooseBalls(n) {
+    if (autoSpin) return
+    haptic('light')
+    setBallsPerLaunch(n)
+  }
+
+  // Ping the slot's hit animation. Multiple back-to-back hits are
+  // de-duped by timestamp — only the most recent flash holds the
+  // class, so a new ball landing in the same slot retriggers the pop.
+  function flashSlot(idx) {
+    const ts = Date.now() + Math.random()
+    setHitSlots(prev => ({ ...prev, [idx]: ts }))
+    setTimeout(() => {
+      setHitSlots(prev => {
+        if (prev[idx] !== ts) return prev
+        const next = { ...prev }
+        delete next[idx]
+        return next
+      })
+    }, 700)
+  }
+
+  // Animate one ball through the peg field. Self-cleans on landing.
+  async function animateBall() {
     if (cancelRef.current) return
-    if (balanceRef.current < stakeRef.current) {
+    const id = `b${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const { path, landing } = rollPath()
+    const currentRisk  = riskRef.current
+    const currentStake = stakeRef.current
+
+    setBalls(prev => [...prev, { id, row: 0, col: 0 }])
+    await sleep(140)   // entry "hover" beat — the ball is briefly
+                       // visible at the spawn point before falling.
+
+    for (let r = 1; r <= ROWS; r++) {
+      if (cancelRef.current) return
+      setBalls(prev => prev.map(b => b.id === id ? { ...b, row: r, col: path[r] } : b))
+      await sleep(180)
+    }
+    if (cancelRef.current) return
+
+    // Pay
+    const mul = MULTIPLIERS[currentRisk][landing]
+    const win = Math.round(currentStake * mul)
+    if (win > 0) {
+      setBalance(prev => {
+        const next = prev + win
+        balanceRef.current = next
+        return next
+      })
+      setBalanceBounce(true)
+      setTimeout(() => setBalanceBounce(false), 500)
+    }
+    setLaunchWin(prev => prev + win)
+    flashSlot(landing)
+
+    if (mul >= 1) haptic('success')
+    else          haptic('light')
+
+    // Briefly hold the ball at the slot, then remove from grid.
+    await sleep(180)
+    setBalls(prev => prev.filter(b => b.id !== id))
+  }
+
+  // One launch = ballsPerLaunch independent balls dropped with a small
+  // spawn stagger. Cost is debited once up-front, each ball credits its
+  // own win on landing.
+  function dropLaunch() {
+    if (cancelRef.current) return
+    const N = ballsPerLaunchRef.current
+    const cost = stakeRef.current * N
+    if (balanceRef.current < cost) {
       setAutoSpin(false); autoRef.current = false
       return
     }
 
-    const currentStake = stakeRef.current
-    const currentMults = MULTIPLIERS[risk]
-
-    // Charge the stake immediately (dev-mode local).
-    setBalance(balanceRef.current - currentStake)
-    balanceRef.current -= currentStake
-
-    setDropping(true)
-    setHighlightSlot(null)
-    setLastWin(0)
-
-    const { path, landing } = rollPath()
-
-    // Animate the ball through the path. CSS transitions handle the
-    // smooth movement between waypoints; we just step the ball state.
-    // The 220 ms-per-step pacing matches the .plinko-ball CSS transition
-    // duration so the ball reaches each peg before the next waypoint
-    // is set — the cubic-bezier ease-in on `top` makes the visual fall
-    // accelerate like real gravity.
-    setBall({ row: 0, col: 0 })
+    setBalance(prev => {
+      const next = prev - cost
+      balanceRef.current = next
+      return next
+    })
+    setLaunchWin(0)
     haptic('light')
-    // Slight delay so the ball appears at the spawn point before the
-    // first row dispatch — gives the entry "drop in" feel.
-    await sleep(180)
 
-    for (let r = 1; r <= ROWS; r++) {
-      if (cancelRef.current) return
-      setBall({ row: r, col: path[r] })
-      // gentle haptic kick on every other peg — feels like real bounces
-      if (r % 2 === 0) haptic('light')
-      await sleep(220)
+    const stagger = N <= 10 ? 80 : N <= 50 ? 35 : 14
+    for (let i = 0; i < N; i++) {
+      setTimeout(() => animateBall(), i * stagger)
     }
+  }
 
-    // Settle into the slot
-    if (cancelRef.current) return
-    const mul = currentMults[landing]
-    const win = Math.round(currentStake * mul)
-    setHighlightSlot(landing)
-    setLastWin(win)
-
-    if (mul >= 1) haptic('success')
-    else          haptic('medium')
-
-    if (win > 0) {
-      setBalance(balanceRef.current + win)
-      balanceRef.current += win
-      setBalanceBounce(true)
-      setTimeout(() => setBalanceBounce(false), 600)
-    }
-
-    setRecentResults(prev => [{ mul, win, key: `${Date.now()}-${Math.random()}` }, ...prev].slice(0, 8))
-
-    await sleep(550)
-    if (cancelRef.current) return
-    setBall(null)
-    setDropping(false)
-
-    // Auto-drop chain
-    if (autoRef.current && balanceRef.current >= stakeRef.current && !cancelRef.current) {
-      await sleep(220)
-      if (autoRef.current && !cancelRef.current && balanceRef.current >= stakeRef.current) {
-        dropOne()
-      } else {
+  // Auto-loop: chains launches as long as auto is on and balance allows.
+  // Wait for the launch's spawn phase + a small gap before firing the
+  // next so balls stack up gradually rather than instantly all at once.
+  async function autoLoop() {
+    while (autoRef.current && !cancelRef.current) {
+      const cost = stakeRef.current * ballsPerLaunchRef.current
+      if (balanceRef.current < cost) {
         setAutoSpin(false); autoRef.current = false
+        break
       }
-    } else if (autoRef.current && balanceRef.current < stakeRef.current) {
-      setAutoSpin(false); autoRef.current = false
+      dropLaunch()
+      const N = ballsPerLaunchRef.current
+      const stagger = N <= 10 ? 80 : N <= 50 ? 35 : 14
+      const launchSpawnTime = N * stagger
+      await sleep(Math.max(420, launchSpawnTime + 220))
     }
   }
 
   function onDropClick() {
-    // Auto-stop toggle is ALWAYS allowed, even while a ball is mid-air.
-    // The auto-chain only schedules another drop when autoRef.current is
-    // still true at the check point in dropOne().
     if (autoSpin) {
       setAutoSpin(false); autoRef.current = false
       return
     }
-    if (isBusy) return
-    if (!canPlay) return
-    dropOne()
+    if (!canAfford) return
+    dropLaunch()
   }
 
   function onAutoClick() {
-    // Always allow stopping the auto chain — even mid-flight.
     if (autoSpin) {
       setAutoSpin(false); autoRef.current = false
       return
     }
-    if (isBusy) return
-    if (!canPlay) return
+    if (!canAfford) return
     setAutoSpin(true); autoRef.current = true
-    dropOne()
+    autoLoop()
   }
 
-  const stakeUpDisabled = isBusy || stakeIndex >= BETS.length - 1 ||
-                          (BETS[stakeIndex + 1] !== undefined && BETS[stakeIndex + 1] > balance)
-  const stakeDownDisabled = isBusy || stakeIndex <= 0
-  const winLabel = lastWin > 0 ? `+${formatCurrency(lastWin, currency, rates)}` : null
+  const stakeUpDisabled   = autoSpin || stakeIndex >= BETS.length - 1 ||
+                            (BETS[stakeIndex + 1] !== undefined && BETS[stakeIndex + 1] > balance)
+  const stakeDownDisabled = autoSpin || stakeIndex <= 0
+  const winLabel = launchWin > 0 ? `+${formatCurrency(launchWin, currency, rates)}` : null
 
   return (
-    <div className={`plinko-slot-page plinko-slot-page--${dropping ? 'dropping' : 'idle'}`}>
+    <div className={`plinko-slot-page plinko-slot-page--${balls.length ? 'dropping' : 'idle'}`}>
       <div className="plinko-game-window">
         <main className="plinko-stage" aria-label="Plinko">
           <div className="plinko-bg" />
@@ -287,8 +311,8 @@ export default function PlinkoSlot() {
                         key={`peg-${r}-${p}`}
                         className="plinko-peg"
                         style={{
-                          left:  `${pegNormX(r + 1, p) * 100}%`,
-                          top:   `${rowNormY(r) * 100}%`,
+                          left: `${pegNormX(r + 1, p) * 100}%`,
+                          top:  `${rowNormY(r) * 100}%`,
                         }}
                       />
                     ))}
@@ -297,10 +321,10 @@ export default function PlinkoSlot() {
               })}
             </div>
 
-            {/* Ball (only mounted while dropping). CSS transition handles
-                the smooth move between waypoints set in dropOne(). */}
-            {ball && (
+            {/* Balls — many can be in flight at once when ballsPerLaunch > 1. */}
+            {balls.map(ball => (
               <span
+                key={ball.id}
                 className="plinko-ball"
                 style={{
                   left: `${ballNormX(ball.row, ball.col) * 100}%`,
@@ -308,41 +332,46 @@ export default function PlinkoSlot() {
                 }}
                 aria-hidden="true"
               />
-            )}
+            ))}
 
-            {/* Landing slots — bottom row of multiplier buckets */}
+            {/* Landing slots — one row of multiplier buckets. */}
             <div className="plinko-slots" aria-hidden="true">
-              {mults.map((mul, k) => {
-                const tier = tierFor(mul)
-                const isHit = highlightSlot === k
-                return (
-                  <span
-                    key={`slot-${k}`}
-                    className={`plinko-slot plinko-slot--tier${tier} ${isHit ? 'is-hit' : ''}`}
-                  >
-                    <span className="plinko-slot-mul">×{mul}</span>
-                  </span>
-                )
-              })}
+              {mults.map((mul, k) => (
+                <span
+                  key={`slot-${k}`}
+                  className={`plinko-slot plinko-slot--tier${tierFor(mul)} ${hitSlots[k] ? 'is-hit' : ''}`}
+                >
+                  <span className="plinko-slot-mul">×{formatMul(mul)}</span>
+                </span>
+              ))}
             </div>
           </div>
-
-          {/* Recent results rail — last 8 mul × stake outcomes */}
-          {recentResults.length > 0 && (
-            <ul className="plinko-recent" aria-hidden="true">
-              {recentResults.map(r => (
-                <li
-                  key={r.key}
-                  className={`plinko-recent-item plinko-recent-item--tier${tierFor(r.mul)}`}
-                >
-                  ×{r.mul}
-                </li>
-              ))}
-            </ul>
-          )}
         </main>
 
-        <div className={`plinko-winbar ${lastWin > 0 ? 'is-win' : ''}`}>
+        {/* Balls-per-launch selector — choose how many balls per drop. */}
+        <div className="plinko-launch-row">
+          <div className="plinko-launch-row-head">
+            <span className="plinko-launch-label">{t.slotPlinkoBallsPerLaunch}</span>
+            <span className="plinko-launch-total">
+              {t.slotPlinkoTotalBet} <strong>{formatCurrency(totalBet, currency, rates)}</strong>
+            </span>
+          </div>
+          <div className="plinko-launch-buttons">
+            {BALLS_PER_LAUNCH.map(n => (
+              <button
+                key={n}
+                type="button"
+                className={`plinko-launch-btn ${ballsPerLaunch === n ? 'is-active' : ''}`}
+                onClick={() => chooseBalls(n)}
+                disabled={autoSpin}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={`plinko-winbar ${launchWin > 0 ? 'is-win' : ''}`}>
           <span className="plinko-winbar-label">{t.slotPotential}</span>
           <strong className="plinko-winbar-value">
             {winLabel ?? formatCurrency(0, currency, rates)}
@@ -358,23 +387,19 @@ export default function PlinkoSlot() {
           <div className="plinko-center">
             <button
               type="button"
-              className={`plinko-drop-btn ${isBusy ? 'is-busy' : ''} ${autoSpin ? 'is-auto' : ''}`}
+              className={`plinko-drop-btn ${autoSpin ? 'is-auto' : ''}`}
               onClick={onDropClick}
-              disabled={(!canPlay && !autoSpin) || (isBusy && !autoSpin)}
+              disabled={!canAfford && !autoSpin}
               aria-label={autoSpin ? t.slotPlinkoStop : t.slotPlinkoDrop}
             >
-              {isBusy ? (
-                <svg className="plinko-drop-icon spinning" width="36" height="36" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" strokeDasharray="40 60" strokeLinecap="round"/>
-                </svg>
-              ) : autoSpin ? (
+              {autoSpin ? (
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="6" y="5" width="4" height="14" rx="1.2" />
                   <rect x="14" y="5" width="4" height="14" rx="1.2" />
                 </svg>
               ) : (
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 4 L12 18 M6 12 L12 18 L18 12" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 4 L12 18 M6 12 L12 18 L18 12" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
             </button>
@@ -382,7 +407,7 @@ export default function PlinkoSlot() {
               type="button"
               className={`plinko-auto-btn ${autoSpin ? 'is-on' : ''}`}
               onClick={onAutoClick}
-              disabled={isBusy && !autoSpin}
+              disabled={!canAfford && !autoSpin}
             >
               {autoSpin ? t.slotPlinkoStop : t.slotPlinkoAuto}
             </button>
@@ -390,45 +415,21 @@ export default function PlinkoSlot() {
 
           <div className="plinko-stake-block">
             <div className="plinko-risk-row">
-              <button
-                type="button"
-                className="plinko-risk-step"
-                onClick={() => changeRisk(-1)}
-                disabled={isBusy || autoSpin}
-                aria-label="risk down"
-              >‹</button>
+              <button type="button" className="plinko-risk-step" onClick={() => changeRisk(-1)} disabled={autoSpin} aria-label="risk down">‹</button>
               <span className={`plinko-risk-label plinko-risk-label--${risk}`}>
-                {risk === 'low' ? t.slotPlinkoRiskLow
+                {risk === 'low'  ? t.slotPlinkoRiskLow
                  : risk === 'high' ? t.slotPlinkoRiskHigh
                  : t.slotPlinkoRiskMedium}
               </span>
-              <button
-                type="button"
-                className="plinko-risk-step"
-                onClick={() => changeRisk(1)}
-                disabled={isBusy || autoSpin}
-                aria-label="risk up"
-              >›</button>
+              <button type="button" className="plinko-risk-step" onClick={() => changeRisk(1)} disabled={autoSpin} aria-label="risk up">›</button>
             </div>
             <div className="plinko-stake-row">
-              <button
-                type="button"
-                className="plinko-stake-step"
-                onClick={() => changeStake(-1)}
-                disabled={stakeDownDisabled}
-                aria-label="stake down"
-              >−</button>
+              <button type="button" className="plinko-stake-step" onClick={() => changeStake(-1)} disabled={stakeDownDisabled} aria-label="stake down">−</button>
               <div className="plinko-stake">
                 <span>{t.slotBet}</span>
                 <strong>{formatCurrency(stake, currency, rates)}</strong>
               </div>
-              <button
-                type="button"
-                className="plinko-stake-step"
-                onClick={() => changeStake(1)}
-                disabled={stakeUpDisabled}
-                aria-label="stake up"
-              >+</button>
+              <button type="button" className="plinko-stake-step" onClick={() => changeStake(1)} disabled={stakeUpDisabled} aria-label="stake up">+</button>
             </div>
           </div>
         </section>
