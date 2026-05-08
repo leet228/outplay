@@ -493,7 +493,19 @@
 .plinko-card-slot--warm { background: linear-gradient(180deg, #ef4444, #7f1d1d); }
 .plinko-card-slot--cold { background: linear-gradient(180deg, #f97316, #9a3412); }
 
-/* Larger preview-modal variant — pegs + ball scale up */
+/* Larger preview-modal variant — pegs + ball scale up.
+ * Mirrors Rocket: in `--large` the artwork sits inside a fixed-size
+ * .slot-preview-visual box (instead of being absolutely positioned over
+ * the home-grid card), so we drop the absolute fill and let it occupy
+ * its parent normally. Without this the SVG/ball/slots stack over the
+ * preview modal's title + button. */
+.plinko-slot-card-art--large {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+}
 .plinko-slot-card-art--large .plinko-card-peg { width: 7px; height: 7px; margin-left: -3.5px; margin-top: -3.5px; }
 .plinko-slot-card-art--large .plinko-card-ball { width: 16px; height: 16px; margin-left: -8px; margin-top: -8px; }
 .plinko-slot-card-art--large .plinko-card-slot { height: 26px; font-size: 11px; }
