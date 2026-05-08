@@ -2828,12 +2828,14 @@
 }
 .slots-row::-webkit-scrollbar { display: none; }
 
-/* Compact vertical card — keeps a clear 4:5 portrait shape but
-   significantly smaller than the original half-screen card. */
+/* Compact vertical card — sized so that exactly 3 cards fit within
+ * the .slots-block's visible width on a phone viewport (Plinko was
+ * being clipped at 124 px). 116 px × 3 + 20 px gaps + 20 px row
+ * padding = 388 px, fits comfortably under ~392 px block content. */
 .slot-card--scroll {
-  flex: 0 0 124px;
-  min-width: 124px;
-  min-height: 158px;
+  flex: 0 0 116px;
+  min-width: 116px;
+  min-height: 148px;
   scroll-snap-align: start;
   border-radius: 16px;
 }
