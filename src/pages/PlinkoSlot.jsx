@@ -72,22 +72,32 @@ function rollPath() {
 }
 
 // ─── Geometry ───────────────────────────────────────────────────
-// Pegs / ball / slots all live inside .plinko-game-area which is a
-// compact box (~72 % wide, sized in CSS) centred in the stage. So the
-// JS x-formulas use the FULL 0..1 range of the game-area — no further
-// compression here. The "small Plinko on a black background" look
-// from the spec photos comes entirely from the game-area's CSS size.
-function ballNormX(r, k) {
-  return 0.5 + (k - r / 2) / (ROWS + 1)
+// Peg field is COMPRESSED to ~64 % of the game-area width (so the
+// triangle stays a small funnel) but the slot row underneath is
+// visually WIDER (positioned in CSS with negative left/right). For
+// the ball's final landing on row = ROWS, x is mapped from the narrow
+// peg-field grid to the wider slot grid — visually the ball "spreads
+// outward" into its slot. Same pattern as the 1W / Stake reference
+// where the slot row is the widest element on the card.
+const PEG_HFRAC  = 0.64   // peg/ball span (fraction of game-area width)
+const SLOT_HFRAC = 1.30   // slot row span relative to game-area (>1 → wider)
+
+function compressX(local, frac) {
+  return 0.5 + (local - 0.5) * frac
 }
 
-// rowNormY — fraction of the PEGS container height (the upper strip of
-// game-area, minus the slot row pinned to its bottom). r = 0 sits at
-// the top edge; r = ROWS - 1 sits flush with the slot row top.
+function ballNormX(r, k) {
+  const local = 0.5 + (k - r / 2) / (ROWS + 1)
+  return compressX(local, r === ROWS ? SLOT_HFRAC : PEG_HFRAC)
+}
+
+// rowNormY — fraction of the PEGS container height (the upper strip
+// of game-area, minus the slot row strip pinned to its bottom).
 function rowNormY(r) { return r / (ROWS - 1) }
 
 function pegNormX(pegArg, p) {
-  return 0.5 + (p - pegArg / 2) / (ROWS + 1)
+  const local = 0.5 + (p - pegArg / 2) / (ROWS + 1)
+  return compressX(local, PEG_HFRAC)
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))

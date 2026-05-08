@@ -77,20 +77,17 @@
   position: absolute;
   inset: 16px 6px 14px;
   pointer-events: none;
-  --plinko-slot-row-h: 26px;
+  --plinko-slot-row-h: 22px;
 }
 
-/* Compact game-area centred in the board. The whole peg field + slot
- * row fits inside this fixed-aspect box, so visually it sits like a
- * small Plinko widget on the dark stage with empty space around it
- * (matches the 1W / Stake mobile reference photo).
- *
- * Width caps at ~280 px so on bigger viewports the triangle doesn't
- * stretch huge — keeps the "small thumbnail" feel everywhere. */
+/* Compact game-area — peg field box. The slot row at its bottom is
+ * stretched WIDER than this box via negative margins, so the visible
+ * Plinko stack reads as "narrow funnel + wide slot tray underneath"
+ * just like the 1W reference. */
 .plinko-game-area {
   position: absolute;
-  width: min(72%, 300px);
-  aspect-ratio: 5 / 4;
+  width: min(70%, 280px);
+  aspect-ratio: 6 / 5;
   top: 8%;
   left: 50%;
   transform: translateX(-50%);
@@ -124,10 +121,10 @@
  * the next waypoint dispatches. */
 .plinko-ball {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  margin-left: -5px;
-  margin-top:  -5px;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  margin-top:  -3.5px;
   border-radius: 50%;
   z-index: 5;
   background:
@@ -147,12 +144,16 @@
  * label. Pinned to bottom: 0 with a fixed height matching the JS
  * --plinko-slot-row-h so the peg container above caps at the same
  * line. */
+/* Slot row pinned to the bottom of game-area but stretched WIDER
+ * than the peg field above (negative left / right). That gives each
+ * slot enough horizontal room for an "×number" label without the peg
+ * field needing to be wide too. */
 .plinko-slots {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: -15%;
+  right: -15%;
   bottom: 0;
-  height: var(--plinko-slot-row-h, 26px);
+  height: var(--plinko-slot-row-h, 22px);
   display: grid;
   grid-template-columns: repeat(17, 1fr);
   gap: 1px;
@@ -165,7 +166,7 @@
   justify-content: center;
   min-width: 0;
   border-radius: 4px;
-  font-size: clamp(7px, 1.6vw, 10px);
+  font-size: clamp(6px, 1.6vw, 9px);
   font-weight: 800;
   color: #fff;
   border: 1px solid rgba(0, 0, 0, 0.45);
@@ -178,16 +179,22 @@
 }
 
 .plinko-slot-mul {
-  letter-spacing: -0.04em;
+  letter-spacing: -0.05em;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
   white-space: nowrap;
   max-width: 100%;
   text-align: center;
 }
-/* No "×" pseudo: with 17 slots inside the compact game-area each slot
- * is only ~16 px wide on phone — the digits eat every available pixel,
- * and the prefix would just clip 3-digit multipliers like "110". */
+/* "×" prefix as a small pseudo so labels read as multipliers
+ * ("×110" / "×0.5") even on the phone. Slot row is wider than the peg
+ * field above so the digits + this small × all fit horizontally. */
+.plinko-slot-mul::before {
+  content: '×';
+  font-size: 0.7em;
+  margin-right: 0.5px;
+  opacity: 0.7;
+}
 
 /* All-blue tier palette. Brightness climbs with the multiplier; the
  * jackpot tier gets a soft outer glow so the eye locks on it. */
