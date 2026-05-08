@@ -72,38 +72,22 @@ function rollPath() {
 }
 
 // ─── Geometry ───────────────────────────────────────────────────
-// Peg field is COMPRESSED (uses ~78 % of board width) so the slot row
-// underneath has comfortable horizontal space for its labels. At the
-// final row (r = ROWS) the ball "splashes out" from the narrow funnel
-// to the wider slot grid — same shape as a real Plinko machine where
-// the slot opening is wider than the peg arrangement above it.
-//
-// Vertical: peg rows fill the FULL pegs container (which is itself
-// shorter than the board, leaving the bottom strip for the slot row
-// — see `.plinko-pegs` inset in PlinkoSlot.css). The CSS variable
-// --plinko-slot-row-h drives both the slot row height and the ball's
-// "drop into slot" final-row top via calc() in the JSX.
-const PEG_FIELD_WIDTH  = 0.78  // peg/ball span this fraction of board width
-const SLOT_FIELD_WIDTH = 0.92  // slot grid span (matches CSS .plinko-slots inset)
-
-function compressX(local, frac) {
-  return 0.5 + (local - 0.5) * frac
-}
-
+// Pegs / ball / slots all live inside .plinko-game-area which is a
+// compact box (~72 % wide, sized in CSS) centred in the stage. So the
+// JS x-formulas use the FULL 0..1 range of the game-area — no further
+// compression here. The "small Plinko on a black background" look
+// from the spec photos comes entirely from the game-area's CSS size.
 function ballNormX(r, k) {
-  const local = 0.5 + (k - r / 2) / (ROWS + 1)
-  // At the final row the ball lands in the (wider) slot grid.
-  return compressX(local, r === ROWS ? SLOT_FIELD_WIDTH : PEG_FIELD_WIDTH)
+  return 0.5 + (k - r / 2) / (ROWS + 1)
 }
 
-// rowNormY is now a 0..1 fraction of the PEGS container (the upper
-// strip of the board, minus the slot row at bottom). r = 0 is at the
-// top edge, r = ROWS - 1 is at the bottom edge (right above slots).
+// rowNormY — fraction of the PEGS container height (the upper strip of
+// game-area, minus the slot row pinned to its bottom). r = 0 sits at
+// the top edge; r = ROWS - 1 sits flush with the slot row top.
 function rowNormY(r) { return r / (ROWS - 1) }
 
 function pegNormX(pegArg, p) {
-  const local = 0.5 + (p - pegArg / 2) / (ROWS + 1)
-  return compressX(local, PEG_FIELD_WIDTH)
+  return 0.5 + (p - pegArg / 2) / (ROWS + 1)
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
@@ -327,15 +311,17 @@ export default function PlinkoSlot() {
         <main className="plinko-stage" aria-label="Plinko">
           <div className="plinko-bg" />
           <div className="plinko-board">
+           {/* Compact game-area — sized in CSS to ~72 % of the board so
+            * the peg field stays a small triangle in the middle of the
+            * stage with empty space around it (matching the reference
+            * spec photo). All inside coordinates use the game-area as
+            * the 0..1 reference, no further compression needed. */}
+           <div className="plinko-game-area">
             {/* Pegs — triangular grid. Row r has r+2 pegs, EXCEPT the
              * last row which gets r+3 (= ROWS+2 = 18) pegs spread across
-             * the full board width at p / (ROWS + 1) positions. With
+             * the full game-area width at p / (ROWS + 1) positions. With
              * 18 pegs in the last row, each pair frames exactly one slot
-             * → slots visually sit "in the gaps" between pegs as the
-             * user expected, instead of having a peg sat ON every slot
-             * centre. Ball physics still resolves at half-integer / 17
-             * positions on row 16, which lands between the 18 last-row
-             * pegs (i.e., in the slot centre). */}
+             * → slots visually sit "in the gaps" between pegs. */}
             <div className="plinko-pegs" aria-hidden="true">
               {Array.from({ length: ROWS }).map((_, r) => {
                 const pegsInRow = r === ROWS - 1 ? r + 3 : r + 2
@@ -372,10 +358,10 @@ export default function PlinkoSlot() {
               if (ball.row === 0) {
                 topCss = '0px'
               } else if (ball.row === ROWS) {
-                topCss = 'calc(100% - var(--plinko-slot-row-h, 44px) / 2)'
+                topCss = 'calc(100% - var(--plinko-slot-row-h, 26px) / 2)'
               } else {
                 const frac = rowNormY(ball.row - 0.5)
-                topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 44px)))`
+                topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 26px)))`
               }
               return (
                 <span
@@ -390,10 +376,7 @@ export default function PlinkoSlot() {
               )
             })}
 
-            {/* Landing slots — one row of multiplier buckets. Label is
-             * the formatted number only (no "×" prefix or pseudo),
-             * because at 17 slots × ~22 px on phone there's only room
-             * for the digits themselves. */}
+            {/* Landing slots — one row of multiplier buckets. */}
             <div className="plinko-slots" aria-hidden="true">
               {mults.map((mul, k) => (
                 <span
@@ -404,6 +387,7 @@ export default function PlinkoSlot() {
                 </span>
               ))}
             </div>
+           </div>
           </div>
         </main>
 

@@ -77,29 +77,43 @@
   position: absolute;
   inset: 16px 6px 14px;
   pointer-events: none;
-  --plinko-slot-row-h: 32px;
+  --plinko-slot-row-h: 26px;
 }
 
-/* ── Pegs container — the upper strip of the board, capped at the
- * top of the slot row. JS pegs use top: rowNormY(r) × 100% which
- * is 100 % of THIS container, not of the board. Same calc lives on
- * the ball's CSS top (with calc(...)) so pegs and ball stay locked
- * to the same coordinate space. */
+/* Compact game-area centred in the board. The whole peg field + slot
+ * row fits inside this fixed-aspect box, so visually it sits like a
+ * small Plinko widget on the dark stage with empty space around it
+ * (matches the 1W / Stake mobile reference photo).
+ *
+ * Width caps at ~280 px so on bigger viewports the triangle doesn't
+ * stretch huge — keeps the "small thumbnail" feel everywhere. */
+.plinko-game-area {
+  position: absolute;
+  width: min(72%, 300px);
+  aspect-ratio: 5 / 4;
+  top: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ── Pegs container — the upper strip of the GAME-AREA (not the
+ * full board), capped at the slot row top. */
 .plinko-pegs {
   position: absolute;
-  inset: 0 0 var(--plinko-slot-row-h, 44px) 0;
+  inset: 0 0 var(--plinko-slot-row-h, 26px) 0;
 }
 
 .plinko-peg {
   position: absolute;
-  width: 5px;
-  height: 5px;
-  margin-left: -2.5px;
-  margin-top:  -2.5px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  margin-top:  -2px;
   border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, #b0b6c4 0%, #8088a0 60%, #4a5060 100%);
   box-shadow:
-    0 0 3px rgba(255, 255, 255, 0.20),
+    0 0 2px rgba(255, 255, 255, 0.18),
     inset 0 -1px 0 rgba(0, 0, 0, 0.4);
 }
 
@@ -138,7 +152,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: var(--plinko-slot-row-h, 32px);
+  height: var(--plinko-slot-row-h, 26px);
   display: grid;
   grid-template-columns: repeat(17, 1fr);
   gap: 1px;
@@ -151,9 +165,7 @@
   justify-content: center;
   min-width: 0;
   border-radius: 4px;
-  /* Tightly clamped so even on a 360 px phone (slot ≈ 22 px wide)
-   * the worst-case label "10K" / "211" fits without clipping. */
-  font-size: clamp(8px, 1.9vw, 11px);
+  font-size: clamp(7px, 1.6vw, 10px);
   font-weight: 800;
   color: #fff;
   border: 1px solid rgba(0, 0, 0, 0.45);
@@ -172,8 +184,10 @@
   white-space: nowrap;
   max-width: 100%;
   text-align: center;
-  /* No "×" pseudo — at this slot width every pixel goes to digits. */
 }
+/* No "×" pseudo: with 17 slots inside the compact game-area each slot
+ * is only ~16 px wide on phone — the digits eat every available pixel,
+ * and the prefix would just clip 3-digit multipliers like "110". */
 
 /* All-blue tier palette. Brightness climbs with the multiplier; the
  * jackpot tier gets a soft outer glow so the eye locks on it. */
