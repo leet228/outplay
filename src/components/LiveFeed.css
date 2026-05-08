@@ -36,22 +36,12 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* Cylindrical-list stage — rows are 3D planes on the front face of
-   * an imaginary cylinder rotating top → bottom. New rows enter from
-   * above tipped face-up-and-back, roll down + flatten into place,
-   * then much later tip face-down-and-back as they leave the bottom.
-   * Both halves of the animation share the SAME rotation direction
-   * around the cylinder's axis, so the eye reads it as one continuous
-   * downward roll. */
-  perspective: 760px;
-  perspective-origin: 50% 50%;
-  transform-style: preserve-3d;
-  /* Promote to its own compositor layer. */
-  transform: translateZ(0);
 }
 
 /* Row card. Height target: just slightly taller than the header
- * pill above (~46 px) — about 54 px total. */
+ * pill above (~46 px) — about 54 px total. No entry/exit animation
+ * per the user's spec — last row vanishes the instant the next one
+ * appears at the top. */
 .live-feed-row {
   display: grid;
   grid-template-columns: 36px 1fr auto;
@@ -61,36 +51,11 @@
   border-radius: 14px;
   background: var(--surface, #1c1c1e);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  /* Pivot through the row's centre so the rotation matches a band on
-   * the cylinder rolling past. translateY moves the row up/down its
-   * own height to "carry" it across the visible window. */
-  transform-origin: 50% 50%;
-  backface-visibility: hidden;
-  animation: live-feed-wheel-in 0.55s cubic-bezier(0.32, 1.2, 0.4, 1) both;
-  will-change: transform, opacity;
-}
-
-/* New row rolls in: starts ABOVE its target, tilted so the face
- * points up-and-back (rotateX positive = bottom forward). Cylinder
- * rotates downward → row drops + flattens into place. */
-@keyframes live-feed-wheel-in {
-  0%   { opacity: 0; transform: translateY(-58px) rotateX(70deg); }
-  55%  { opacity: 1; transform: translateY(-6px)  rotateX(12deg); }
-  100% { opacity: 1; transform: translateY(0)     rotateX(0deg); }
 }
 
 .live-feed-row.is-leaving {
-  animation: live-feed-wheel-out 0.55s cubic-bezier(0.5, 0, 0.7, 0.6) forwards;
+  display: none;
   pointer-events: none;
-}
-
-/* Old row rolls OUT in the same downward direction: from flat, tips
- * face-down-and-back (rotateX negative = top forward) while
- * translating BELOW its target — same cylinder rotation continuing
- * past the bottom rim. */
-@keyframes live-feed-wheel-out {
-  0%   { opacity: 1; transform: translateY(0)    rotateX(0deg); }
-  100% { opacity: 0; transform: translateY(58px) rotateX(-70deg); }
 }
 
 .live-feed-row.is-win {

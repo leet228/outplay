@@ -77,8 +77,9 @@ export default function LiveFeed() {
     }
   }, [])
 
-  // VISIBLE_ROWS as live + one "leaving" slot for the fade-out target.
-  const renderable = rows.slice(0, VISIBLE_ROWS + 1)
+  // No exit animation — the moment a new row arrives, the oldest one
+  // vanishes from the DOM. Render exactly VISIBLE_ROWS items.
+  const renderable = rows.slice(0, VISIBLE_ROWS)
 
   return (
     <div className="live-feed">
@@ -88,17 +89,12 @@ export default function LiveFeed() {
       </div>
 
       <div className="live-feed-list">
-        {renderable.map((row, i) => {
+        {renderable.map((row) => {
           const win = row.amount_rub > 0
-          const leaving = i >= VISIBLE_ROWS
           return (
             <div
               key={row.id}
-              className={
-                'live-feed-row' +
-                (win ? ' is-win' : ' is-loss') +
-                (leaving ? ' is-leaving' : '')
-              }
+              className={'live-feed-row' + (win ? ' is-win' : ' is-loss')}
             >
               <span className="live-feed-icon">
                 <img src={SLOT_ICONS[row.game_id]} alt="" loading="lazy" />
