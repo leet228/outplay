@@ -87,9 +87,9 @@
  * just like the 1W reference. */
 .plinko-game-area {
   position: absolute;
-  width: min(70%, 280px);
-  aspect-ratio: 6 / 5;
-  top: 8%;
+  width: min(82%, 320px);
+  aspect-ratio: 1 / 1;
+  top: 6%;
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;

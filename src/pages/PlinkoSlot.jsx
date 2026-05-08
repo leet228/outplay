@@ -77,7 +77,7 @@ function rollPath() {
 // photo, not 2). PEG_HFRAC gives the pegs more breathing room — at
 // 0.85 the gaps between pegs in any row are visibly wider than the
 // previous tight 0.64 layout.
-const PEG_HFRAC  = 0.85   // peg/ball span (fraction of game-area width)
+const PEG_HFRAC  = 1.00   // peg/ball span (fraction of game-area width)
 const SLOT_HFRAC = 1.05   // slot row span relative to game-area
 
 function compressX(local, frac) {
