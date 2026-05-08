@@ -72,12 +72,11 @@ CREATE OR REPLACE FUNCTION feed_insert_fake()
 RETURNS VOID LANGUAGE plpgsql VOLATILE
 AS $$
 DECLARE
-  v_games TEXT[][] := ARRAY[
-    ARRAY['tower-stack',    'Tower Stack'],
-    ARRAY['tetris-cascade', 'Block Blast'],
-    ARRAY['rocket',         'Rocket'],
-    ARRAY['plinko',         'Plinko']
-  ];
+  -- Parallel 1-D arrays — Postgres pl/pgsql plays nicer with these
+  -- than with a TEXT[][] 2-D one (where array_length / [i][j] indexing
+  -- can blow up if the literal isn't strictly rectangular).
+  v_game_ids    TEXT[] := ARRAY['tower-stack', 'tetris-cascade', 'rocket',  'plinko'];
+  v_game_labels TEXT[] := ARRAY['Tower Stack', 'Block Blast',    'Rocket',  'Plinko'];
   v_bets INTEGER[] := ARRAY[10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000];
   v_game_idx INTEGER;
   v_game_id  TEXT;
@@ -85,8 +84,8 @@ DECLARE
   v_is_loss  BOOLEAN;
   r          NUMERIC;
 BEGIN
-  v_game_idx := 1 + floor(random() * array_length(v_games, 1))::INT;
-  v_game_id  := v_games[v_game_idx][1];
+  v_game_idx := 1 + floor(random() * array_length(v_game_ids, 1))::INT;
+  v_game_id  := v_game_ids[v_game_idx];
 
   -- Plinko never shows a loss; other games still get 60 % losses.
   v_is_loss := (v_game_id <> 'plinko') AND (random() < 0.60);
@@ -116,7 +115,7 @@ BEGIN
     user_name, avatar_emoji, game_id, game_label, amount_rub, is_fake
   ) VALUES (
     'Outplay', '🎰',
-    v_games[v_game_idx][1], v_games[v_game_idx][2],
+    v_game_ids[v_game_idx], v_game_labels[v_game_idx],
     v_amount, true
   );
 END;

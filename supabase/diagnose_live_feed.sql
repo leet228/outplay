@@ -3,6 +3,9 @@
 -- Supabase SQL Editor shows only the LAST result of a multi-statement
 -- script, so we squash everything into one UNION result.
 -- =============================================
+-- TIP: if cron_last_status = 'failed', also run the second query at
+-- the very bottom of this file separately to see the full error
+-- message (Supabase truncates wide cells in the result table).
 
 WITH
   cron_installed AS (
@@ -57,3 +60,13 @@ SELECT
   (SELECT most_recent FROM recent_events)        AS most_recent_event,
   (SELECT version     FROM trigger_check)        AS trigger_version,
   (SELECT published   FROM realtime_check)       AS realtime_publishing;
+
+-- ───── If cron is failing: select THIS one and run separately ─────
+-- Last 3 cron failures with the FULL untruncated error text. Click
+-- a single cell in the result to see the whole message.
+SELECT start_time, return_message AS full_error
+FROM cron.job_run_details
+WHERE jobid IN (SELECT jobid FROM cron.job WHERE jobname = 'live-feed-fake')
+  AND status = 'failed'
+ORDER BY start_time DESC
+LIMIT 3;
