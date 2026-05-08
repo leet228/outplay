@@ -1078,6 +1078,35 @@ export async function finishTetrisRound(roundId, payoutRub) {
   return data
 }
 
+// ── Plinko RPCs ────────────────────────────
+// Server is a pass-through:
+//   start_plinko_round  — atomic stake×ballsCount debit. Returns
+//                         { round_id, balance, balls_count,
+//                           deficit_active }.
+//   finish_plinko_round — accepts the client's claimed total payout
+//                         for the launch (sum of all balls). Caps at
+//                         balls_count × stake × 10000 (theoretical max)
+//                         + 1 000 000 ₽ absolute. Applies the deficit
+//                         circuit breaker.
+export async function startPlinkoRound(userId, stakeRub, ballsCount = 1) {
+  const { data, error } = await supabase.rpc('start_plinko_round', {
+    p_user_id: userId,
+    p_stake_rub: stakeRub,
+    p_balls_count: ballsCount,
+  })
+  if (error) { console.error('startPlinkoRound error:', error); return { error: error.message } }
+  return data
+}
+
+export async function finishPlinkoRound(roundId, totalPayoutRub) {
+  const { data, error } = await supabase.rpc('finish_plinko_round', {
+    p_round_id: roundId,
+    p_payout_rub: Math.max(0, Math.round(totalPayoutRub || 0)),
+  })
+  if (error) { console.error('finishPlinkoRound error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Admin: slot stats ───────────────────────
 export async function adminGetSlotStats() {
   const { data, error } = await supabase.rpc('admin_get_slot_stats')

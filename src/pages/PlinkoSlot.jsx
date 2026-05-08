@@ -5,6 +5,7 @@ import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
+import { startPlinkoRound, finishPlinkoRound } from '../lib/supabase'
 import './PlinkoSlot.css'
 
 // ─────────────────────────────────────────────────────────────
@@ -140,6 +141,19 @@ export default function PlinkoSlot() {
   const autoRef           = useRef(autoSpin)
   const cancelRef         = useRef(false)
 
+  // Server-round bookkeeping. currentRoundRef holds the server's
+  // round descriptor for the active launch; ballsLandedRef counts
+  // how many of the launch's N balls have completed their fall so we
+  // know when to finalize. finalizingRef gates new launches while a
+  // finishPlinkoRound RPC is mid-flight (otherwise a fast click could
+  // start a new round before the previous one's payout is committed).
+  const currentRoundRef     = useRef(null)
+  const ballsLandedRef      = useRef(0)
+  const ballsExpectedRef    = useRef(0)
+  const launchTotalWinRef   = useRef(0)
+  const finalizingRef       = useRef(false)
+  const [finalizing, setFinalizing] = useState(false)
+
   useEffect(() => { balanceRef.current        = balance },        [balance])
   useEffect(() => { stakeRef.current          = stake },          [stake])
   useEffect(() => { riskRef.current           = risk },           [risk])
@@ -212,6 +226,8 @@ export default function PlinkoSlot() {
   }
 
   // Animate one ball through the peg field. Self-cleans on landing.
+  // Tracks against ballsLandedRef / ballsExpectedRef and triggers the
+  // launch finalize once the last ball settles.
   async function animateBall() {
     if (cancelRef.current) return
     const id = `b${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -220,8 +236,7 @@ export default function PlinkoSlot() {
     const currentStake = stakeRef.current
 
     setBalls(prev => [...prev, { id, row: 0, col: 0 }])
-    await sleep(140)   // entry "hover" beat — the ball is briefly
-                       // visible at the spawn point before falling.
+    await sleep(140)
 
     for (let r = 1; r <= ROWS; r++) {
       if (cancelRef.current) return
@@ -230,7 +245,7 @@ export default function PlinkoSlot() {
     }
     if (cancelRef.current) return
 
-    // Pay
+    // Pay (optimistic local credit — server reconciles at finalize).
     const mul = MULTIPLIERS[currentRisk][landing]
     const win = Math.round(currentStake * mul)
     if (win > 0) {
@@ -241,6 +256,7 @@ export default function PlinkoSlot() {
       setTimeout(() => setBalanceBounce(false), 500)
     }
     setLaunchWin(prev => prev + win)
+    launchTotalWinRef.current += win
     flashSlot(landing)
 
     if (mul >= 1) haptic('success')
@@ -249,13 +265,55 @@ export default function PlinkoSlot() {
     // Briefly hold the ball at the slot, then remove from grid.
     await sleep(180)
     setBalls(prev => prev.filter(b => b.id !== id))
+
+    // Track landings — when the last ball of the launch settles, fire
+    // the server finalize.
+    ballsLandedRef.current++
+    if (ballsLandedRef.current >= ballsExpectedRef.current) {
+      finalizeLaunch()
+    }
+  }
+
+  // Finalize the active launch on the server (real users only).
+  // Reconciles the client's optimistic balance with the server's
+  // authoritative number — server caps the payout and applies the
+  // deficit breaker, so the credited amount may be less than the
+  // client claimed.
+  async function finalizeLaunch() {
+    const round = currentRoundRef.current
+    if (!round) return
+    currentRoundRef.current = null
+    const total = launchTotalWinRef.current
+    launchTotalWinRef.current = 0
+    ballsLandedRef.current = 0
+    ballsExpectedRef.current = 0
+
+    const rid = round.round_id
+    if (typeof rid !== 'string' || rid.startsWith('dev-')) return
+
+    finalizingRef.current = true
+    setFinalizing(true)
+    try {
+      const res = await finishPlinkoRound(rid, total)
+      if (res && typeof res.balance === 'number' && !cancelRef.current) {
+        setBalance(res.balance)
+        balanceRef.current = res.balance
+      }
+    } finally {
+      finalizingRef.current = false
+      setFinalizing(false)
+    }
   }
 
   // One launch = ballsPerLaunch independent balls dropped with a small
-  // spawn stagger. Cost is debited once up-front, each ball credits its
-  // own win on landing.
-  function dropLaunch() {
+  // spawn stagger. Server flow:
+  //   real user → start_plinko_round debits stake×N, returns round_id
+  //   dev user  → mock round_id, balance handled locally
+  // Each ball animates independently and credits its win optimistically;
+  // finalizeLaunch runs after the LAST ball lands.
+  async function dropLaunch() {
     if (cancelRef.current) return
+    if (finalizingRef.current) return  // wait for previous finalize
     const N = ballsPerLaunchRef.current
     const cost = stakeRef.current * N
     if (balanceRef.current < cost) {
@@ -263,11 +321,37 @@ export default function PlinkoSlot() {
       return
     }
 
-    {
+    const isDev = !user || user.id === 'dev'
+    let round
+    if (isDev) {
+      // Local — debit balance, fake a round id.
       const next = balanceRef.current - cost
       balanceRef.current = next
       setBalance(next)
+      round = {
+        ok: true,
+        round_id: `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        balance: next,
+        balls_count: N,
+        deficit_active: false,
+      }
+    } else {
+      const res = await startPlinkoRound(user.id, stakeRef.current, N)
+      if (cancelRef.current) return
+      if (!res || res.error || !res.ok) {
+        console.error('startPlinkoRound failed:', res)
+        setAutoSpin(false); autoRef.current = false
+        return
+      }
+      round = res
+      setBalance(round.balance)
+      balanceRef.current = round.balance
     }
+
+    currentRoundRef.current = round
+    ballsLandedRef.current  = 0
+    ballsExpectedRef.current = N
+    launchTotalWinRef.current = 0
     setLaunchWin(0)
     haptic('light')
 
@@ -278,16 +362,20 @@ export default function PlinkoSlot() {
   }
 
   // Auto-loop: chains launches as long as auto is on and balance allows.
-  // Wait for the launch's spawn phase + a small gap before firing the
-  // next so balls stack up gradually rather than instantly all at once.
   async function autoLoop() {
     while (autoRef.current && !cancelRef.current) {
+      // Wait out any in-flight finalize before firing the next launch
+      // so previous round's payout is committed first.
+      while (finalizingRef.current && !cancelRef.current && autoRef.current) {
+        await sleep(60)
+      }
+      if (!autoRef.current || cancelRef.current) break
       const cost = stakeRef.current * ballsPerLaunchRef.current
       if (balanceRef.current < cost) {
         setAutoSpin(false); autoRef.current = false
         break
       }
-      dropLaunch()
+      await dropLaunch()
       const N = ballsPerLaunchRef.current
       const stagger = N <= 10 ? 80 : N <= 50 ? 35 : 14
       const launchSpawnTime = N * stagger
@@ -300,6 +388,7 @@ export default function PlinkoSlot() {
       setAutoSpin(false); autoRef.current = false
       return
     }
+    if (finalizingRef.current) return
     if (!canAfford) return
     dropLaunch()
   }
@@ -309,6 +398,7 @@ export default function PlinkoSlot() {
       setAutoSpin(false); autoRef.current = false
       return
     }
+    if (finalizingRef.current) return
     if (!canAfford) return
     setAutoSpin(true); autoRef.current = true
     autoLoop()

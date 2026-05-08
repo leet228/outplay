@@ -20,6 +20,9 @@ const SLOT_ICONS = {
   'tower-stack':    iconTowerStack,
   'tetris-cascade': iconTetrisCascade,
   'rocket':         iconRocket,
+  // TODO: dedicated Plinko PNG asset. Falls back to the Rocket art
+  // for now so the feed row still has an icon when a Plinko event lands.
+  'plinko':         iconRocket,
 }
 
 /**
