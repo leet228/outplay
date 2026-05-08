@@ -70,24 +70,24 @@
 /* Board area — pegs + ball + slot row sit in here. The peg field is
  * held to the top portion of the board (its container caps at
  * `bottom: SLOT_ROW_PX`) so the slot row underneath has a real strip
- * of breathing room — that's the "smaller field" the user asked for:
- * same number of peg rows, just compressed vertically so the slot
- * labels can be tall + horizontal. */
+ * of breathing room. The user asked for the field to be smaller in
+ * both dimensions — pegs use only 78 % of the width via JS positioning
+ * and the bottom 44 px is reserved for the slot row. */
 .plinko-board {
   position: absolute;
   inset: 16px 10px 14px;
   pointer-events: none;
-  --plinko-slot-row-h: 38px;
+  --plinko-slot-row-h: 44px;
 }
 
-/* ── Pegs — full-board container so ball positioning percentages
- * align with peg positions. The slot row covers the bottom strip
- * via its own absolute positioning; rowNormY(15) ≈ 94 % means the
- * last peg row sits just at / inside the top of the slot row, which
- * looks like the pegs are gating the slots (Stake-style funnel). */
+/* ── Pegs container — the upper strip of the board, capped at the
+ * top of the slot row. JS pegs use top: rowNormY(r) × 100% which
+ * is 100 % of THIS container, not of the board. Same calc lives on
+ * the ball's CSS top (with calc(...)) so pegs and ball stay locked
+ * to the same coordinate space. */
 .plinko-pegs {
   position: absolute;
-  inset: 0;
+  inset: 0 0 var(--plinko-slot-row-h, 44px) 0;
 }
 
 .plinko-peg {
@@ -128,19 +128,20 @@
   pointer-events: none;
 }
 
-/* ── Landing slots row — pinned to the bottom of the board with a
- * fixed pixel height (--plinko-slot-row-h). Tall enough to host a
- * comfortable label, narrow enough that the pegs above still get most
- * of the vertical space. */
+/* ── Landing slots row — wider than the peg field above (92 % of the
+ * board vs 78 % for pegs), so each slot has comfortable room for its
+ * label. Pinned to bottom: 0 with a fixed height matching the JS
+ * --plinko-slot-row-h so the peg container above caps at the same
+ * line. */
 .plinko-slots {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 4%;
+  right: 4%;
   bottom: 0;
-  height: var(--plinko-slot-row-h, 38px);
+  height: var(--plinko-slot-row-h, 44px);
   display: grid;
   grid-template-columns: repeat(17, 1fr);
-  gap: 1px;
+  gap: 2px;
   align-items: stretch;
 }
 
@@ -149,11 +150,8 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  border-radius: 6px;
-  /* Bigger and clamped tighter — labels read horizontally on every
-   * viewport. Letter-spacing is slightly negative so "×10K" stays
-   * visually compact in the narrow phone slot. */
-  font-size: clamp(9px, 2.4vw, 12px);
+  border-radius: 8px;
+  font-size: clamp(10px, 2.6vw, 13px);
   font-weight: 800;
   color: #fff;
   border: 1px solid rgba(0, 0, 0, 0.45);
@@ -166,12 +164,21 @@
 }
 
 .plinko-slot-mul {
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
   white-space: nowrap;
   max-width: 100%;
   text-align: center;
+}
+/* Tiny "×" pseudo before the number — kept as a hairline accent so
+ * the label still reads as a multiplier, but it doesn't eat the
+ * pixel budget the actual digits need. */
+.plinko-slot-mul::before {
+  content: '×';
+  font-size: 0.78em;
+  margin-right: 0.5px;
+  opacity: 0.7;
 }
 
 /* All-blue tier palette. Brightness climbs with the multiplier; the

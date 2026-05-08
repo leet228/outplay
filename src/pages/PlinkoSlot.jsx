@@ -71,16 +71,40 @@ function rollPath() {
   return { path, landing: k }
 }
 
-// Geometry — ball / peg positions are board-space percentages, scaled
-// at render time by the actual stage box. The slot row lives inside
-// the board pinned to bottom: 0 with a fixed pixel height, so we
-// stretch the peg distribution across (ROWS + 1) instead of (ROWS + 2)
-// — last peg row lands just above the slots and the ball's final
-// rowNormY(ROWS - 0.5) puts it visually in the centre of the slot it
-// landed in.
-function ballNormX(r, k) { return 0.5 + (k - r / 2) / (ROWS + 1) }
-function rowNormY(r)     { return (r + 1) / (ROWS + 1) }
-function pegNormX(r, p)  { return 0.5 + (p - r / 2) / (ROWS + 1) }
+// ─── Geometry ───────────────────────────────────────────────────
+// Peg field is COMPRESSED (uses ~78 % of board width) so the slot row
+// underneath has comfortable horizontal space for its labels. At the
+// final row (r = ROWS) the ball "splashes out" from the narrow funnel
+// to the wider slot grid — same shape as a real Plinko machine where
+// the slot opening is wider than the peg arrangement above it.
+//
+// Vertical: peg rows fill the FULL pegs container (which is itself
+// shorter than the board, leaving the bottom strip for the slot row
+// — see `.plinko-pegs` inset in PlinkoSlot.css). The CSS variable
+// --plinko-slot-row-h drives both the slot row height and the ball's
+// "drop into slot" final-row top via calc() in the JSX.
+const PEG_FIELD_WIDTH  = 0.78  // peg/ball span this fraction of board width
+const SLOT_FIELD_WIDTH = 0.92  // slot grid span (matches CSS .plinko-slots inset)
+
+function compressX(local, frac) {
+  return 0.5 + (local - 0.5) * frac
+}
+
+function ballNormX(r, k) {
+  const local = 0.5 + (k - r / 2) / (ROWS + 1)
+  // At the final row the ball lands in the (wider) slot grid.
+  return compressX(local, r === ROWS ? SLOT_FIELD_WIDTH : PEG_FIELD_WIDTH)
+}
+
+// rowNormY is now a 0..1 fraction of the PEGS container (the upper
+// strip of the board, minus the slot row at bottom). r = 0 is at the
+// top edge, r = ROWS - 1 is at the bottom edge (right above slots).
+function rowNormY(r) { return r / (ROWS - 1) }
+
+function pegNormX(pegArg, p) {
+  const local = 0.5 + (p - pegArg / 2) / (ROWS + 1)
+  return compressX(local, PEG_FIELD_WIDTH)
+}
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
@@ -333,27 +357,50 @@ export default function PlinkoSlot() {
               })}
             </div>
 
-            {/* Balls — many can be in flight at once when ballsPerLaunch > 1. */}
-            {balls.map(ball => (
-              <span
-                key={ball.id}
-                className="plinko-ball"
-                style={{
-                  left: `${ballNormX(ball.row, ball.col) * 100}%`,
-                  top:  `${ball.row === 0 ? 0 : rowNormY(ball.row - 0.5) * 100}%`,
-                }}
-                aria-hidden="true"
-              />
-            ))}
+            {/* Balls — many can be in flight at once when ballsPerLaunch > 1.
+             *
+             * Ball y is computed as a fraction of the pegs-container
+             * height via calc(): pegs container is the board minus the
+             * slot-row strip at bottom, so calc(frac × (100% − slot-h))
+             * keeps the ball in lock-step with the peg rows.
+             *
+             * On the final row (r = ROWS), the ball is positioned
+             * IN the slot row (calc(100% − slot-h / 2)) — a nice
+             * "drop into slot" landing once the funnel has done its job. */}
+            {balls.map(ball => {
+              let topCss
+              if (ball.row === 0) {
+                topCss = '0px'
+              } else if (ball.row === ROWS) {
+                topCss = 'calc(100% - var(--plinko-slot-row-h, 44px) / 2)'
+              } else {
+                const frac = rowNormY(ball.row - 0.5)
+                topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 44px)))`
+              }
+              return (
+                <span
+                  key={ball.id}
+                  className="plinko-ball"
+                  style={{
+                    left: `${ballNormX(ball.row, ball.col) * 100}%`,
+                    top:  topCss,
+                  }}
+                  aria-hidden="true"
+                />
+              )
+            })}
 
-            {/* Landing slots — one row of multiplier buckets. */}
+            {/* Landing slots — one row of multiplier buckets.
+             * Label is just the formatted number now (no "×" prefix) —
+             * "×10K" was overflowing the narrow slots on phone, dropping
+             * the prefix saves ~25 % horizontal width per cell. */}
             <div className="plinko-slots" aria-hidden="true">
               {mults.map((mul, k) => (
                 <span
                   key={`slot-${k}`}
                   className={`plinko-slot plinko-slot--tier${tierFor(mul)} ${hitSlots[k] ? 'is-hit' : ''}`}
                 >
-                  <span className="plinko-slot-mul">×{formatMul(mul)}</span>
+                  <span className="plinko-slot-mul">{formatMul(mul)}</span>
                 </span>
               ))}
             </div>
