@@ -303,10 +303,19 @@ export default function PlinkoSlot() {
         <main className="plinko-stage" aria-label="Plinko">
           <div className="plinko-bg" />
           <div className="plinko-board">
-            {/* Pegs — triangular grid, rows 0..ROWS-1, row r has r+2 pegs */}
+            {/* Pegs — triangular grid. Row r has r+2 pegs, EXCEPT the
+             * last row which gets r+3 (= ROWS+2 = 18) pegs spread across
+             * the full board width at p / (ROWS + 1) positions. With
+             * 18 pegs in the last row, each pair frames exactly one slot
+             * → slots visually sit "in the gaps" between pegs as the
+             * user expected, instead of having a peg sat ON every slot
+             * centre. Ball physics still resolves at half-integer / 17
+             * positions on row 16, which lands between the 18 last-row
+             * pegs (i.e., in the slot centre). */}
             <div className="plinko-pegs" aria-hidden="true">
               {Array.from({ length: ROWS }).map((_, r) => {
-                const pegsInRow = r + 2
+                const pegsInRow = r === ROWS - 1 ? r + 3 : r + 2
+                const pegArg    = pegsInRow - 1
                 return (
                   <React.Fragment key={`prow-${r}`}>
                     {Array.from({ length: pegsInRow }).map((__, p) => (
@@ -314,7 +323,7 @@ export default function PlinkoSlot() {
                         key={`peg-${r}-${p}`}
                         className="plinko-peg"
                         style={{
-                          left: `${pegNormX(r + 1, p) * 100}%`,
+                          left: `${pegNormX(pegArg, p) * 100}%`,
                           top:  `${rowNormY(r) * 100}%`,
                         }}
                       />
