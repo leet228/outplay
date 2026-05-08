@@ -36,6 +36,12 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* 3D rolodex-style stage. Perspective + preserve-3d on the parent
+   * lets each row use its own rotateX without flattening, so new rows
+   * "wheel in" from above and exiting rows "fall away" downward — the
+   * iOS picker / slot-reel feel the user asked for. */
+  perspective: 720px;
+  transform-style: preserve-3d;
   /* Promote to its own compositor layer so child transforms don't
    * bubble up into expensive parent repaints. */
   transform: translateZ(0);
@@ -52,26 +58,32 @@
   border-radius: 14px;
   background: var(--surface, #1c1c1e);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  /* Smooth fade-in on mount. Pure opacity, no translate — feels
-   * calmer than a slide. `both` keeps the start frame so the row
-   * never flashes fully opaque before animating. */
-  animation: live-feed-fade-in 0.7s ease-out both;
-  will-change: opacity;
+  /* Each row is its own 3D plane on the wheel. transform-origin at
+   * the TOP edge — newcomers pivot down out of the upper rim, exiting
+   * rows pivot down past the lower rim. */
+  transform-origin: 50% 0%;
+  backface-visibility: hidden;
+  animation: live-feed-wheel-in 0.55s cubic-bezier(0.32, 1.4, 0.4, 1) both;
+  will-change: transform, opacity;
 }
 
-@keyframes live-feed-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+@keyframes live-feed-wheel-in {
+  0%   { opacity: 0; transform: translateZ(-40px) rotateX(-78deg); }
+  60%  { opacity: 1; transform: translateZ(0)     rotateX(8deg); }
+  100% { opacity: 1; transform: translateZ(0)     rotateX(0deg); }
 }
 
 .live-feed-row.is-leaving {
-  animation: live-feed-fade-out 0.7s ease-out forwards;
+  animation: live-feed-wheel-out 0.55s cubic-bezier(0.5, 0, 0.7, 0.6) forwards;
   pointer-events: none;
+  /* Pivot from the BOTTOM edge for exit — looks like the row tips
+   * forward and falls behind the stage. */
+  transform-origin: 50% 100%;
 }
 
-@keyframes live-feed-fade-out {
-  from { opacity: 1; }
-  to   { opacity: 0; }
+@keyframes live-feed-wheel-out {
+  0%   { opacity: 1; transform: translateZ(0)     rotateX(0deg); }
+  100% { opacity: 0; transform: translateZ(-40px) rotateX(78deg); }
 }
 
 .live-feed-row.is-win {
