@@ -235,25 +235,25 @@ export default function PlinkoSlot() {
   }
 
   function onDropClick() {
-    if (isBusy) {
-      // mid-flight click → toggle auto if user wants to stop chain
-      if (autoSpin) { setAutoSpin(false); autoRef.current = false }
-      return
-    }
+    // Auto-stop toggle is ALWAYS allowed, even while a ball is mid-air.
+    // The auto-chain only schedules another drop when autoRef.current is
+    // still true at the check point in dropOne().
     if (autoSpin) {
       setAutoSpin(false); autoRef.current = false
       return
     }
+    if (isBusy) return
     if (!canPlay) return
     dropOne()
   }
 
   function onAutoClick() {
-    if (isBusy) return
+    // Always allow stopping the auto chain — even mid-flight.
     if (autoSpin) {
       setAutoSpin(false); autoRef.current = false
       return
     }
+    if (isBusy) return
     if (!canPlay) return
     setAutoSpin(true); autoRef.current = true
     dropOne()

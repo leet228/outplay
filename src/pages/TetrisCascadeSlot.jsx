@@ -952,24 +952,29 @@ export default function TetrisCascadeSlot() {
   }
 
   function onSpinClick() {
-    if (isBusy) return
-    if (isBonus) return // Bonus drives itself
-    if (finalizingRef.current) return // wait for previous finalize RPC
+    // Auto-stop toggle is ALWAYS allowed, even mid-spin / mid-bonus /
+    // during the finalize RPC. Users want to be able to halt an auto
+    // chain at any moment; the chain itself only starts another spin
+    // when autoRef.current is true at the check point in runSpin().
     if (autoSpin) {
       setAutoSpin(false); autoRef.current = false
       return
     }
+    if (isBusy) return
+    if (isBonus) return // Bonus drives itself
+    if (finalizingRef.current) return // wait for previous finalize RPC
     if (!canPlay) return
     runSpin()
   }
 
   function onAutoSpinClick() {
-    if (isBusy || isBonus) return
-    if (finalizingRef.current) return // wait for previous finalize RPC
+    // Always allow stopping the auto chain — even mid-spin / mid-bonus.
     if (autoSpin) {
       setAutoSpin(false); autoRef.current = false
       return
     }
+    if (isBusy || isBonus) return
+    if (finalizingRef.current) return // wait for previous finalize RPC
     if (!canPlay) return
     setAutoSpin(true); autoRef.current = true
     runSpin()
@@ -1231,7 +1236,7 @@ export default function TetrisCascadeSlot() {
               type="button"
               className={`tetris-spin-btn ${isBusy ? 'is-busy' : ''} ${autoSpin ? 'is-auto' : ''}`}
               onClick={onSpinClick}
-              disabled={(!canPlay && !autoSpin) || isBonus}
+              disabled={!autoSpin && (!canPlay || isBonus)}
               aria-label={autoSpin ? t.slotTetrisStop : t.slotTetrisSpin}
             >
               {isBusy ? (
@@ -1253,7 +1258,7 @@ export default function TetrisCascadeSlot() {
               type="button"
               className={`tetris-auto-btn ${autoSpin ? 'is-auto' : ''}`}
               onClick={onAutoSpinClick}
-              disabled={(isBusy && !autoSpin) || isBonus}
+              disabled={!autoSpin && (isBusy || isBonus)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 {autoSpin ? (
