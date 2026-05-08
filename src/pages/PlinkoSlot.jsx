@@ -212,8 +212,15 @@ export default function PlinkoSlot() {
     }
   }, [balance, stake, autoSpin])
 
+  // Lock stake / risk / balls-per-launch while a launch is in flight
+  // (balls still falling) OR while we're waiting for the server's
+  // finalize RPC to commit. Otherwise the user could change parameters
+  // mid-launch and the running balls would be cleared by the new
+  // dropLaunch() before settling, eating their bonus payout.
+  const launchLocked = balls.length > 0 || finalizing || autoSpin
+
   function changeStake(direction) {
-    if (autoSpin) return
+    if (launchLocked) return
     const nextIndex = Math.max(0, Math.min(BETS.length - 1, stakeIndex + direction))
     if (nextIndex === stakeIndex) return
     if (direction > 0 && BETS[nextIndex] > balance) return
@@ -222,7 +229,7 @@ export default function PlinkoSlot() {
   }
 
   function changeRisk(direction) {
-    if (autoSpin) return
+    if (launchLocked) return
     const idx = RISK_LEVELS.indexOf(risk)
     const next = (idx + direction + RISK_LEVELS.length) % RISK_LEVELS.length
     haptic('light')
@@ -230,7 +237,7 @@ export default function PlinkoSlot() {
   }
 
   function chooseBalls(n) {
-    if (autoSpin) return
+    if (launchLocked) return
     haptic('light')
     setBallsPerLaunch(n)
   }
@@ -431,9 +438,9 @@ export default function PlinkoSlot() {
     autoLoop()
   }
 
-  const stakeUpDisabled   = autoSpin || stakeIndex >= BETS.length - 1 ||
+  const stakeUpDisabled   = launchLocked || stakeIndex >= BETS.length - 1 ||
                             (BETS[stakeIndex + 1] !== undefined && BETS[stakeIndex + 1] > balance)
-  const stakeDownDisabled = autoSpin || stakeIndex <= 0
+  const stakeDownDisabled = launchLocked || stakeIndex <= 0
   const winLabel = launchWin > 0 ? `+${formatCurrency(launchWin, currency, rates)}` : null
 
   return (
@@ -529,7 +536,7 @@ export default function PlinkoSlot() {
                 type="button"
                 className={`plinko-launch-btn ${ballsPerLaunch === n ? 'is-active' : ''}`}
                 onClick={() => chooseBalls(n)}
-                disabled={autoSpin}
+                disabled={launchLocked}
               >
                 {n}
               </button>
@@ -574,7 +581,7 @@ export default function PlinkoSlot() {
 
           <div className="plinko-stake-block">
             <div className="plinko-risk-row">
-              <button type="button" className="plinko-risk-step" onClick={() => changeRisk(-1)} disabled={autoSpin} aria-label="risk down">‹</button>
+              <button type="button" className="plinko-risk-step" onClick={() => changeRisk(-1)} disabled={launchLocked} aria-label="risk down">‹</button>
               <span className={`plinko-risk-label plinko-risk-label--${risk}`}>
                 <span className="plinko-risk-name">
                   {risk === 'low'  ? t.slotPlinkoRiskLowName
@@ -583,7 +590,7 @@ export default function PlinkoSlot() {
                 </span>
                 <span className="plinko-risk-suffix">{t.slotPlinkoRiskWord}</span>
               </span>
-              <button type="button" className="plinko-risk-step" onClick={() => changeRisk(1)} disabled={autoSpin} aria-label="risk up">›</button>
+              <button type="button" className="plinko-risk-step" onClick={() => changeRisk(1)} disabled={launchLocked} aria-label="risk up">›</button>
             </div>
             <div className="plinko-stake-row">
               <button type="button" className="plinko-stake-step" onClick={() => changeStake(-1)} disabled={stakeDownDisabled} aria-label="stake down">−</button>

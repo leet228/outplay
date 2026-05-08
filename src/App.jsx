@@ -462,7 +462,7 @@ export default function App() {
       }
       // ── Dev fallback ──
       setUser({ id: 'dev', first_name: 'Dev', username: 'dev', wins: 3, losses: 1, is_pro: true, pro_expires: new Date(Date.now() + 25 * 86400000).toISOString() })
-      setBalance(500)
+      setBalance(100000)
       store.setRank(1)
       store.setTotalPnl(575)
       store.setDailyStats([
