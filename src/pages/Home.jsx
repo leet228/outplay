@@ -14,6 +14,7 @@ import './Home.css'
 // Imported here so the home-page rocket card art styles ship with Home,
 // not just when the player opens the slot itself.
 import './RocketSlot.css'
+import './PlinkoSlot.css'
 import LiveFeed from '../components/LiveFeed'
 
 /* ── Icons ── */
@@ -1438,6 +1439,15 @@ const SLOTS = [
     shadow: '#581c87',
   },
   {
+    id: 'plinko',
+    category: 'quick',
+    titleKey: 'slotPlinkoTitle',
+    subKey: 'slotPlinkoSub',
+    route: '/slots/plinko',
+    accent: '#a855f7',
+    shadow: '#4c1d95',
+  },
+  {
     id: 'tetris-cascade',
     category: 'popular',
     titleKey: 'slotTetrisTitle',
@@ -1618,21 +1628,74 @@ function RocketSlotArtwork({ large = false, animated = false }) {
   )
 }
 
+// Plinko card art — triangular peg field with a "frozen mid-flight" ball
+// and a row of multiplier slots at the bottom. Animated variant adds a
+// soft pulse on the ball + slot lights.
+function PlinkoSlotArtwork({ large = false, animated = false }) {
+  // 6 visible peg rows for the card preview (real game uses 12 rows).
+  const ROWS_PREVIEW = 6
+  const pegs = []
+  for (let r = 0; r < ROWS_PREVIEW; r++) {
+    const pegsInRow = r + 2
+    for (let p = 0; p < pegsInRow; p++) {
+      // x in 0..1 across the card, centred
+      const x = 0.5 + (p - (r + 1) / 2) / (ROWS_PREVIEW + 1)
+      const y = (r + 1) / (ROWS_PREVIEW + 2.5)
+      pegs.push({ key: `${r}-${p}`, x, y })
+    }
+  }
+  // 7 multiplier slots at bottom (representative subset)
+  const slots = ['×9', '×2', '×1', '×0.5', '×1', '×2', '×9']
+  return (
+    <div className={`plinko-slot-card-art ${large ? 'plinko-slot-card-art--large' : ''} ${animated ? 'plinko-slot-card-art--animated' : ''}`} aria-hidden="true">
+      <span className="plinko-card-glow" />
+      <div className="plinko-card-pegs">
+        {pegs.map((p, i) => (
+          <span
+            key={p.key}
+            className="plinko-card-peg"
+            style={{
+              left: `${p.x * 100}%`,
+              top:  `${p.y * 100}%`,
+              ...(animated ? { animationDelay: `${(i % 9) * 0.12}s` } : {}),
+            }}
+          />
+        ))}
+      </div>
+      {/* Frozen ball mid-bounce, slightly off-centre to suggest motion */}
+      <span className="plinko-card-ball" />
+      <div className="plinko-card-slots">
+        {slots.map((s, i) => (
+          <span
+            key={i}
+            className={`plinko-card-slot plinko-card-slot--${i === 0 || i === slots.length - 1 ? 'hot' : (Math.abs(i - 3) <= 1 ? 'cold' : 'warm')}`}
+          >
+            {s}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function renderSlotArtwork(slot, opts = {}) {
   if (slot.id === 'tetris-cascade') return <TetrisSlotArtwork {...opts} />
   if (slot.id === 'rocket')         return <RocketSlotArtwork {...opts} />
+  if (slot.id === 'plinko')         return <PlinkoSlotArtwork {...opts} />
   return <TowerSlotArtwork {...opts} />
 }
 
 function slotKickerKey(id) {
   if (id === 'tetris-cascade') return 'slotTetrisKicker'
   if (id === 'rocket')         return 'slotRocketKicker'
+  if (id === 'plinko')         return 'slotPlinkoKicker'
   return 'slotTowerKicker'
 }
 
 function slotPreviewKey(id) {
   if (id === 'tetris-cascade') return 'slotTetrisPreview'
   if (id === 'rocket')         return 'slotRocketPreview'
+  if (id === 'plinko')         return 'slotPlinkoPreview'
   return 'slotTowerPreview'
 }
 

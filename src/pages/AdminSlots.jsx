@@ -39,6 +39,7 @@ const SLOT_LABELS = {
   'tower-stack': 'Tower Stack',
   'tetris-cascade': 'Tetris Cascade',
   'rocket': 'Rocket',
+  'plinko': 'Plinko',
 }
 
 export default function AdminSlots() {

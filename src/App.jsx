@@ -34,6 +34,7 @@ import Circle from './pages/Circle'
 import TowerStackSlot from './pages/TowerStackSlot'
 import TetrisCascadeSlot from './pages/TetrisCascadeSlot'
 import RocketSlot from './pages/RocketSlot'
+import PlinkoSlot from './pages/PlinkoSlot'
 
 // Disable browser scroll restoration globally — SPA handles it manually
 if ('scrollRestoration' in history) {
@@ -95,6 +96,7 @@ function Layout() {
         <Route path="/slots/tower-stack" element={<TowerStackSlot />} />
         <Route path="/slots/tetris-cascade" element={<TetrisCascadeSlot />} />
         <Route path="/slots/rocket" element={<RocketSlot />} />
+        <Route path="/slots/plinko" element={<PlinkoSlot />} />
         <Route path="/result" element={<Result />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="/guilds" element={<Guilds />} />
