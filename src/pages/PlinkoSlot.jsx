@@ -390,10 +390,10 @@ export default function PlinkoSlot() {
               )
             })}
 
-            {/* Landing slots — one row of multiplier buckets.
-             * Label is just the formatted number now (no "×" prefix) —
-             * "×10K" was overflowing the narrow slots on phone, dropping
-             * the prefix saves ~25 % horizontal width per cell. */}
+            {/* Landing slots — one row of multiplier buckets. Label is
+             * the formatted number only (no "×" prefix or pseudo),
+             * because at 17 slots × ~22 px on phone there's only room
+             * for the digits themselves. */}
             <div className="plinko-slots" aria-hidden="true">
               {mults.map((mul, k) => (
                 <span
