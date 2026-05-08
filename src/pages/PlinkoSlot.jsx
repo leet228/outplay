@@ -195,6 +195,7 @@ export default function PlinkoSlot() {
   function flashSlot(idx) {
     const ts = Date.now() + Math.random()
     setHitSlots(prev => ({ ...prev, [idx]: ts }))
+    // Match the 0.28 s CSS animation duration on .plinko-slot.is-hit.
     setTimeout(() => {
       setHitSlots(prev => {
         if (prev[idx] !== ts) return prev
@@ -202,7 +203,7 @@ export default function PlinkoSlot() {
         delete next[idx]
         return next
       })
-    }, 700)
+    }, 280)
   }
 
   // Animate one ball through the peg field. Self-cleans on landing.
