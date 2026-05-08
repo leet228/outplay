@@ -3,60 +3,49 @@
 -- Run AFTER fix_feed_insert_fake_now.sql
 -- =============================================
 --
--- The previous schedule was a flat "1 fake every 4 seconds" tick,
--- which felt too metronomic. The user wants fake events to spawn at
--- a JITTERED interval, anywhere from 0.5 to 1.5 seconds apart.
+-- Goal: fake events spawn at irregular intervals between 0.5 and 1.5
+-- seconds, not on a metronomic 4-second beat.
 --
--- pg_cron's minimum tick is sub-second on Supabase but the natural
--- way to express "fire at irregular gaps" is to:
---   1. Track the next-target firing time in a tiny state table.
---   2. Have a fast (250 ms) cron tick check whether NOW() >= target.
---   3. When it does fire, randomise the next target 0.5-1.5 s out.
+-- pg_cron on Supabase requires interval >= 1 second, so we can't tick
+-- below that. Instead each cron tick pre-sleeps a random 0-500 ms
+-- before inserting. With ticks aligned to 1 s boundaries, the
+-- effective gap between consecutive INSERTs is:
 --
--- Average gap ≈ 1 s, never less than 0.5 s, never more than 1.5 s.
+--   (1 s + random_b) - (0 s + random_a)
+--      with random_a, random_b ∈ [0, 0.5 s] uniform
+--
+--   → gap is uniform in [0.5 s, 1.5 s], avg 1 s.
+--
+-- Cleanup: drops the unused feed_fake_state table left over from the
+-- previous draft of this migration.
 
--- ── 1. Tiny state table (single row) ─────────────────────────────
-CREATE TABLE IF NOT EXISTS feed_fake_state (
-  id            INTEGER     PRIMARY KEY DEFAULT 1,
-  next_fire_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-INSERT INTO feed_fake_state (id, next_fire_at)
-  VALUES (1, NOW())
-  ON CONFLICT (id) DO NOTHING;
-
-
--- ── 2. Tick wrapper that respects the random next-fire target ────
+-- ── 1. Tick wrapper with pre-insert jitter ───────────────────────
 CREATE OR REPLACE FUNCTION feed_fake_tick()
 RETURNS VOID
 LANGUAGE plpgsql VOLATILE
 AS $$
-DECLARE
-  v_fire_at TIMESTAMPTZ;
 BEGIN
-  SELECT next_fire_at INTO v_fire_at FROM feed_fake_state WHERE id = 1 FOR UPDATE;
-
-  IF v_fire_at IS NULL OR v_fire_at <= NOW() THEN
-    PERFORM public.feed_insert_fake();
-
-    -- Random gap in [0.5, 1.5] seconds.
-    UPDATE feed_fake_state
-       SET next_fire_at = NOW() + ((0.5 + random()) * INTERVAL '1 second')
-     WHERE id = 1;
-  END IF;
+  -- Random 0-500 ms delay before the insert. Combined with the 1-s
+  -- cron cadence above, neighbouring inserts land 0.5-1.5 s apart.
+  PERFORM pg_sleep(random() * 0.5);
+  PERFORM public.feed_insert_fake();
 EXCEPTION WHEN OTHERS THEN
   PERFORM admin_log('warn', 'feed_fake_tick', SQLERRM, NULL);
 END;
 $$;
 
 
--- ── 3. Replace the cron job — fire 4 times a second, function gates ─
+-- ── 2. Replace the cron job at 1-second cadence ──────────────────
 DO $$ BEGIN PERFORM cron.unschedule('live-feed-fake'); EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 SELECT cron.schedule(
   'live-feed-fake',
-  '250 milliseconds',
+  '1 seconds',
   $$ SELECT public.feed_fake_tick() $$
 );
+
+
+-- ── 3. Drop the unused state table from the previous draft ───────
+DROP TABLE IF EXISTS feed_fake_state;
 
 NOTIFY pgrst, 'reload schema';
