@@ -185,16 +185,22 @@ export default function PlinkoSlot() {
 
     // Animate the ball through the path. CSS transitions handle the
     // smooth movement between waypoints; we just step the ball state.
+    // The 220 ms-per-step pacing matches the .plinko-ball CSS transition
+    // duration so the ball reaches each peg before the next waypoint
+    // is set — the cubic-bezier ease-in on `top` makes the visual fall
+    // accelerate like real gravity.
     setBall({ row: 0, col: 0 })
     haptic('light')
-    await sleep(60)
+    // Slight delay so the ball appears at the spawn point before the
+    // first row dispatch — gives the entry "drop in" feel.
+    await sleep(180)
 
     for (let r = 1; r <= ROWS; r++) {
       if (cancelRef.current) return
       setBall({ row: r, col: path[r] })
-      // small haptic kick on every other peg so the drop FEELS bouncy
+      // gentle haptic kick on every other peg — feels like real bounces
       if (r % 2 === 0) haptic('light')
-      await sleep(95)
+      await sleep(220)
     }
 
     // Settle into the slot
