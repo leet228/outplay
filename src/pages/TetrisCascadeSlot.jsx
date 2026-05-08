@@ -811,6 +811,25 @@ export default function TetrisCascadeSlot() {
 
     // ── Bonus trigger: sweep coins, celebrate, transition to bonus mode ──
     if (triggeredBonus) {
+      // CRITICAL: lock isBonus IMMEDIATELY (state + ref). The trigger
+      // celebration takes ~3 s; during that window isBusy goes false
+      // (phase='done') and without this lock the user could click Spin
+      // and start a new paid round — start_tetris_round would abort
+      // the still-pending trigger round on the server, throwing away
+      // the entire bonus payout. This is the "bonus winnings vanish
+      // after bonus" bug from the report.
+      setIsBonus(true)
+      isBonusRef.current = true
+      setFreeSpinsLeft(BONUS_FREE_SPINS)
+      freeSpinsLeftRef.current = BONUS_FREE_SPINS
+      setRage(0)
+      rageRef.current = 0
+      setForceNextI(false)
+      forceNextIRef.current = false
+      // Carry the trigger spin's natural win into the bonus accumulator
+      // so the server gets ONE finalize call with regular + bonus combined.
+      bonusAccruedRef.current = spinPayout
+
       const coinCellSet = new Set()
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
@@ -835,19 +854,6 @@ export default function TetrisCascadeSlot() {
       haptic('success')
       await sleep(2000)
       setBigText(null)
-
-      setIsBonus(true)
-      isBonusRef.current = true
-      setFreeSpinsLeft(BONUS_FREE_SPINS)
-      freeSpinsLeftRef.current = BONUS_FREE_SPINS
-      setRage(0)
-      rageRef.current = 0
-      setForceNextI(false)
-      forceNextIRef.current = false
-
-      // Carry the trigger spin's natural win into the bonus accumulator
-      // so the server gets ONE finalize call with regular + bonus combined.
-      bonusAccruedRef.current = spinPayout
 
       await sleep(450)
       runSpin(true)
@@ -1042,6 +1048,20 @@ export default function TetrisCascadeSlot() {
     setBalance(result.balance)
     balanceRef.current = result.balance
 
+    // CRITICAL: lock isBonus IMMEDIATELY so the user can't press Spin
+    // during the ~3 s buy-bonus celebration animation. Without this
+    // the new spin's start_tetris_round would abort the bought round
+    // server-side and the entire bonus payout would be lost.
+    setIsBonus(true)
+    isBonusRef.current = true
+    setFreeSpinsLeft(BONUS_FREE_SPINS)
+    freeSpinsLeftRef.current = BONUS_FREE_SPINS
+    setRage(0)
+    rageRef.current = 0
+    setForceNextI(false)
+    forceNextIRef.current = false
+    bonusAccruedRef.current = 0
+
     haptic('medium')
     setTotalWin(0)
     setCascadeStep(0)
@@ -1091,16 +1111,6 @@ export default function TetrisCascadeSlot() {
     await sleep(2000)
     setBigText(null)
 
-    setIsBonus(true)
-    isBonusRef.current = true
-    setFreeSpinsLeft(BONUS_FREE_SPINS)
-    freeSpinsLeftRef.current = BONUS_FREE_SPINS
-    setRage(0)
-    rageRef.current = 0
-    setForceNextI(false)
-    forceNextIRef.current = false
-
-    bonusAccruedRef.current = 0
     setTotalWin(0)
     setPhase('done')
 
@@ -1134,7 +1144,7 @@ export default function TetrisCascadeSlot() {
           </div>
         )}
 
-        <main className="tetris-stage" aria-label="Tetris Cascade">
+        <main className="tetris-stage" aria-label="Block Blast">
           <div className="tetris-bg" />
           <div className="tetris-grid" style={{ '--cols': COLS, '--rows': ROWS }}>
             {Array.from({ length: ROWS }).map((_, r) => (

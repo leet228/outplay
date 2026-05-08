@@ -37,7 +37,7 @@ function timeAgo(ts) {
 
 const SLOT_LABELS = {
   'tower-stack': 'Tower Stack',
-  'tetris-cascade': 'Tetris Cascade',
+  'tetris-cascade': 'Block Blast',
   'rocket': 'Rocket',
   'plinko': 'Plinko',
 }
