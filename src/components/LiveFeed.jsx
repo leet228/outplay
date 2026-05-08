@@ -6,7 +6,6 @@ import { formatCurrency } from '../lib/currency'
 import { getLiveFeed, subscribeLiveFeed } from '../lib/supabase'
 
 import iconTowerStack    from '../assets/games/tower_stack.png'
-import iconTetrisCascade from '../assets/games/tetris_cascade.png'
 import iconRocket        from '../assets/games/rocket.png'
 
 import './LiveFeed.css'
@@ -16,13 +15,60 @@ const VISIBLE_ROWS = 5
 // fade-out to play before they unmount.
 const STATE_BUFFER = VISIBLE_ROWS + 4
 
+// PNG icons for the slots that have art assets shipped with the app.
 const SLOT_ICONS = {
-  'tower-stack':    iconTowerStack,
-  'tetris-cascade': iconTetrisCascade,
-  'rocket':         iconRocket,
-  // TODO: dedicated Plinko PNG asset. Falls back to the Rocket art
-  // for now so the feed row still has an icon when a Plinko event lands.
-  'plinko':         iconRocket,
+  'tower-stack': iconTowerStack,
+  'rocket':      iconRocket,
+}
+
+// Inline SVG icons for slots that don't have a dedicated PNG yet.
+// Rendered directly in the live-feed-icon span instead of an <img>.
+function BlockBlastIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true">
+      <rect x="3"  y="3"  width="6"  height="6"  rx="1.2" fill="#3b82f6" />
+      <rect x="11" y="3"  width="6"  height="6"  rx="1.2" fill="#a855f7" />
+      <rect x="3"  y="11" width="6"  height="6"  rx="1.2" fill="#ec4899" />
+      <rect x="11" y="11" width="6"  height="6"  rx="1.2" fill="#fbbf24" />
+      <rect x="15" y="15" width="6"  height="6"  rx="1.2" fill="#22c55e" />
+    </svg>
+  )
+}
+
+function PlinkoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true">
+      <defs>
+        <linearGradient id="lf-plinko-bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stopColor="#1e3a8a" />
+          <stop offset="100%" stopColor="#0c0a18" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="24" height="24" rx="4" fill="url(#lf-plinko-bg)" />
+      {/* triangular peg field */}
+      <circle cx="12" cy="5"  r="0.9" fill="#cbd5e1" />
+      <circle cx="9"  cy="9"  r="0.9" fill="#cbd5e1" />
+      <circle cx="15" cy="9"  r="0.9" fill="#cbd5e1" />
+      <circle cx="6"  cy="13" r="0.9" fill="#cbd5e1" />
+      <circle cx="12" cy="13" r="0.9" fill="#cbd5e1" />
+      <circle cx="18" cy="13" r="0.9" fill="#cbd5e1" />
+      {/* slot row */}
+      <rect x="3"  y="18" width="4"  height="3" rx="0.6" fill="#3b82f6" />
+      <rect x="8"  y="18" width="4"  height="3" rx="0.6" fill="#60a5fa" />
+      <rect x="13" y="18" width="4"  height="3" rx="0.6" fill="#3b82f6" />
+      <rect x="18" y="18" width="3"  height="3" rx="0.6" fill="#1d4ed8" />
+      {/* falling ball */}
+      <circle cx="11.5" cy="10.5" r="1.4" fill="#fff" />
+    </svg>
+  )
+}
+
+function renderSlotIcon(gameId) {
+  if (gameId === 'tetris-cascade') return <BlockBlastIcon />
+  if (gameId === 'plinko')         return <PlinkoIcon />
+  const png = SLOT_ICONS[gameId]
+  if (png) return <img src={png} alt="" loading="lazy" />
+  return null
 }
 
 /**
@@ -102,7 +148,7 @@ export default function LiveFeed() {
               }
             >
               <span className="live-feed-icon">
-                <img src={SLOT_ICONS[row.game_id]} alt="" loading="lazy" />
+                {renderSlotIcon(row.game_id)}
               </span>
               <span className="live-feed-game">{row.game_label}</span>
               <span className="live-feed-amount">
