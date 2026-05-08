@@ -131,12 +131,10 @@
   height: 7px;
   margin-left: -3.5px;
   margin-top:  -3.5px;
-  /* GPU layer hint — animating left/top per row-step on up to 100
-   * balls; will-change forces compositor promotion so the browser
-   * skips full layout/paint per step. translateZ(0) is a fallback
-   * for older WebKit that doesn't honour will-change reliably. */
-  will-change: left, top;
-  transform: translateZ(0);
+  /* No will-change / translateZ — promoting 100 separate GPU layers
+   * actually HURT perf on phones with limited GPU memory (each ball
+   * was getting its own compositor layer). Browsers handle a single
+   * shared paint pass faster when the elements are small. */
   border-radius: 50%;
   z-index: 5;
   background:
