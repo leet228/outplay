@@ -26,14 +26,14 @@ LIMIT 10;
 
 -- 4. Are NEW events landing in the table? (last 60 seconds)
 SELECT
-  COUNT(*) FILTER (WHERE kind = 'fake') AS fakes_last_minute,
-  COUNT(*) FILTER (WHERE kind = 'real') AS reals_last_minute,
+  COUNT(*) FILTER (WHERE is_fake = true)  AS fakes_last_minute,
+  COUNT(*) FILTER (WHERE is_fake = false) AS reals_last_minute,
   MAX(created_at) AS most_recent_event
 FROM live_feed_events
 WHERE created_at > NOW() - INTERVAL '60 seconds';
 
 -- 5. Latest 5 events period (any age)
-SELECT id, game_id, game_label, amount_rub, kind, created_at
+SELECT id, game_id, game_label, amount_rub, is_fake, created_at
 FROM live_feed_events
 ORDER BY created_at DESC
 LIMIT 5;

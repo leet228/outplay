@@ -112,14 +112,13 @@ BEGIN
     END IF;
   END IF;
 
-  INSERT INTO live_feed_events (game_id, game_label, amount_rub, kind, created_at)
-    VALUES (
-      v_games[v_game_idx][1],
-      v_games[v_game_idx][2],
-      v_amount,
-      'fake',
-      NOW()
-    );
+  INSERT INTO live_feed_events (
+    user_name, avatar_emoji, game_id, game_label, amount_rub, is_fake
+  ) VALUES (
+    'Outplay', '🎰',
+    v_games[v_game_idx][1], v_games[v_game_idx][2],
+    v_amount, true
+  );
 END;
 $$;
 
