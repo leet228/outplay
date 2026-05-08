@@ -77,8 +77,9 @@
   position: absolute;
   inset: 16px 6px 14px;
   pointer-events: none;
-  --plinko-slot-row-h: 12px;
-  --plinko-slot-w: 16px;
+  /* Approx slot row height as a % of game-area height, used by both
+   * the .plinko-pegs bottom inset and the ball's final-row top calc. */
+  --plinko-slot-row-h: 4%;
 }
 
 /* Compact game-area — peg field box. The slot row at its bottom is
@@ -87,12 +88,14 @@
  * just like the 1W reference. */
 .plinko-game-area {
   position: absolute;
-  width: min(82%, 320px);
+  width: min(90%, 360px);
   aspect-ratio: 1 / 1;
   top: 6%;
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;
+  /* allow pegs / slot row to overflow horizontally for more spread */
+  overflow: visible;
 }
 
 /* ── Pegs container — the upper strip of the GAME-AREA (not the
@@ -145,20 +148,20 @@
  * label. Pinned to bottom: 0 with a fixed height matching the JS
  * --plinko-slot-row-h so the peg container above caps at the same
  * line. */
-/* Slot row centred under the peg field with FIXED-pixel cells (16 × 12)
- * — this gives the horizontal-rectangle look the user asked for and
- * keeps every slot the same physical size regardless of game-area size.
- * Total width = 17 × 16 + 16 × 1 px gaps = 288 px; centred via
- * left: 50% / transform: translateX(-50%). */
+/* Slot row — width is a % of game-area, each cell uses aspect-ratio
+ * 4:3 to keep the horizontal-rectangle proportions. So everything
+ * scales with the stage size now (not pinned to 16×12 px), but on the
+ * default game-area the slots come out the same visual size as the
+ * previous fixed-pixel build. */
 .plinko-slots {
   position: absolute;
   left: 50%;
   bottom: 0;
   transform: translateX(-50%);
-  height: var(--plinko-slot-row-h, 12px);
+  width: 92%;
   display: grid;
-  grid-template-columns: repeat(17, var(--plinko-slot-w, 16px));
-  gap: 1px;
+  grid-template-columns: repeat(17, 1fr);
+  gap: 0.3%;
   align-items: stretch;
 }
 
@@ -167,8 +170,11 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
+  /* aspect-ratio drives the cell height: width is set by grid 1fr,
+   * height = width × 3/4 → same horizontal-rectangle proportions as
+   * the previous 16 × 12 build, but now scaling with the stage. */
+  aspect-ratio: 4 / 3;
   border-radius: 3px;
-  /* 16 × 12 px slot → tightest font for "×110" worst-case is 6 px. */
   font-size: 6px;
   font-weight: 800;
   color: #fff;

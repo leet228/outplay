@@ -77,8 +77,8 @@ function rollPath() {
 // photo, not 2). PEG_HFRAC gives the pegs more breathing room — at
 // 0.85 the gaps between pegs in any row are visibly wider than the
 // previous tight 0.64 layout.
-const PEG_HFRAC  = 1.00   // peg/ball span (fraction of game-area width)
-const SLOT_HFRAC = 1.05   // slot row span relative to game-area
+const PEG_HFRAC  = 1.10   // peg/ball span (overflows game-area for max spread)
+const SLOT_HFRAC = 1.15   // slot row span relative to game-area
 
 function compressX(local, frac) {
   return 0.5 + (local - 0.5) * frac
@@ -368,10 +368,10 @@ export default function PlinkoSlot() {
               if (ball.row === 0) {
                 topCss = '0px'
               } else if (ball.row === ROWS) {
-                topCss = 'calc(100% - var(--plinko-slot-row-h, 26px) / 2)'
+                topCss = 'calc(100% - var(--plinko-slot-row-h, 4%) / 2)'
               } else {
                 const frac = rowNormY(ball.row - 0.5)
-                topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 26px)))`
+                topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 4%)))`
               }
               return (
                 <span
