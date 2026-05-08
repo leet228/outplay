@@ -168,6 +168,18 @@ export default function PlinkoSlot() {
   const autoRef           = useRef(autoSpin)
   const cancelRef         = useRef(false)
 
+  // ── rAF coalescing ──
+  // 100-ball launches land in a tight cluster — without batching that's
+  // 100 setBalance + 100 setLaunchWin + 100 setHitSlots within ~1.5 s,
+  // each triggering a global Zustand re-render and a slot-row diff.
+  // We collect updates per-frame and flush at most once per rAF, which
+  // caps the React update rate at 60 Hz regardless of landing density.
+  const winFlushRef       = useRef({ pending: 0, scheduled: false })
+  const hitFlushRef       = useRef({ pending: [], scheduled: false })
+  const removeFlushRef    = useRef({ pending: [], scheduled: false })
+  const lastHapticAtRef   = useRef(0)
+  const bounceTimerRef    = useRef(null)
+
   // Server-round bookkeeping. currentRoundRef holds the server's
   // round descriptor for the active launch; ballsLandedRef counts
   // how many of the launch's N balls have completed their fall so we
@@ -180,13 +192,23 @@ export default function PlinkoSlot() {
   const launchTotalWinRef   = useRef(0)
   const finalizingRef       = useRef(false)
   const [finalizing, setFinalizing] = useState(false)
+  // True while ANY ball from the active launch is still in flight.
+  // Flipped on at dropLaunch start, off only when the last ball of the
+  // launch has fully landed (just before finalizeLaunch fires). New
+  // launches — manual click OR auto-loop iteration — must wait for this
+  // to clear, otherwise balls from two launches would overlap on the
+  // board and the landing counter would be poisoned.
+  const inFlightRef         = useRef(false)
 
   useEffect(() => { balanceRef.current        = balance },        [balance])
   useEffect(() => { stakeRef.current          = stake },          [stake])
   useEffect(() => { riskRef.current           = risk },           [risk])
   useEffect(() => { ballsPerLaunchRef.current = ballsPerLaunch }, [ballsPerLaunch])
   useEffect(() => { autoRef.current           = autoSpin },       [autoSpin])
-  useEffect(() => () => { cancelRef.current   = true }, [])
+  useEffect(() => () => {
+    cancelRef.current = true
+    if (bounceTimerRef.current) clearTimeout(bounceTimerRef.current)
+  }, [])
 
   const stakeIndex = BETS.indexOf(stake)
   const mults      = MULTIPLIERS[risk]
@@ -245,32 +267,101 @@ export default function PlinkoSlot() {
   // Ping the slot's hit animation. Multiple back-to-back hits are
   // de-duped by timestamp — only the most recent flash holds the
   // class, so a new ball landing in the same slot retriggers the pop.
+  // Coalesces multiple hits in the same frame into a single setHitSlots
+  // call; without this a 100-ball burst fires 100 separate slot-row
+  // re-renders within 1.5 s.
   function flashSlot(idx) {
-    const ts = Date.now() + Math.random()
-    setHitSlots(prev => ({ ...prev, [idx]: ts }))
-    // Match the 0.28 s CSS animation duration on .plinko-slot.is-hit.
-    setTimeout(() => {
+    hitFlushRef.current.pending.push(idx)
+    if (hitFlushRef.current.scheduled) return
+    hitFlushRef.current.scheduled = true
+    requestAnimationFrame(() => {
+      const indices = hitFlushRef.current.pending
+      hitFlushRef.current.pending = []
+      hitFlushRef.current.scheduled = false
+      if (cancelRef.current || indices.length === 0) return
+      const ts = Date.now() + Math.random()
       setHitSlots(prev => {
-        if (prev[idx] !== ts) return prev
         const next = { ...prev }
-        delete next[idx]
+        for (const i of indices) next[i] = ts
         return next
       })
-    }, 280)
+      setTimeout(() => {
+        setHitSlots(prev => {
+          let changed = false
+          const next = { ...prev }
+          for (const i of indices) {
+            if (next[i] === ts) { delete next[i]; changed = true }
+          }
+          return changed ? next : prev
+        })
+      }, 280)
+    })
   }
 
-  // Animate one ball through the peg field. Self-cleans on landing.
+  // rAF-batched balance + launchWin commit. Each ball calls commitWin()
+  // and we flush the accumulated win once per frame — turns a 100-ball
+  // landing burst from ~100 Zustand updates/sec into a steady 60 Hz.
+  function commitWin(win) {
+    if (win > 0) winFlushRef.current.pending += win
+    // launchWin always advances (so a 0× still triggers a re-paint of the
+    // win bar, otherwise it'd freeze on a stale value during all-loss
+    // launches). But the value only meaningfully changes when win > 0.
+    if (winFlushRef.current.scheduled) return
+    winFlushRef.current.scheduled = true
+    requestAnimationFrame(() => {
+      const won = winFlushRef.current.pending
+      winFlushRef.current.pending = 0
+      winFlushRef.current.scheduled = false
+      if (cancelRef.current) return
+      if (won > 0) {
+        const next = balanceRef.current + won
+        balanceRef.current = next
+        setBalance(next)
+        setLaunchWin(prev => prev + won)
+        setBalanceBounce(true)
+        if (bounceTimerRef.current) clearTimeout(bounceTimerRef.current)
+        bounceTimerRef.current = setTimeout(() => setBalanceBounce(false), 500)
+      }
+    })
+  }
+
+  // Cap haptic rate — 100 vibrations during a 1.5-s burst is jarring on
+  // a phone and adds JS work for each call. One per 80 ms keeps the
+  // tactile feel without saturating.
+  function maybeHaptic(kind) {
+    const now = performance.now()
+    if (now - lastHapticAtRef.current < 80) return
+    lastHapticAtRef.current = now
+    haptic(kind)
+  }
+
+  // rAF-batched ball removal. 100 balls landing in ~1.5 s previously
+  // fired 100 separate setBalls(filter) calls — each one O(N) on the
+  // shrinking array. Coalescing per frame turns it into ~16 calls,
+  // each removing the batch with one filter.
+  function removeBalls(ids) {
+    for (const id of ids) removeFlushRef.current.pending.push(id)
+    if (removeFlushRef.current.scheduled) return
+    removeFlushRef.current.scheduled = true
+    requestAnimationFrame(() => {
+      const out = removeFlushRef.current.pending
+      removeFlushRef.current.pending = []
+      removeFlushRef.current.scheduled = false
+      if (cancelRef.current || out.length === 0) return
+      const drop = new Set(out)
+      setBalls(prev => prev.filter(b => !drop.has(b.id)))
+    })
+  }
+
+  // Animate one ball through the peg field. The ball is already in
+  // state (added by dropLaunch's batched spawn) — this just walks it
+  // through the row updates, pays out, and queues its removal.
   // Tracks against ballsLandedRef / ballsExpectedRef and triggers the
   // launch finalize once the last ball settles.
-  async function animateBall() {
+  async function animateBall(id, path, landing) {
     if (cancelRef.current) return
-    const id = `b${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const { path, landing } = rollPath()
     const currentRisk  = riskRef.current
     const currentStake = stakeRef.current
-
-    setBalls(prev => [...prev, { id, row: 0, col: 0 }])
-    await sleep(140)
 
     for (let r = 1; r <= ROWS; r++) {
       if (cancelRef.current) return
@@ -280,30 +371,31 @@ export default function PlinkoSlot() {
     if (cancelRef.current) return
 
     // Pay (optimistic local credit — server reconciles at finalize).
+    // commitWin() rAF-batches setBalance + setLaunchWin so a 100-ball
+    // landing burst settles in ~16 frames instead of 100 React updates.
     const mul = MULTIPLIERS[currentRisk][landing]
     const win = Math.round(currentStake * mul)
-    if (win > 0) {
-      const next = balanceRef.current + win
-      balanceRef.current = next
-      setBalance(next)
-      setBalanceBounce(true)
-      setTimeout(() => setBalanceBounce(false), 500)
-    }
-    setLaunchWin(prev => prev + win)
+    commitWin(win)
     launchTotalWinRef.current += win
     flashSlot(landing)
 
-    if (mul >= 1) haptic('success')
-    else          haptic('light')
+    if (mul >= 1) maybeHaptic('success')
+    else          maybeHaptic('light')
 
-    // Briefly hold the ball at the slot, then remove from grid.
+    // Briefly hold the ball at the slot, then queue removal (batched
+    // per rAF — 100 simultaneous landings → ~16 setBalls calls).
     await sleep(180)
-    setBalls(prev => prev.filter(b => b.id !== id))
+    removeBalls([id])
 
-    // Track landings — when the last ball of the launch settles, fire
-    // the server finalize.
+    // Track landings — when the last ball of the launch settles, clear
+    // the in-flight flag and fire the server finalize. The flag has to
+    // drop BEFORE finalizeLaunch starts because finalizeLaunch awaits a
+    // server RPC and the auto-loop is only allowed to start the NEXT
+    // launch once balls have stopped falling (finalizingRef guards the
+    // RPC window separately).
     ballsLandedRef.current++
     if (ballsLandedRef.current >= ballsExpectedRef.current) {
+      inFlightRef.current = false
       finalizeLaunch()
     }
   }
@@ -348,12 +440,16 @@ export default function PlinkoSlot() {
   async function dropLaunch() {
     if (cancelRef.current) return
     if (finalizingRef.current) return  // wait for previous finalize
+    if (inFlightRef.current) return    // previous launch's balls still falling
     const N = ballsPerLaunchRef.current
     const cost = stakeRef.current * N
     if (balanceRef.current < cost) {
       setAutoSpin(false); autoRef.current = false
       return
     }
+    // Reserve the in-flight slot before any awaits so a second
+    // dropLaunch() racing on the click can't slip through.
+    inFlightRef.current = true
 
     const isDev = !user || user.id === 'dev'
     let round
@@ -371,10 +467,13 @@ export default function PlinkoSlot() {
       }
     } else {
       const res = await startPlinkoRound(user.id, stakeRef.current, N)
-      if (cancelRef.current) return
+      if (cancelRef.current) { inFlightRef.current = false; return }
       if (!res || res.error || !res.ok) {
         console.error('startPlinkoRound failed:', res)
         setAutoSpin(false); autoRef.current = false
+        // Release the gate so the user can retry instead of being stuck
+        // with a permanently-locked drop button after a server hiccup.
+        inFlightRef.current = false
         return
       }
       round = res
@@ -389,18 +488,64 @@ export default function PlinkoSlot() {
     setLaunchWin(0)
     haptic('light')
 
-    const stagger = N <= 10 ? 80 : N <= 50 ? 35 : 14
+    // Pre-roll every ball's path up front so we can spawn them all in a
+    // single setBalls() commit. Without this, a 100-ball launch would
+    // fire 100 separate "append ball" renders during the spawn window
+    // (one every 14 ms) — each diffing the growing balls array.
+    const launchSeed = Date.now()
+    const newBalls = []
+    const meta = []
     for (let i = 0; i < N; i++) {
-      setTimeout(() => animateBall(), i * stagger)
+      const id = `b${launchSeed}-${i}`
+      const { path, landing } = rollPath()
+      newBalls.push({ id, row: 0, col: 0 })
+      meta.push({ id, path, landing })
+    }
+
+    // ONE commit — all N balls appear at row 0 simultaneously. Visually
+    // they're stacked at top centre; the cascade kicks in 140 ms later
+    // as each ball's row-step loop starts on its own staggered timer.
+    setBalls(prev => [...prev, ...newBalls])
+
+    // ── Per-launch stagger ──
+    // Tuned so each launch finishes draining inside the user-visible
+    // budget AND keeps peak ball concurrency manageable.
+    //
+    //   Total clear time = 140 + (N − 1) × stagger + 16 × 180 + 180
+    //                     ≈ (N − 1) × stagger + 3200 ms
+    //
+    //     N=100 stagger 42 → 99·42 + 3200 ≈ 7360 ms  (budget 7.5 s) ✓
+    //     N=50  stagger 35 → 49·35 + 3200 ≈ 4915 ms  (budget 5.0 s) ✓
+    //     N=20  stagger 60 → 19·60 + 3200 ≈ 4340 ms
+    //     N=10  stagger 80 → 9·80  + 3200 ≈ 3920 ms
+    //
+    // Wider stagger at N=100 also caps peak concurrent balls at ~73
+    // instead of all 100, which lowers per-frame render pressure.
+    const stagger = N <= 10 ? 80
+                  : N <= 20 ? 60
+                  : N <= 50 ? 35
+                  : 42
+    for (let i = 0; i < N; i++) {
+      const m = meta[i]
+      setTimeout(() => animateBall(m.id, m.path, m.landing), 140 + i * stagger)
     }
   }
 
   // Auto-loop: chains launches as long as auto is on and balance allows.
+  // Each iteration waits for the previous launch's balls to fully land
+  // (inFlightRef = false) AND for the server finalize to commit
+  // (finalizingRef = false) before firing the next dropLaunch. Without
+  // the inFlight gate, balls from launch N+1 would spawn while N's
+  // last balls were still falling, polluting the landing counter.
   async function autoLoop() {
     while (autoRef.current && !cancelRef.current) {
-      // Wait out any in-flight finalize before firing the next launch
-      // so previous round's payout is committed first.
-      while (finalizingRef.current && !cancelRef.current && autoRef.current) {
+      // Wait for any active launch to drain (balls falling OR server
+      // finalize pending). Polling at 60 ms is plenty — this loop
+      // only spins between launches, not during them.
+      while (
+        (inFlightRef.current || finalizingRef.current) &&
+        !cancelRef.current && autoRef.current
+      ) {
         await sleep(60)
       }
       if (!autoRef.current || cancelRef.current) break
@@ -410,10 +555,10 @@ export default function PlinkoSlot() {
         break
       }
       await dropLaunch()
-      const N = ballsPerLaunchRef.current
-      const stagger = N <= 10 ? 80 : N <= 50 ? 35 : 14
-      const launchSpawnTime = N * stagger
-      await sleep(Math.max(420, launchSpawnTime + 220))
+      // Small breather so the user perceives a gap between launches
+      // (the gate above handles the real "are balls done falling"
+      // wait on the next iteration).
+      await sleep(280)
     }
   }
 
@@ -423,6 +568,7 @@ export default function PlinkoSlot() {
       return
     }
     if (finalizingRef.current) return
+    if (inFlightRef.current) return   // wait for previous balls to land
     if (!canAfford) return
     dropLaunch()
   }
@@ -433,6 +579,7 @@ export default function PlinkoSlot() {
       return
     }
     if (finalizingRef.current) return
+    if (inFlightRef.current) return
     if (!canAfford) return
     setAutoSpin(true); autoRef.current = true
     autoLoop()
@@ -442,6 +589,64 @@ export default function PlinkoSlot() {
                             (BETS[stakeIndex + 1] !== undefined && BETS[stakeIndex + 1] > balance)
   const stakeDownDisabled = launchLocked || stakeIndex <= 0
   const winLabel = launchWin > 0 ? `+${formatCurrency(launchWin, currency, rates)}` : null
+
+  // ── Memoised pegs ──
+  // Static for the life of the component (ROWS is a constant). Without
+  // memoisation, every setBalls() during a 100-ball launch causes React
+  // to re-diff all 153 peg <span>s. This pins one render and reuses it.
+  const pegsJsx = useMemo(() => (
+    Array.from({ length: ROWS }).map((_, r) => {
+      const pegsInRow = r + 3
+      const pegArg    = pegsInRow - 1
+      return (
+        <React.Fragment key={`prow-${r}`}>
+          {Array.from({ length: pegsInRow }).map((__, p) => (
+            <span
+              key={`peg-${r}-${p}`}
+              className="plinko-peg"
+              style={{
+                left: `${pegNormX(pegArg, p) * 100}%`,
+                top:  `${rowNormY(r) * 100}%`,
+              }}
+            />
+          ))}
+        </React.Fragment>
+      )
+    })
+  ), [])
+
+  // ── Memoised slot row ──
+  // Re-renders only on risk change (mults table) or hit pulse — NOT on
+  // every ball-state update during a launch.
+  //
+  // Per-hit visible pulse: the slot itself is keyed by `slot-${k}` so
+  // it keeps a stable identity, but the `.plinko-slot-pulse` overlay
+  // child is keyed by `pulse-${ts}` — a fresh ts on every landing
+  // batch. When ts changes React unmounts the old overlay and mounts a
+  // new one, which forces the CSS animation to play from frame 0 even
+  // if a previous pulse on the same slot is still mid-cycle. That's
+  // the only way to guarantee EVERY ball landing produces a visible
+  // pop without resorting to forced reflows or WAAPI plumbing.
+  const slotsJsx = useMemo(() => (
+    mults.map((mul, k) => {
+      const ts = hitSlots[k]
+      return (
+        <span
+          key={`slot-${k}`}
+          className={`plinko-slot plinko-slot--tier${tierFor(mul)} ${ts ? 'is-hit' : ''}`}
+        >
+          <span className="plinko-slot-mul">{formatMul(mul)}</span>
+          {ts != null && (
+            <span
+              key={`pulse-${ts}`}
+              className="plinko-slot-pulse"
+              aria-hidden="true"
+            />
+          )}
+        </span>
+      )
+    })
+  ), [mults, hitSlots])
 
   return (
     <div className={`plinko-slot-page plinko-slot-page--${balls.length ? 'dropping' : 'idle'}`}>
@@ -459,29 +664,12 @@ export default function PlinkoSlot() {
              * last row which gets r+3 (= ROWS+2 = 18) pegs spread across
              * the full game-area width at p / (ROWS + 1) positions. With
              * 18 pegs in the last row, each pair frames exactly one slot
-             * → slots visually sit "in the gaps" between pegs. */}
-            <div className="plinko-pegs" aria-hidden="true">
-              {Array.from({ length: ROWS }).map((_, r) => {
-                // Every row has r + 3 pegs so row 0 shows 3 pegs (the
-                // spec photo opens with a 3-dot top row, not 2).
-                const pegsInRow = r + 3
-                const pegArg    = pegsInRow - 1
-                return (
-                  <React.Fragment key={`prow-${r}`}>
-                    {Array.from({ length: pegsInRow }).map((__, p) => (
-                      <span
-                        key={`peg-${r}-${p}`}
-                        className="plinko-peg"
-                        style={{
-                          left: `${pegNormX(pegArg, p) * 100}%`,
-                          top:  `${rowNormY(r) * 100}%`,
-                        }}
-                      />
-                    ))}
-                  </React.Fragment>
-                )
-              })}
-            </div>
+             * → slots visually sit "in the gaps" between pegs.
+             *
+             * The peg array itself is built once (useMemo above) and
+             * reused across renders so React doesn't re-diff 153 spans
+             * during a 100-ball launch. */}
+            <div className="plinko-pegs" aria-hidden="true">{pegsJsx}</div>
 
             {/* Balls — many can be in flight at once when ballsPerLaunch > 1.
              *
@@ -497,17 +685,11 @@ export default function PlinkoSlot() {
               <PlinkoBall key={ball.id} row={ball.row} col={ball.col} />
             ))}
 
-            {/* Landing slots — one row of multiplier buckets. */}
-            <div className="plinko-slots" aria-hidden="true">
-              {mults.map((mul, k) => (
-                <span
-                  key={`slot-${k}`}
-                  className={`plinko-slot plinko-slot--tier${tierFor(mul)} ${hitSlots[k] ? 'is-hit' : ''}`}
-                >
-                  <span className="plinko-slot-mul">{formatMul(mul)}</span>
-                </span>
-              ))}
-            </div>
+            {/* Landing slots — one row of multiplier buckets. The
+             * children are memoised on (mults, hitSlots) so they only
+             * re-render when the risk changes or a slot is flashed,
+             * not on every ball-position update. */}
+            <div className="plinko-slots" aria-hidden="true">{slotsJsx}</div>
            </div>
           </div>
         </main>
@@ -555,7 +737,11 @@ export default function PlinkoSlot() {
               type="button"
               className={`plinko-drop-btn ${autoSpin ? 'is-auto' : ''}`}
               onClick={onDropClick}
-              disabled={!canAfford && !autoSpin}
+              /* Drop is locked while balls from a previous launch are
+               * still falling (launchLocked covers that, plus finalize
+               * and auto-spin). The autoSpin variant is the "stop"
+               * button and must always be clickable. */
+              disabled={!autoSpin && (!canAfford || launchLocked)}
               aria-label={autoSpin ? t.slotPlinkoStop : t.slotPlinkoDrop}
             >
               {autoSpin ? (
@@ -573,7 +759,7 @@ export default function PlinkoSlot() {
               type="button"
               className={`plinko-auto-btn ${autoSpin ? 'is-on' : ''}`}
               onClick={onAutoClick}
-              disabled={!canAfford && !autoSpin}
+              disabled={!autoSpin && (!canAfford || launchLocked)}
             >
               {autoSpin ? t.slotPlinkoStop : t.slotPlinkoAuto}
             </button>
