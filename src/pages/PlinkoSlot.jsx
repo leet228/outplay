@@ -78,7 +78,7 @@ function rollPath() {
 // 0.85 the gaps between pegs in any row are visibly wider than the
 // previous tight 0.64 layout.
 const PEG_HFRAC  = 1.10   // peg/ball span (overflows game-area for max spread)
-const SLOT_HFRAC = 1.15   // slot row span relative to game-area
+const SLOT_HFRAC = 1.10   // slot row span — matches peg field so slots sit in peg gaps
 
 function compressX(local, frac) {
   return 0.5 + (local - 0.5) * frac

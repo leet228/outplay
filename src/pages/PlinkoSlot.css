@@ -148,20 +148,19 @@
  * label. Pinned to bottom: 0 with a fixed height matching the JS
  * --plinko-slot-row-h so the peg container above caps at the same
  * line. */
-/* Slot row — width is a % of game-area, each cell uses aspect-ratio
- * 4:3 to keep the horizontal-rectangle proportions. So everything
- * scales with the stage size now (not pinned to 16×12 px), but on the
- * default game-area the slots come out the same visual size as the
- * previous fixed-pixel build. */
+/* Slot row — width matches the peg field's 110 % span (PEG_HFRAC =
+ * 1.10) so each slot lines up with the GAP between two consecutive
+ * pegs of the last row. Pushed slightly below the game-area's bottom
+ * with bottom: -5 % so the row doesn't overlap the bottom-most pegs. */
 .plinko-slots {
   position: absolute;
   left: 50%;
-  bottom: 0;
+  bottom: -5%;
   transform: translateX(-50%);
-  width: 92%;
+  width: 110%;
   display: grid;
   grid-template-columns: repeat(17, 1fr);
-  gap: 0.3%;
+  gap: 0;
   align-items: stretch;
 }
 
