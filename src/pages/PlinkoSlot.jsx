@@ -30,13 +30,18 @@ const RISK_LEVELS = ['low', 'medium', 'high']
 const BALLS_PER_LAUNCH = [1, 10, 20, 50, 100]
 
 // Multiplier tables for 16-row board. Symmetric around the centre.
-//   low / medium  — Stake.com standard reference values
-//   high          — extreme jackpot variant from the spec screenshot
-//                   (×10000 edges, ×0.1 centre — RTP ≈ 94 %)
+// All three risk modes are tuned so the analytic long-run RTP sits at
+// ~94 % — under the 95 % design ceiling. Verified by:
+//
+//     node scripts/plinko-rtp-sim.js
+//
+//   low      analytic 94.05 %
+//   medium   analytic 93.53 %
+//   high     analytic 94.00 %
 const MULTIPLIERS = {
-  low:    [16,    9,   2,   1.4, 1.4, 1.2, 1.1, 1,   0.5, 1,   1.1, 1.2, 1.4, 1.4, 2,   9,   16   ],
-  medium: [110,   41,  10,  5,   3,   1.5, 1,   0.5, 0.3, 0.5, 1,   1.5, 3,   5,   10,  41,  110  ],
-  high:   [10000, 211, 21,  5,   1.8, 0.8, 0.3, 0.2, 0.1, 0.2, 0.3, 0.8, 1.8, 5,   21,  211, 10000],
+  low:    [16,    9,   2,   1.4, 1.4, 1.2, 1,   0.9, 0.55, 0.9, 1,   1.2, 1.4, 1.4, 2,   9,   16   ],
+  medium: [110,   41,  10,  5,   3,   1.5, 1,   0.4, 0.2,  0.4, 1,   1.5, 3,   5,   10,  41,  110  ],
+  high:   [10000, 211, 21,  5,   1.8, 0.8, 0.3, 0.2, 0.1,  0.2, 0.3, 0.8, 1.8, 5,   21,  211, 10000],
 }
 
 // Slot tier (0..5) maps to a CSS gradient brightness level. All blues —
