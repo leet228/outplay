@@ -67,17 +67,24 @@
   pointer-events: none;
 }
 
-/* Board area — pegs + ball + slot row sit in here. Bottom inset is
- * just the page padding now (was 56 px reserving room for the slot
- * row OUTSIDE the board); the slot row lives INSIDE the board pinned
- * to its bottom edge so it sits directly under the last peg row. */
+/* Board area — pegs + ball + slot row sit in here. The peg field is
+ * held to the top portion of the board (its container caps at
+ * `bottom: SLOT_ROW_PX`) so the slot row underneath has a real strip
+ * of breathing room — that's the "smaller field" the user asked for:
+ * same number of peg rows, just compressed vertically so the slot
+ * labels can be tall + horizontal. */
 .plinko-board {
   position: absolute;
   inset: 16px 10px 14px;
   pointer-events: none;
+  --plinko-slot-row-h: 38px;
 }
 
-/* ── Pegs ── */
+/* ── Pegs — full-board container so ball positioning percentages
+ * align with peg positions. The slot row covers the bottom strip
+ * via its own absolute positioning; rowNormY(15) ≈ 94 % means the
+ * last peg row sits just at / inside the top of the slot row, which
+ * looks like the pegs are gating the slots (Stake-style funnel). */
 .plinko-pegs {
   position: absolute;
   inset: 0;
@@ -121,30 +128,32 @@
   pointer-events: none;
 }
 
-/* ── Landing slots row — pinned to the bottom of the board, inside
- * the same coordinate space as the pegs so they line up under the
- * last peg row's gaps without any free-space gap below the pegs. */
+/* ── Landing slots row — pinned to the bottom of the board with a
+ * fixed pixel height (--plinko-slot-row-h). Tall enough to host a
+ * comfortable label, narrow enough that the pegs above still get most
+ * of the vertical space. */
 .plinko-slots {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
+  height: var(--plinko-slot-row-h, 38px);
   display: grid;
   grid-template-columns: repeat(17, 1fr);
   gap: 1px;
+  align-items: stretch;
 }
 
 .plinko-slot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
-  min-width: 0;            /* allow slot cell to shrink under content */
+  min-width: 0;
   border-radius: 6px;
-  /* font-size scales with viewport so labels fit even when 17 slots
-   * have to share a 320 px wide stage on phone — clamps to 9 px min
-   * (still readable) and 11 px max on desktop. */
-  font-size: clamp(9px, 2.0vw, 11px);
+  /* Bigger and clamped tighter — labels read horizontally on every
+   * viewport. Letter-spacing is slightly negative so "×10K" stays
+   * visually compact in the narrow phone slot. */
+  font-size: clamp(9px, 2.4vw, 12px);
   font-weight: 800;
   color: #fff;
   border: 1px solid rgba(0, 0, 0, 0.45);
@@ -153,16 +162,14 @@
     0 2px 0 rgba(0, 0, 0, 0.30);
   transition: transform 0.18s ease-out, box-shadow 0.18s ease-out, background 0.18s ease, filter 0.18s ease;
   overflow: hidden;
-  padding: 0 1px;
+  padding: 0;
 }
 
 .plinko-slot-mul {
-  letter-spacing: 0;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
   white-space: nowrap;
-  /* Auto-shrink the label as a last resort if the clamp font-size is
-   * still too wide for an extreme tier (×10K on the narrowest phone). */
   max-width: 100%;
   text-align: center;
 }
@@ -435,20 +442,35 @@
 .plinko-risk-step:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
 .plinko-risk-step:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Risk label is now two stacked words — "СРЕДНИЙ" on top, "РИСК" on
+ * the bottom — so the pill's width stays narrow no matter which risk
+ * is active. The longest word ("ВЫСОКИЙ" / "СРЕДНИЙ") fits in a
+ * compact column instead of forcing the pill wide. */
 .plinko-risk-label {
   flex: 1 1 0;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  line-height: 1.05;
   text-align: center;
-  /* Scales the active risk's name down on narrow viewports so a longer
-   * label like "Высокий риск" doesn't push the pill wider. The pill's
-   * width is set by its grid cell + padding, not by content. */
-  font-size: clamp(8px, 1.8vw, 11px);
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
+}
+
+.plinko-risk-name {
+  font-size: clamp(9px, 2.0vw, 11px);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.plinko-risk-suffix {
+  font-size: clamp(7px, 1.6vw, 9px);
+  opacity: 0.75;
+  white-space: nowrap;
+  margin-top: 1px;
 }
 .plinko-risk-label--low    { color: #34d399; }
 .plinko-risk-label--medium { color: #fbbf24; }

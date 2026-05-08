@@ -431,9 +431,12 @@ export default function PlinkoSlot() {
             <div className="plinko-risk-row">
               <button type="button" className="plinko-risk-step" onClick={() => changeRisk(-1)} disabled={autoSpin} aria-label="risk down">‹</button>
               <span className={`plinko-risk-label plinko-risk-label--${risk}`}>
-                {risk === 'low'  ? t.slotPlinkoRiskLow
-                 : risk === 'high' ? t.slotPlinkoRiskHigh
-                 : t.slotPlinkoRiskMedium}
+                <span className="plinko-risk-name">
+                  {risk === 'low'  ? t.slotPlinkoRiskLowName
+                   : risk === 'high' ? t.slotPlinkoRiskHighName
+                   : t.slotPlinkoRiskMediumName}
+                </span>
+                <span className="plinko-risk-suffix">{t.slotPlinkoRiskWord}</span>
               </span>
               <button type="button" className="plinko-risk-step" onClick={() => changeRisk(1)} disabled={autoSpin} aria-label="risk up">›</button>
             </div>
