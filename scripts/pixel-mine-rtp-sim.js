@@ -108,6 +108,18 @@ function generateReels() {
   return reels
 }
 
+// FS reel layout — strip ender scatters so the bonus can't
+// re-trigger itself (mirrors generateReelsNoEnder in the game).
+function generateReelsNoEnder() {
+  const reels = generateReels()
+  for (let r = 0; r < REEL_ROWS; r++) {
+    for (let c = 0; c < REEL_COLS; c++) {
+      if (reels[r][c] === 'ender') reels[r][c] = 'blank'
+    }
+  }
+  return reels
+}
+
 function generateColumn() {
   return COLUMN_ROW_TABLES.map(t => pickWeighted(t, 'type'))
 }
@@ -256,7 +268,7 @@ function runFullSpin(stake) {
   let total = runOnePhase(grid, rawReels, chests, stake)
   if (countEnders(rawReels) >= SCATTER_TRIGGER) {
     for (let i = 0; i < FS_COUNT; i++) {
-      const fsReels = generateReels()
+      const fsReels = generateReelsNoEnder()
       total += runOnePhase(grid, fsReels, chests, stake)
     }
   }
@@ -335,7 +347,7 @@ function diagnose(spins) {
       bonusEntries++
       let fs = 0
       for (let j = 0; j < FS_COUNT; j++) {
-        const fsReels = generateReels()
+        const fsReels = generateReelsNoEnder()
         fs += runOnePhase(grid, fsReels, chests, stake)
       }
       bonusWin += Math.min(fs, stake * PAYOUT_CAP)

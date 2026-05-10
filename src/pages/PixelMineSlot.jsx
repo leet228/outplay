@@ -294,6 +294,21 @@ function generateReels() {
   return reels
 }
 
+// Free-Spins reel generator. Eye-of-Ender scatters can never
+// appear inside the bonus — the FS run is sealed at exactly the
+// 4 spins triggered. Any roll that would have been an ender is
+// swapped to a `blank` so the symbol probabilities stay otherwise
+// identical to the base game.
+function generateReelsNoEnder() {
+  const reels = generateReels()
+  for (let r = 0; r < REEL_ROWS; r++) {
+    for (let c = 0; c < REEL_COLS; c++) {
+      if (reels[r][c] === 'ender') reels[r][c] = 'blank'
+    }
+  }
+  return reels
+}
+
 // Count Eye of Ender scatters in a reel grid.
 function countEnders(reels) {
   let n = 0
@@ -1172,10 +1187,10 @@ export default function PixelMineSlot() {
         // Counter shows REMAINING spins after this one — so the
         // first FS spin shows (FS_TOTAL - 1), the last shows 0.
         setBonusSpinsLeft(FS_TOTAL - 1 - i)
-        // FS reels — normal RNG. We don't force-stop ender re-
-        // triggers here since the spec only specifies a single
-        // 4-spin run.
-        const fsRawReels = generateReels()
+        // FS reels — `generateReelsNoEnder` strips Eye-of-Ender
+        // scatters (mapped to `blank`) so a bonus can never
+        // re-trigger inside itself. The 4 free spins are sealed.
+        const fsRawReels = generateReelsNoEnder()
         const fsResult = await runSpinPhases(g, fsRawReels, { fillGrid: false })
         if (cancelRef.current) break
         g = fsResult.grid
