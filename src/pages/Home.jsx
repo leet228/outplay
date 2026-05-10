@@ -10,6 +10,19 @@ import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { searchUsers as searchUsersApi, sendFriendRequest, acceptFriendRequest, rejectFriendRequest, removeFriend, getFriendsData, sendGameInvite, acceptGameInvite, rejectGameInvite, cancelAllPendingInvites, getPendingInvites, getGameOnlineCounts } from '../lib/supabase'
 import { GAME_CARD_ART } from '../lib/gameAssets'
+// Pixel Mine card art textures — imported as URL refs so we can drop
+// them into inline style.backgroundImage without any CSS animation
+// layer promotion (keeps the 16×16 pixel art crisp on mobile).
+import pmTexGrass     from '../assets/games/pixel_mine/blocks/grass.png'
+import pmTexStone     from '../assets/games/pixel_mine/blocks/stone_block.png'
+import pmTexStoneDmg1 from '../assets/games/pixel_mine/block_damage/stone_block (1).png'
+import pmTexGold      from '../assets/games/pixel_mine/blocks/gold_block.png'
+import pmTexGoldDmg1  from '../assets/games/pixel_mine/block_damage/gold_block (1).png'
+import pmTexGoldDmg2  from '../assets/games/pixel_mine/block_damage/gold_block (2).png'
+import pmTexGoldDmg3  from '../assets/games/pixel_mine/block_damage/gold_block (3).png'
+import pmTexGoldDmg4  from '../assets/games/pixel_mine/block_damage/gold_block (4).png'
+import pmTexChest     from '../assets/games/pixel_mine/chests/chest.png'
+import pmTexChestOpen from '../assets/games/pixel_mine/chests/opened_chest.png'
 import './Home.css'
 // Imported here so the home-page rocket card art styles ship with Home,
 // not just when the player opens the slot itself.
@@ -1699,73 +1712,254 @@ function PlinkoSlotArtwork({ large = false, animated = false }) {
 // The animated variant runs a wood-pickaxe drop loop above the grid
 // (rotates + falls + bounces) so the card flickers with motion when
 // hovered or shown in the preview modal.
+// 8-second loop driven by JS state (NOT CSS keyframes) so
+// background-image swaps go through React re-render → DOM raster
+// path. CSS @keyframes on `background-image` was triggering layer
+// promotion in some browsers (the LEFT-column textures looked
+// blurry while the right-column static blocks stayed crisp). The
+// in-game slot uses the exact same approach — JS state drives
+// inline style.backgroundImage, no CSS animation involved.
+//
+// Times are in milliseconds within the 0..8000 ms loop:
+const PM_LOOP = 8000
+// Strike landing times (each = pickaxe hits a block at that ms)
+const PM_STRIKES = {
+  grass:  320,
+  stone1: 960,
+  stone2: 1600,
+  gold1:  2080,
+  gold2:  2560,
+  gold3:  3040,
+  gold4:  3520,
+  gold5:  4000,
+}
+// Chest + 100x reveal timings
+const PM_CHEST_OPEN_AT = 4800   // chest swaps to opened texture
+const PM_MUL_POP_AT    = 5120   // "100x" text starts rising
+const PM_MUL_HOLD_AT   = 5440   // settled position
+const PM_MUL_FADE_AT   = 7040   // start fading out
+const PM_MUL_GONE_AT   = 7600   // fully gone
+
 function PixelMineSlotArtwork({ large = false, animated = false }) {
+  // Single ms-based phase counter (0..PM_LOOP). Updated via rAF when
+  // animated; stays at 0 otherwise. Re-renders update inline style
+  // properties only (no DOM structure changes), which React batches
+  // efficiently.
+  const [phase, setPhase] = useState(0)
+
+  useEffect(() => {
+    if (!animated) return
+    const start = Date.now()
+    let raf
+    const tick = () => {
+      setPhase((Date.now() - start) % PM_LOOP)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [animated])
+
+  // ── Derive every visual state from `phase` ──
+  // Block textures: each block holds its base texture until the
+  // strike that destroys / damages it lands. After the killing
+  // strike the bg goes to `null` (sky shows through).
+  const showStaticGrass = !animated || phase < PM_STRIKES.grass + 160
+  const grassTex = showStaticGrass ? pmTexGrass : null
+
+  let stoneTex
+  if (!animated || phase < PM_STRIKES.stone1) stoneTex = pmTexStone
+  else if (phase < PM_STRIKES.stone2 + 160) stoneTex = pmTexStoneDmg1
+  else stoneTex = null
+
+  let goldTex
+  if (!animated || phase < PM_STRIKES.gold1) goldTex = pmTexGold
+  else if (phase < PM_STRIKES.gold2) goldTex = pmTexGoldDmg1
+  else if (phase < PM_STRIKES.gold3) goldTex = pmTexGoldDmg2
+  else if (phase < PM_STRIKES.gold4) goldTex = pmTexGoldDmg3
+  else if (phase < PM_STRIKES.gold5 + 160) goldTex = pmTexGoldDmg4
+  else goldTex = null
+
+  // Chest texture — closed until the reveal point.
+  const chestTex = (!animated || phase < PM_CHEST_OPEN_AT)
+    ? pmTexChest
+    : pmTexChestOpen
+
+  // 100x multiplier text — opacity / position / scale.
+  let mulOpacity = 0
+  let mulY = 20      // % shift down at rest
+  let mulScale = 0.5
+  if (animated) {
+    if (phase >= PM_MUL_POP_AT && phase < PM_MUL_HOLD_AT) {
+      // pop in
+      const t = (phase - PM_MUL_POP_AT) / (PM_MUL_HOLD_AT - PM_MUL_POP_AT)
+      mulOpacity = t
+      mulY = 20 - 35 * t       // 20 → -15
+      mulScale = 0.5 + 0.65 * t // 0.5 → 1.15
+    } else if (phase >= PM_MUL_HOLD_AT && phase < PM_MUL_FADE_AT) {
+      // hold steady
+      mulOpacity = 1
+      mulY = -25
+      mulScale = 1
+    } else if (phase >= PM_MUL_FADE_AT && phase < PM_MUL_GONE_AT) {
+      // fade out
+      const t = (phase - PM_MUL_FADE_AT) / (PM_MUL_GONE_AT - PM_MUL_FADE_AT)
+      mulOpacity = 1 - t
+      mulY = -25 - 25 * t
+      mulScale = 1
+    }
+  }
+
+  // Pickaxe: outer translateY (0 = parked in reel cell, positive =
+  // dropping into grid), inner rotation continuous.
+  // Every strike has a ~160 ms drop + ~160 ms bounce-up cadence,
+  // landing at one of three target Y positions.
+  let pickaxeY = 0
+  let pickaxeOpacity = 1
+  if (animated) {
+    // Build a chronological list of [t, y] keypoints and lerp.
+    // Y values are % of pickaxe own height (matches the old
+    // CSS keyframe; tuned for the top:7% start position).
+    //   0   = parked (in reel cell)
+    //   110 = grass row hit
+    //   220 = stone row hit
+    //   330 = gold row hit
+    //   -100= off-screen above
+    const keys = [
+      [0,    0],
+      [160,  0],
+      [320,  110],   // strike grass
+      [640,  0],     // bounce
+      [960,  220],   // strike stone 1
+      [1280, 110],   // bounce
+      [1600, 220],   // strike stone 2
+      [1840, 110],   // bounce
+      [2080, 330],   // strike gold 1
+      [2320, 220],
+      [2560, 330],   // strike gold 2
+      [2800, 220],
+      [3040, 330],   // strike gold 3
+      [3280, 220],
+      [3520, 330],   // strike gold 4
+      [3760, 220],
+      [4000, 330],   // strike gold 5
+      [4480, -100],  // rise + fade
+      [PM_LOOP - 1, -100],
+    ]
+    // Find the segment containing `phase` and lerp.
+    for (let i = 0; i < keys.length - 1; i++) {
+      const [t0, y0] = keys[i]
+      const [t1, y1] = keys[i + 1]
+      if (phase >= t0 && phase <= t1) {
+        const t = t1 === t0 ? 0 : (phase - t0) / (t1 - t0)
+        pickaxeY = y0 + (y1 - y0) * t
+        break
+      }
+    }
+    // Opacity: visible until 4480 ms (start of off-screen rise),
+    // fades out 4480→4640.
+    if (phase < 4480) pickaxeOpacity = 1
+    else if (phase < 4640) pickaxeOpacity = 1 - (phase - 4480) / 160
+    else pickaxeOpacity = 0
+  }
+  // Continuous rotation — 1 turn per second through the whole loop.
+  const pickaxeRot = animated ? (phase * 0.36) % 360 : 0
+
+  // Reel cell wood texture: only visible while pickaxe is parked
+  // (phase < 240) so it looks like the slot "fired" the pickaxe out.
+  const woodCellVisible = !animated || phase < 240
+
   return (
     <div className={`pixel-mine-slot-card-art ${large ? 'pixel-mine-slot-card-art--large' : ''} ${animated ? 'pixel-mine-slot-card-art--animated' : ''}`} aria-hidden="true">
       <span className="pixel-mine-card-sky" />
       <span className="pixel-mine-card-cloud" />
 
       {/* Inventory-slot reel strip — 3 square cells with the slot's
-       * iconic symbols. Texture lookups match the in-game asset paths. */}
+       * iconic symbols. The wood cell goes empty when the pickaxe
+       * leaves it (drops out of the slot). */}
       <div className="pixel-mine-card-reels">
-        <span className="pixel-mine-card-reel-cell" data-sym="wood" />
+        <span
+          className="pixel-mine-card-reel-cell"
+          data-sym="wood"
+          style={{ backgroundImage: woodCellVisible ? undefined : 'none' }}
+        />
         <span className="pixel-mine-card-reel-cell" data-sym="tnt" />
         <span className="pixel-mine-card-reel-cell" data-sym="ender" />
       </div>
 
-      {/* Wood pickaxe — animated variant only. Drops from the LEFT
-       * reel cell (where the wood pickaxe sprite sits in the slot's
-       * reel strip) straight down into the LEFT column of the grid.
-       * 8-strike sequence: 1 hit on grass (top of left col),
-       * 2 hits on stone (mid row), 5 hits on gold (bottom row),
-       * then rises out of frame so the left chest reveal plays. */}
+      {/* Wood pickaxe — drops from the LEFT reel cell into the LEFT
+       * column. Outer wrapper handles vertical position + opacity,
+       * inner sprite handles the rotation. Same two-element split
+       * as the in-game .pixel-mine-falling-pickaxe so the bitmap
+       * stays pixel-aligned through the drop. */}
       {animated && (
-        <span className="pixel-mine-card-pickaxe-fly">
-          {/* Inner sprite — same two-element trick as the in-game
-           * .pixel-mine-falling-pickaxe (outer = translateY, inner =
-           * rotate). Splitting the transforms across two elements
-           * keeps the bitmap pixel-aligned on the compositor and
-           * preserves the pixel-art look during the strike. */}
-          <span className="pixel-mine-card-pickaxe-spin" />
+        <span
+          className="pixel-mine-card-pickaxe-fly"
+          style={{
+            transform: `translateY(${pickaxeY}%)`,
+            opacity: pickaxeOpacity,
+          }}
+        >
+          <span
+            className="pixel-mine-card-pickaxe-spin"
+            style={{ transform: `rotate(${pickaxeRot}deg)` }}
+          />
         </span>
       )}
 
-      {/* Grid + chests share a wrapper so the chest row always sits
-       * flush under the grid regardless of card aspect ratio. */}
       <div className="pixel-mine-card-stack-wrap">
-        {/* 3-column × 3-row mining grid. The LEFT column is the one
-         * the pickaxe targets in the animation: grass(1HP) →
-         * stone(2HP) → gold(5HP) for a clean "1 + 2 + 5 = 8 strikes"
-         * cadence. Other columns add visual variety with a wider
-         * tier range (stone, redstone, diamond, obsidian). */}
+        {/* 3×3 mining grid. The LEFT column is the one the pickaxe
+         * works through: grass(1HP) → stone(2HP) → gold(5HP), 8
+         * strikes total. Other columns stay decorative. */}
         <div className="pixel-mine-card-grid">
           {/* Row 0 — surface */}
-          <span className="pixel-mine-card-block" data-block="grass" data-anim="break-grass" />
+          <span
+            className="pixel-mine-card-block"
+            data-block="grass"
+            style={{ backgroundImage: grassTex ? `url("${grassTex}")` : 'none' }}
+          />
           <span className="pixel-mine-card-block" data-block="grass" />
           <span className="pixel-mine-card-block" data-block="grass" />
           {/* Row 1 — stone band */}
-          <span className="pixel-mine-card-block" data-block="stone" data-anim="break-stone" />
+          <span
+            className="pixel-mine-card-block"
+            data-block="stone"
+            style={{ backgroundImage: stoneTex ? `url("${stoneTex}")` : 'none' }}
+          />
           <span className="pixel-mine-card-block" data-block="redstone" />
           <span className="pixel-mine-card-block" data-block="stone" />
           {/* Row 2 — jackpot tier */}
-          <span className="pixel-mine-card-block" data-block="gold" data-anim="break-gold" />
+          <span
+            className="pixel-mine-card-block"
+            data-block="gold"
+            style={{ backgroundImage: goldTex ? `url("${goldTex}")` : 'none' }}
+          />
           <span className="pixel-mine-card-block" data-block="diamond" />
           <span className="pixel-mine-card-block" data-block="obsidian" />
         </div>
 
-        {/* One chest per column. The LEFT chest opens at the end of
-         * the strike sequence; other chests stay closed. The "100x"
-         * multiplier text is rendered as a SIBLING of the chests
-         * row (not a child of the chest itself) so the chest stays
-         * an animation-free rasterisation target — having an
-         * animated descendant promotes the parent to a compositor
-         * layer with bilinear filtering, which blurs pixel art. */}
+        {/* One chest per column; left one opens via inline-style swap. */}
         <div className="pixel-mine-card-chests">
-          <span className="pixel-mine-card-chest" data-anim="open-100x" />
+          <span
+            className="pixel-mine-card-chest"
+            style={{ backgroundImage: `url("${chestTex}")` }}
+          />
           <span className="pixel-mine-card-chest" />
           <span className="pixel-mine-card-chest" />
         </div>
-        {animated && <span className="pixel-mine-card-chest-mul">100x</span>}
+        {/* "100x" multiplier badge — sibling of the chests row so the
+         * chest itself has no animated descendants. Position +
+         * opacity driven by inline style from the JS phase. */}
+        {animated && (
+          <span
+            className="pixel-mine-card-chest-mul"
+            style={{
+              opacity: mulOpacity,
+              transform: `translate(-50%, ${mulY}%) scale(${mulScale})`,
+            }}
+          >
+            100x
+          </span>
+        )}
       </div>
     </div>
   )

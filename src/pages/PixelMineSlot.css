@@ -1416,71 +1416,15 @@
   image-rendering: pixelated;
 }
 
-.pixel-mine-slot-card-art--animated .pixel-mine-card-pickaxe-fly {
-  animation: pixel-mine-card-pickaxe-loop 8s cubic-bezier(0.4, 0, 0.6, 1) infinite both;
-}
-
-/* Inner sprite spins continuously through the whole loop (~1 rev/s
- * at 8s = 8 turns per loop), same vibe as the in-game falling
- * pickaxe. Pure rotate, no translate — keeps the bitmap aligned. */
-.pixel-mine-slot-card-art--animated .pixel-mine-card-pickaxe-spin {
-  animation: pixel-mine-card-pickaxe-spin 1s linear infinite;
-}
-
-@keyframes pixel-mine-card-pickaxe-loop {
-  /* Outer wrapper handles ONLY translateY + opacity. Rotation is
-   * on the inner .pixel-mine-card-pickaxe-spin element. */
-  0%, 2% { transform: translateY(0); opacity: 1; }
-
-  /* === Strike 1 — grass (1 hit) === */
-  4%   { transform: translateY(110%); opacity: 1; }   /* drop, hit grass */
-  8%   { transform: translateY(0);    opacity: 1; }   /* bounce back to slot */
-
-  /* === Strikes 2-3 — stone (2 hits) === */
-  12%  { transform: translateY(220%); opacity: 1; }
-  16%  { transform: translateY(110%); opacity: 1; }
-  20%  { transform: translateY(220%); opacity: 1; }
-  23%  { transform: translateY(110%); opacity: 1; }
-
-  /* === Strikes 4-8 — gold (5 hits) === */
-  26%  { transform: translateY(330%); opacity: 1; }
-  29%  { transform: translateY(220%); opacity: 1; }
-  32%  { transform: translateY(330%); opacity: 1; }
-  35%  { transform: translateY(220%); opacity: 1; }
-  38%  { transform: translateY(330%); opacity: 1; }
-  41%  { transform: translateY(220%); opacity: 1; }
-  44%  { transform: translateY(330%); opacity: 1; }
-  47%  { transform: translateY(220%); opacity: 1; }
-  50%  { transform: translateY(330%); opacity: 1; }   /* gold shatters */
-
-  /* Pickaxe rises out of frame, fading */
-  56%  { transform: translateY(-100%); opacity: 0; }
-
-  /* Hold off-screen while chest opens + 100x reveal plays out */
-  100% { transform: translateY(-100%); opacity: 0; }
-}
-
-@keyframes pixel-mine-card-pickaxe-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-/* Wood reel cell: empties when the pickaxe leaves it, restores at
- * the loop reset so the next cycle starts with the cell visually
- * "loaded" with the wood pickaxe again. The slot looks like it
- * spit out the pickaxe rather than coexisting with a duplicate. */
-.pixel-mine-slot-card-art--animated .pixel-mine-card-reel-cell[data-sym='wood'] {
-  animation: pm-card-wood-cell 8s linear infinite;
-}
-
-@keyframes pm-card-wood-cell {
-  0%, 3% {
-    background-image: url("../assets/games/pixel_mine/reels/wood.png");
-  }
-  4%, 100% {
-    background-image: none;
-  }
-}
+/* No CSS keyframe animation here any more — outer position +
+ * opacity AND inner rotation are both driven by JS-set inline
+ * styles via `style={{ transform: ..., opacity: ... }}` in the
+ * React component. CSS @keyframes was triggering compositor
+ * layer promotion that resampled the 16×16 bitmap with bilinear
+ * filtering on every frame, blurring the pixel art. JS-driven
+ * inline styles change once per render and don't carry an
+ * @keyframes declaration, so the rasterisation path stays clean
+ * and `image-rendering: pixelated` works as expected. */
 
 /* ── Block break animations (animated variant only) ──
  * Each middle-column block holds its texture until the strike that
@@ -1498,118 +1442,19 @@
   animation: pm-card-gold-break 8s linear infinite;
 }
 
-/* IMPORTANT — these break keyframes ONLY animate `background-image`
- * (and box-shadow on shatter). They do NOT animate `opacity` or
- * `transform`. Both `opacity` and `transform` are "compositor-only"
- * properties: animating either of them promotes the element to a
- * GPU compositor layer for the whole animation duration, and that
- * layer is then resampled with bilinear filtering on every frame —
- * even with image-rendering: pixelated, the GPU's resample step
- * blurs 16×16 pixel art. That's why the right-column blocks
- * (no animation, no GPU layer) look crisp while the left-column
- * ones (animated, on the layer) used to look blurry.
- *
- * `background-image` is NOT a compositor property — it animates
- * step-wise without forcing a layer, so the texture stays sampled
- * through `image-rendering: pixelated` cleanly. To "shatter" the
- * block we just swap the bg image to `none` (and kill the inset
- * box-shadow that drew its 3-D border). */
+/* No keyframes for block break — bg-image swaps are driven by
+ * JS-set inline `style={{ backgroundImage: ... }}` from the React
+ * component. When the killing strike lands, the React state sets
+ * the texture URL to null, the inline style becomes
+ * `backgroundImage: 'none'`, and the cell goes invisible (sky
+ * shows through). Pure DOM raster path, no @keyframes, no layer
+ * promotion. The static `.pixel-mine-card-block[data-block]` rules
+ * above still set the initial bg-image for the static-thumbnail
+ * variant where `animated` is false. */
 
-/* Grass — 1 HP, no intermediate damage frames. Hit at 4 % swaps
- * the bg-image to none, and the cell goes invisible (sky shows
- * through). */
-@keyframes pm-card-grass-break {
-  0%, 4% {
-    background-image: url("../assets/games/pixel_mine/blocks/grass.png");
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
-      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  }
-  6%, 100% {
-    background-image: none;
-    box-shadow: none;
-  }
-}
-
-/* Stone — 2 HP. Hit 1 (12 %) swaps to damage frame; hit 2 (20 %)
- * swaps to nothing (shattered). */
-@keyframes pm-card-stone-break {
-  0%, 11.9% {
-    background-image: url("../assets/games/pixel_mine/blocks/stone_block.png");
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
-      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  }
-  12%, 19.9% {
-    background-image: url("../assets/games/pixel_mine/block_damage/stone_block (1).png");
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
-      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  }
-  22%, 100% {
-    background-image: none;
-    box-shadow: none;
-  }
-}
-
-/* Gold — 5 HP. Strikes at 26/32/38/44/50 %. Each strike swaps the
- * bg-image to the next damage frame, last strike drops it to
- * `none` (shattered, sky visible). */
-@keyframes pm-card-gold-break {
-  0%, 25.9% {
-    background-image: url("../assets/games/pixel_mine/blocks/gold_block.png");
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
-      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  }
-  26%, 31.9% {
-    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (1).png");
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
-      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  }
-  32%, 37.9% {
-    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (2).png");
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
-      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  }
-  38%, 43.9% {
-    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (3).png");
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
-      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  }
-  44%, 49.9% {
-    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (4).png");
-    box-shadow:
-      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
-      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
-  }
-  52%, 100% {
-    background-image: none;
-    box-shadow: none;
-  }
-}
-
-/* ── Left chest opens after the gold shatters ──
- * Texture swap chest → opened_chest at 60 %. No scale/transform on
- * the chest itself — same reasoning as the block-break keyframes:
- * scaling a 16×16 pixel-art bitmap on the GPU compositor blurs it.
- * The opening "pop" is communicated by the texture swap and the
- * 100x reveal animation above the chest. */
-.pixel-mine-slot-card-art--animated .pixel-mine-card-chest[data-anim='open-100x'] {
-  animation: pm-card-chest-open 8s linear infinite;
-}
-
-@keyframes pm-card-chest-open {
-  0%, 59.9% {
-    background-image: url('../assets/games/pixel_mine/chests/chest.png');
-  }
-  60%, 100% {
-    background-image: url('../assets/games/pixel_mine/chests/opened_chest.png');
-  }
-}
+/* No keyframe for chest open — the bg-image swap (closed →
+ * opened_chest) is driven by JS inline style from the React
+ * component, same reasoning as the blocks. */
 
 /* ── 100x multiplier text ──
  * Pops up over the LEFT chest after it opens, holds, then fades
@@ -1645,36 +1490,9 @@
   transform: translate(-50%, 20%) scale(0.5);
 }
 
-.pixel-mine-slot-card-art--animated .pixel-mine-card-chest-mul {
-  animation: pm-card-mul-pop 8s linear infinite;
-}
-
-@keyframes pm-card-mul-pop {
-  0%, 60% {
-    opacity: 0;
-    transform: translate(-50%, 20%) scale(0.5);
-  }
-  64% {
-    opacity: 1;
-    transform: translate(-50%, -10%) scale(1.15);
-  }
-  68% {
-    opacity: 1;
-    transform: translate(-50%, -25%) scale(1);
-  }
-  88% {
-    opacity: 1;
-    transform: translate(-50%, -25%) scale(1);
-  }
-  95% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, 20%) scale(0.5);
-  }
-}
+/* 100x text — opacity + transform driven by JS inline style. The
+ * text itself isn't pixel art (it's a font), so the small amount
+ * of compositor activity here doesn't blur anything. */
 
 /* ── Large variant (preview modal) — bigger 100x text ── */
 .pixel-mine-slot-card-art--large .pixel-mine-card-chest-mul {
