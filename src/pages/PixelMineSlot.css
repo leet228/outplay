@@ -196,7 +196,10 @@
  * mobile portrait and shrinks the cells gracefully on smaller
  * screens. */
 .pixel-mine-stage {
-  --pm-board-w: min(100%, calc((100svh - 360px) * 5 / 11));
+  /* Scale the whole board (reels + grid + chests) down by ~14 %
+   * proportionally — every cell shrinks the same amount, so the
+   * relative geometry is preserved. */
+  --pm-board-w: min(86%, calc((100svh - 360px) * 5 / 11 * 0.86));
 }
 
 /* ── REEL STRIP (5 × 3) — Minecraft inventory style ──
