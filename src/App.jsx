@@ -5,7 +5,7 @@ import { supabase, getOrCreateUser, getUserProfile, getPlans, getLeaderboard, ge
 import { fetchRates } from './lib/currency'
 import useGameStore from './store/useGameStore'
 import { initSounds, preloadAll } from './lib/sounds'
-import { getStoreImageUrls, preloadAppImages, preloadGameCardImages, preloadStoreImages } from './lib/imagePreload'
+import { getStoreImageUrls, preloadAppImages, preloadDeferredAssets, preloadGameCardImages, preloadStoreImages } from './lib/imagePreload'
 import './App.css'
 import BottomNav from './components/BottomNav'
 import DepositSheet from './components/DepositSheet'
@@ -343,6 +343,29 @@ export default function App() {
     const unsubscribe = useGameStore.subscribe(warmStoreImages)
     return unsubscribe
   }, [])
+
+  // Once the splash is gone, lazily warm everything we don't need for
+  // first paint — live-feed slot icons + Pixel Mine textures. Runs in
+  // an idle callback so it never competes with critical bootstrap.
+  useEffect(() => {
+    if (phase === 'splash') return
+    let cancelled = false
+    let idleId = null
+    let timeoutId = null
+    const run = () => { if (!cancelled) preloadDeferredAssets() }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(run, { timeout: 3000 })
+    } else {
+      timeoutId = setTimeout(run, 200)
+    }
+    return () => {
+      cancelled = true
+      if (idleId != null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId)
+      }
+      if (timeoutId != null) clearTimeout(timeoutId)
+    }
+  }, [phase])
 
   // Ping online every 2 min so friends see us as online
   useEffect(() => {

@@ -6,6 +6,28 @@ const activePreloads = new Map()
 const IMAGE_URL_KEYS = ['avatar_url', 'photo_url']
 const APP_IMAGE_URLS = [tgStarSrc]
 
+// Live feed icons — small thumbnails shown on the Home → Slots tab.
+// Bundled via Vite glob so adding a new slot icon (e.g. for a future
+// game) is just dropping the file into `assets/games/`.
+const liveFeedIconRaw = import.meta.glob(
+  ['../assets/games/tower_stack.png',
+   '../assets/games/block_blast.png',
+   '../assets/games/rocket.png',
+   '../assets/games/plinko.png',
+   '../assets/games/pixel_mine.png'],
+  { eager: true, query: '?url', import: 'default' }
+)
+const LIVE_FEED_ICON_URLS = Object.values(liveFeedIconRaw)
+
+// Pixel Mine textures — reels, blocks, damage frames, chests. ~30
+// PNGs the slot needs once the player taps in. We warm them after
+// the splash dismisses so the slot mounts with everything cached.
+const pixelMineTextureRaw = import.meta.glob(
+  '../assets/games/pixel_mine/**/*.png',
+  { eager: true, query: '?url', import: 'default' }
+)
+const PIXEL_MINE_TEXTURE_URLS = Object.values(pixelMineTextureRaw)
+
 function isImageUrl(url) {
   if (typeof url !== 'string') return false
   if (!url || url.length < 8) return false
@@ -112,4 +134,22 @@ export function preloadAppImages() {
 
 export function preloadStoreImages(state) {
   return preloadImages(getStoreImageUrls(state), { idle: true, limit: 160 })
+}
+
+/**
+ * Lazy-warm everything that isn't required for first paint:
+ *   - Live feed slot thumbnails (5 PNGs)
+ *   - Pixel Mine textures (reels / blocks / damage frames / chests)
+ *
+ * Caller schedules this after the splash dismisses so the launch
+ * critical path stays clean. Each call is idempotent — already-loaded
+ * URLs are skipped via the global preloadedUrls set.
+ */
+export function preloadDeferredAssets() {
+  const total = preloadImages(LIVE_FEED_ICON_URLS, {
+    idle: true, limit: LIVE_FEED_ICON_URLS.length,
+  }) + preloadImages(PIXEL_MINE_TEXTURE_URLS, {
+    idle: true, limit: PIXEL_MINE_TEXTURE_URLS.length,
+  })
+  return total
 }
