@@ -1439,22 +1439,84 @@
   animation: pm-card-gold-break 8s linear infinite;
 }
 
+/* Grass — 1 HP, no intermediate damage frames. Hit at 4 % shatters
+ * the block instantly. */
 @keyframes pm-card-grass-break {
   0%, 4%   { opacity: 1; transform: scale(1); }
   6%       { opacity: 0; transform: scale(0.5); }
   100%     { opacity: 0; transform: scale(0.5); }
 }
 
+/* Stone — 2 HP. After the first hit (12 %) the block swaps to its
+ * damage frame; after the second hit (20 %) it shatters. */
 @keyframes pm-card-stone-break {
-  0%, 20%  { opacity: 1; transform: scale(1); }
-  22%      { opacity: 0; transform: scale(0.5); }
-  100%     { opacity: 0; transform: scale(0.5); }
+  0%, 11.9% {
+    background-image: url("../assets/games/pixel_mine/blocks/stone_block.png");
+    opacity: 1;
+    transform: scale(1);
+  }
+  12%, 19.9% {
+    background-image: url("../assets/games/pixel_mine/block_damage/stone_block (1).png");
+    opacity: 1;
+    transform: scale(1);
+  }
+  22% {
+    background-image: url("../assets/games/pixel_mine/block_damage/stone_block (1).png");
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
 }
 
+/* Gold — 5 HP. Strike timings 26 % / 32 % / 38 % / 44 % / 50 %.
+ * Each strike (except the killing blow) swaps to the next damage
+ * frame, mirroring the in-game DAMAGE_TEX behaviour where the
+ * displayed frame index = (full_hp - current_hp - 1) i.e.
+ *   after strike 1 → (1).png
+ *   after strike 2 → (2).png
+ *   after strike 3 → (3).png
+ *   after strike 4 → (4).png
+ *   after strike 5 → destroyed (5th asset frame is unused, matches
+ *     the in-game cap at dmg.length-1 since the cell is null after
+ *     the final hit). */
 @keyframes pm-card-gold-break {
-  0%, 50%  { opacity: 1; transform: scale(1); }
-  52%      { opacity: 0; transform: scale(0.5); }
-  100%     { opacity: 0; transform: scale(0.5); }
+  0%, 25.9% {
+    background-image: url("../assets/games/pixel_mine/blocks/gold_block.png");
+    opacity: 1;
+    transform: scale(1);
+  }
+  26%, 31.9% {
+    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (1).png");
+    opacity: 1;
+    transform: scale(1);
+  }
+  32%, 37.9% {
+    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (2).png");
+    opacity: 1;
+    transform: scale(1);
+  }
+  38%, 43.9% {
+    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (3).png");
+    opacity: 1;
+    transform: scale(1);
+  }
+  44%, 49.9% {
+    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (4).png");
+    opacity: 1;
+    transform: scale(1);
+  }
+  52% {
+    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (4).png");
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
 }
 
 /* ── Left chest opens after the gold shatters ──
