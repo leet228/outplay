@@ -1292,11 +1292,20 @@ export async function getServerNow() {
   return Number(data)
 }
 
+// Module-level dedup flags so transient realtime hiccups don't spam
+// admin logs. Supabase's realtime client auto-reconnects on its own,
+// so a single CHANNEL_ERROR / TIMED_OUT is rarely actionable — by
+// the time an admin sees the log the channel is usually healthy
+// again. We log to admin only ONCE per page session per channel
+// kind; further blips just go to console.warn for local debugging.
+let _rocketRealtimeLogged = false
+let _liveFeedRealtimeLogged = false
+
 // Subscribe to new rocket rounds. Callback fires with the freshly
 // inserted round row. Returns the channel — caller must channel.unsubscribe()
-// on cleanup. Only genuine failures (CHANNEL_ERROR / TIMED_OUT) are
-// logged; CLOSED is the normal status emitted on .unsubscribe() when
-// the user leaves the page.
+// on cleanup. CHANNEL_ERROR / TIMED_OUT are logged to admin once per
+// session at most; CLOSED is the normal status emitted on
+// .unsubscribe() when the user leaves the page.
 export function subscribeRocketRounds(onNewRound) {
   const channel = supabase
     .channel('rocket_rounds_inserts')
@@ -1305,9 +1314,12 @@ export function subscribeRocketRounds(onNewRound) {
         (payload) => onNewRound(payload.new))
     .subscribe((status, err) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        const msg = err?.message || `realtime status: ${status}`
         console.warn('subscribeRocketRounds:', status, err)
-        logClientError('rocket.realtime', msg, { status })
+        if (!_rocketRealtimeLogged) {
+          _rocketRealtimeLogged = true
+          const msg = err?.message || `realtime status: ${status}`
+          logClientError('rocket.realtime', msg, { status })
+        }
       }
     })
   return channel
@@ -1331,9 +1343,10 @@ export async function getLiveFeed(limit = 30) {
 
 // Subscribe to new live_feed_events INSERTs. onInsert(row) fires for
 // every new row. Returns the Supabase channel — caller must call
-// channel.unsubscribe() on cleanup. Only genuine failures
-// (CHANNEL_ERROR / TIMED_OUT) are logged; CLOSED is the normal
-// status emitted on .unsubscribe() when the user leaves the page.
+// channel.unsubscribe() on cleanup. CHANNEL_ERROR / TIMED_OUT are
+// logged to admin at most once per session; the realtime client
+// auto-reconnects on its own so transient hiccups don't need an
+// admin notification each time.
 export function subscribeLiveFeed(onInsert) {
   const channel = supabase
     .channel('live_feed_inserts')
@@ -1342,9 +1355,12 @@ export function subscribeLiveFeed(onInsert) {
         (payload) => onInsert(payload.new))
     .subscribe((status, err) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        const msg = err?.message || `realtime status: ${status}`
         console.warn('subscribeLiveFeed:', status, err)
-        logClientError('live_feed.realtime', msg, { status })
+        if (!_liveFeedRealtimeLogged) {
+          _liveFeedRealtimeLogged = true
+          const msg = err?.message || `realtime status: ${status}`
+          logClientError('live_feed.realtime', msg, { status })
+        }
       }
     })
   return channel
