@@ -155,13 +155,16 @@
 
 .dice-bar {
   position: relative;
-  height: 28px;
+  /* Taller container so the inner bar reads fat — matches the
+   * reference where the green stripe is ~75 % of the container's
+   * height with a small dark gutter top + bottom. */
+  height: 42px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #181a22;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow:
-    inset 0 2px 4px rgba(0, 0, 0, 0.4),
-    0 1px 0 rgba(255, 255, 255, 0.04);
+    inset 0 2px 6px rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
   cursor: pointer;
   touch-action: none;
 }
@@ -170,51 +173,72 @@
 .dice-bar-red,
 .dice-bar-green {
   position: absolute;
+  /* Snug fit — leave just a 6 px gutter on each side so the bar
+   * fills the dark container almost edge-to-edge. */
   top: 6px;
   bottom: 6px;
   border-radius: 999px;
-  transition: left 0.16s ease-out, right 0.16s ease-out;
+  /* NO `transition` here on purpose — we want the bar halves to
+   * snap to the new integer threshold the instant the slider
+   * ticks past it, no smooth-slide. */
 }
 
 .dice-bar-red {
-  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  background: linear-gradient(180deg, #ff5b5b 0%, #d11f1f 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.20),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.32);
 }
 
 .dice-bar-green {
-  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+  background: linear-gradient(180deg, #3ddc7a 0%, #22c55e 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.25),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.32);
 }
 
-/* Draggable threshold handle — vertical white pill. */
+/* Draggable threshold handle — white pill that pokes slightly
+ * above and below the bar like in the reference design. Three
+ * vertical grip lines drawn via inline `<span>`. */
 .dice-handle {
   position: absolute;
   top: 50%;
-  width: 22px;
-  height: 38px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
-  border: 1px solid rgba(0, 0, 0, 0.35);
+  width: 30px;
+  height: 50px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
+  border: 1px solid rgba(0, 0, 0, 0.55);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 4px 10px rgba(0, 0, 0, 0.55);
+    inset 0 2px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.10),
+    0 4px 12px rgba(0, 0, 0, 0.55);
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(15, 23, 42, 0.5);
-  font-size: 18px;
-  font-weight: 900;
-  line-height: 0;
   cursor: ew-resize;
   z-index: 3;
-  transition: left 0.12s ease-out;
+  /* NO smooth transition on `left` — the slider snaps integer to
+   * integer when the player drags, so the handle should JUMP
+   * between positions rather than glide. */
 }
 .dice-bar.is-disabled .dice-handle { cursor: not-allowed; }
+
+/* Three grip lines stacked vertically inside the handle, like
+ * the reference design. */
+.dice-handle-grip {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  pointer-events: none;
+}
+.dice-handle-grip span {
+  display: block;
+  width: 2px;
+  height: 18px;
+  border-radius: 2px;
+  background: rgba(15, 23, 42, 0.45);
+}
 
 /* Result cube — lands on the rolled value with a soft pop. The
  * cube is drawn as a white square with a green/red shadow so the

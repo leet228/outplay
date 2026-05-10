@@ -1482,7 +1482,7 @@ const SLOTS = [
   },
   {
     id: 'dice',
-    category: 'popular',
+    category: 'quick',
     titleKey: 'slotDiceTitle',
     subKey: 'slotDiceSub',
     route: '/slots/dice',
@@ -1997,7 +1997,8 @@ function DiceSlotArtwork({ large = false }) {
     <div className={`dice-slot-card-art ${large ? 'dice-slot-card-art--large' : ''}`} aria-hidden="true">
       <span className="dice-card-bar" />
       <span className="dice-card-cube">62</span>
-      <span className="dice-card-label">DICE</span>
+      {/* Parent slot-card already renders the title overlay; no label
+       * inside the art so we don't get "DICE / DICE" stacked. */}
     </div>
   )
 }

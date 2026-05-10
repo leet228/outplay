@@ -359,19 +359,36 @@ export default function DiceSlot() {
 function DiceBar({ target, mode, lastRoll, disabled, onChangeTarget }) {
   const barRef = useRef(null)
   const draggingRef = useRef(false)
+  // Tracks the last integer value reported so we can fire a haptic
+  // "tick" exactly once per integer crossing while the player drags
+  // (gives the slider a notched / ratcheting feel instead of a
+  // smooth glide). Defaults to a sentinel that never equals a real
+  // value so the first drag move always emits one tick.
+  const lastTickRef = useRef(NaN)
 
   const handleMove = useCallback((clientX) => {
     const el = barRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
     const pct = ((clientX - rect.left) / rect.width) * 100
-    onChangeTarget(pct)
+    // Quantise to integer so the slider snaps to whole-number
+    // targets, then report. If the integer changed since the last
+    // tick, also fire a light haptic — that's the "click per step"
+    // feel the design calls for.
+    const integerPct = Math.max(0, Math.min(100, Math.round(pct)))
+    if (integerPct !== lastTickRef.current) {
+      lastTickRef.current = integerPct
+      haptic('light')
+    }
+    onChangeTarget(integerPct)
   }, [onChangeTarget])
 
   function onPointerDown(e) {
     if (disabled) return
     draggingRef.current = true
-    haptic('light')
+    // Reset the tick tracker so the initial jump on press also
+    // emits a haptic if it lands on a different integer.
+    lastTickRef.current = NaN
     const x = e.touches ? e.touches[0].clientX : e.clientX
     handleMove(x)
   }
@@ -435,7 +452,9 @@ function DiceBar({ target, mode, lastRoll, disabled, onChangeTarget }) {
         </div>
       )}
 
-      {/* Draggable threshold handle. */}
+      {/* Draggable threshold handle — three vertical grip lines
+       * inside a white pill. No CSS transition: the handle JUMPS
+       * between integer positions for the ratchet/tick feel. */}
       <div
         className="dice-handle"
         style={{ left: `${target}%` }}
@@ -444,7 +463,11 @@ function DiceBar({ target, mode, lastRoll, disabled, onChangeTarget }) {
         aria-valuemax={MAX_TARGET}
         aria-valuenow={target}
       >
-        <span aria-hidden="true">‖</span>
+        <span className="dice-handle-grip" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
       </div>
     </div>
   )
