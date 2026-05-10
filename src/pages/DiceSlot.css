@@ -81,10 +81,10 @@
 /* ─────────────────────────────────────────────────────────────
  * History row — recent rolls as pill badges.
  *
- * Pills are flexed across the row with a fat horizontal aspect
- * (wider than tall) so they read as ovals, not round chips. We
- * cap the row at 10 entries — fewer pills = each pill is broader
- * = clearly landscape rather than nearly-square.
+ * Pills have a FIXED width (no flex-grow) so a lone pill doesn't
+ * balloon across the whole row, and empty slots aren't rendered
+ * at all — the row is genuinely blank before the first spin.
+ * Width:height keeps a 2.3:1 landscape oval aspect.
  * ───────────────────────────────────────────────────────────── */
 .dice-history {
   position: relative;
@@ -95,15 +95,12 @@
   flex-wrap: nowrap;
   justify-content: flex-start;
   padding: 2px 0 8px;
+  min-height: 26px;
 }
 
 .dice-history-pill {
-  flex: 1 1 0;
-  min-width: 0;
-  /* Landscape oval — width comes from the flex distribution
-   * (≈ 60 px each across 8 pills in the row), height is held
-   * deliberately short so the aspect ratio reads as 2-2.5:1
-   * (clearly wider than tall). */
+  flex: 0 0 60px;
+  width: 60px;
   height: 26px;
   border-radius: 999px;
   display: flex;

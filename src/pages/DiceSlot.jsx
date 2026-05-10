@@ -212,24 +212,21 @@ export default function DiceSlot() {
           <div className="dice-bg" />
 
           {/* ── History row ──
-              Last N rolls, newest first. Green pill = win, gray = loss.
-              Padded with placeholder pills so the row's visual width is
-              stable from spin 1 onward. */}
+              Last N rolls, newest first. Green pill = win, gray =
+              loss. Empty slots render NOTHING — no placeholder
+              oval — so before the first spin the row is just blank
+              space, and the pills only show when there's something
+              real to show. Pills have a fixed width so they don't
+              stretch when there's only one of them. */}
           <div className="dice-history" aria-hidden="true">
-            {Array.from({ length: 8 }, (_, i) => {
-              const h = history[i]
-              if (!h) {
-                return <span key={`empty-${i}`} className="dice-history-pill is-empty" />
-              }
-              return (
-                <span
-                  key={h.id}
-                  className={`dice-history-pill ${h.win ? 'is-win' : 'is-loss'}`}
-                >
-                  {h.roll}
-                </span>
-              )
-            })}
+            {history.map(h => (
+              <span
+                key={h.id}
+                className={`dice-history-pill ${h.win ? 'is-win' : 'is-loss'}`}
+              >
+                {h.roll}
+              </span>
+            ))}
           </div>
 
           {/* ── Slider area ──
