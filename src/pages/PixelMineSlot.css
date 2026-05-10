@@ -1322,7 +1322,13 @@
   aspect-ratio: 1 / 1;
   background-repeat: no-repeat;
   background-size: 100% 100%;
+  /* Pixelated rendering with vendor fallbacks — keeps the 16×16
+   * source pixels crisp even on the animated left-column blocks
+   * that swap textures during the strike sequence. */
   image-rendering: pixelated;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.18),
     inset -1px -1px 0 rgba(0, 0, 0, 0.28);
@@ -1355,8 +1361,13 @@
   /* `contain` keeps the chest's true 16:11 ratio (no stretching) and
    * always centres it inside the square cell. */
   background-size: contain;
+  /* Pixelated rendering with vendor fallbacks. No filter: drop-shadow
+   * here — it would rasterise the chest into a bitmap and blur the
+   * 16×16 source pixels. */
   image-rendering: pixelated;
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35));
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
 }
 
 /* ── Falling pickaxe (animated only) — wood pickaxe ──
@@ -1379,8 +1390,15 @@
   background-image: url('../assets/games/pixel_mine/reels/wood.png');
   background-repeat: no-repeat;
   background-size: 100% 100%;
+  /* Pixelated rendering with vendor fallbacks so 16×16 source pixels
+   * stay sharp at any rendered size, including when the element is
+   * mid-rotation on a GPU compositor layer. NO filter: drop-shadow
+   * here — drop-shadow rasterises the element into a bitmap before
+   * applying the shadow, which blurs the pixel art. */
   image-rendering: pixelated;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
   pointer-events: none;
   /* Above the grid so the swinging pickaxe always stays in front of
    * the blocks, never disappears behind them. */
@@ -1461,11 +1479,19 @@
 }
 
 /* Grass — 1 HP, no intermediate damage frames. Hit at 4 % shatters
- * the block instantly. */
+ * the block instantly.
+ *
+ * NOTE on rendering: we deliberately animate ONLY opacity (no
+ * transform: scale). A scale on a 16×16 pixel-art texture promotes
+ * the element to a GPU compositor layer that uses bilinear
+ * filtering — even with image-rendering: pixelated set, browsers
+ * sometimes still smooth the transformed bitmap, which makes the
+ * shattering block look fuzzy compared to its untouched neighbours.
+ * Fading-only keeps every block crisp through the whole loop. */
 @keyframes pm-card-grass-break {
-  0%, 4%   { opacity: 1; transform: scale(1); }
-  6%       { opacity: 0; transform: scale(0.5); }
-  100%     { opacity: 0; transform: scale(0.5); }
+  0%, 4%   { opacity: 1; }
+  6%       { opacity: 0; }
+  100%     { opacity: 0; }
 }
 
 /* Stone — 2 HP. After the first hit (12 %) the block swaps to its
@@ -1474,21 +1500,17 @@
   0%, 11.9% {
     background-image: url("../assets/games/pixel_mine/blocks/stone_block.png");
     opacity: 1;
-    transform: scale(1);
   }
   12%, 19.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/stone_block (1).png");
     opacity: 1;
-    transform: scale(1);
   }
   22% {
     background-image: url("../assets/games/pixel_mine/block_damage/stone_block (1).png");
     opacity: 0;
-    transform: scale(0.5);
   }
   100% {
     opacity: 0;
-    transform: scale(0.5);
   }
 }
 
@@ -1507,61 +1529,48 @@
   0%, 25.9% {
     background-image: url("../assets/games/pixel_mine/blocks/gold_block.png");
     opacity: 1;
-    transform: scale(1);
   }
   26%, 31.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (1).png");
     opacity: 1;
-    transform: scale(1);
   }
   32%, 37.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (2).png");
     opacity: 1;
-    transform: scale(1);
   }
   38%, 43.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (3).png");
     opacity: 1;
-    transform: scale(1);
   }
   44%, 49.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (4).png");
     opacity: 1;
-    transform: scale(1);
   }
   52% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (4).png");
     opacity: 0;
-    transform: scale(0.5);
   }
   100% {
     opacity: 0;
-    transform: scale(0.5);
   }
 }
 
 /* ── Left chest opens after the gold shatters ──
- * Texture swap chest → opened_chest at 60% with a brief pop scale,
- * then holds. */
+ * Texture swap chest → opened_chest at 60 %. No scale/transform on
+ * the chest itself — same reasoning as the block-break keyframes:
+ * scaling a 16×16 pixel-art bitmap on the GPU compositor blurs it.
+ * The opening "pop" is communicated by the texture swap and the
+ * 100x reveal animation above the chest. */
 .pixel-mine-slot-card-art--animated .pixel-mine-card-chest[data-anim='open-100x'] {
   animation: pm-card-chest-open 8s linear infinite;
 }
 
 @keyframes pm-card-chest-open {
-  0%, 56% {
+  0%, 59.9% {
     background-image: url('../assets/games/pixel_mine/chests/chest.png');
-    transform: scale(1);
   }
-  58% {
-    transform: scale(1.15);
-  }
-  60% {
+  60%, 100% {
     background-image: url('../assets/games/pixel_mine/chests/opened_chest.png');
-    transform: scale(1.15);
-  }
-  64%, 100% {
-    background-image: url('../assets/games/pixel_mine/chests/opened_chest.png');
-    transform: scale(1);
   }
 }
 
