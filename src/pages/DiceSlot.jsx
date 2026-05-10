@@ -189,12 +189,12 @@ export default function DiceSlot() {
       setLastWin(0)
     }
 
-    // Push to history (newest first, cap 10 — fewer pills means each
-    // one is wider, which is what the reference design calls for).
+    // Push to history (newest first, cap 8 — keeps each pill wide
+    // enough to read as a landscape oval, not a square chip).
     setHistory(prev => [
       { id: Date.now() + Math.random(), roll: value, win: isWin },
       ...prev,
-    ].slice(0, 10))
+    ].slice(0, 8))
 
     rollingRef.current = false
     setRolling(false)
@@ -216,7 +216,7 @@ export default function DiceSlot() {
               Padded with placeholder pills so the row's visual width is
               stable from spin 1 onward. */}
           <div className="dice-history" aria-hidden="true">
-            {Array.from({ length: 10 }, (_, i) => {
+            {Array.from({ length: 8 }, (_, i) => {
               const h = history[i]
               if (!h) {
                 return <span key={`empty-${i}`} className="dice-history-pill is-empty" />

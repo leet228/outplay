@@ -100,12 +100,16 @@
 .dice-history-pill {
   flex: 1 1 0;
   min-width: 0;
-  height: 36px;
+  /* Landscape oval — width comes from the flex distribution
+   * (≈ 60 px each across 8 pills in the row), height is held
+   * deliberately short so the aspect ratio reads as 2-2.5:1
+   * (clearly wider than tall). */
+  height: 26px;
   border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
