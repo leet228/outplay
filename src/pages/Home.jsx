@@ -1688,28 +1688,61 @@ function PlinkoSlotArtwork({ large = false, animated = false }) {
   )
 }
 
-// Pixel Mine card art — pixelated grid of mine blocks (4×3) with a
-// "PIXEL MINE" label across the bottom. Animated variant runs a soft
-// zoom-pulse on the cells (alternating odd/even) for a "blocks
-// twinkling under torchlight" feel.
+// Pixel Mine card art — mirrors the actual Mine Slot:
+//   - Minecraft sky-blue background with a single drifting cloud
+//   - 3-cell reel strip on top showing a wood pickaxe + TNT + Eye
+//     of Ender (the iconic symbols)
+//   - 4-block mining column underneath: grass → stone → diamond →
+//     obsidian (the "skyline" that makes the slot read at a glance)
+//   - Wooden chest at the bottom
+//   - "PIXEL MINE" label across the very bottom
+// The animated variant runs a wood-pickaxe drop loop above the grid
+// (rotates + falls + bounces) so the card flickers with motion when
+// hovered or shown in the preview modal.
 function PixelMineSlotArtwork({ large = false, animated = false }) {
-  // Pre-positioned palette of cells — chosen to read as a Minecraft
-  // ore wall at a glance: gold, diamond, emerald, redstone, lapis,
-  // iron, coal, plus one TNT and one creeper for theme.
-  const cells = [
-    'gold',     'diamond', 'emerald', 'lapis',
-    'iron',     'creeper', 'redstone','gold',
-    'coal',     'tnt',     'lapis',   'emerald',
-  ]
   return (
     <div className={`pixel-mine-slot-card-art ${large ? 'pixel-mine-slot-card-art--large' : ''} ${animated ? 'pixel-mine-slot-card-art--animated' : ''}`} aria-hidden="true">
-      <span className="pixel-mine-card-glow" />
-      <div className="pixel-mine-card-grid">
-        {cells.map((c, i) => (
-          <span key={i} className={`pixel-mine-card-cell pixel-mine-card-cell--${c}`} />
-        ))}
+      <span className="pixel-mine-card-sky" />
+      <span className="pixel-mine-card-cloud" />
+
+      {/* Inventory-slot reel strip — 3 square cells with the slot's
+       * iconic symbols. Texture lookups match the in-game asset paths. */}
+      <div className="pixel-mine-card-reels">
+        <span className="pixel-mine-card-reel-cell" data-sym="wood" />
+        <span className="pixel-mine-card-reel-cell" data-sym="tnt" />
+        <span className="pixel-mine-card-reel-cell" data-sym="ender" />
       </div>
-      <span className="pixel-mine-card-label">PIXEL MINE</span>
+
+      {/* Falling pickaxe — only for the animated variant. Drops into
+       * the middle column and bounces in a loop. */}
+      {animated && <span className="pixel-mine-card-pickaxe-fly" />}
+
+      {/* Grid + chests share a wrapper so the chest row always sits
+       * flush under the grid regardless of card aspect ratio. */}
+      <div className="pixel-mine-card-stack-wrap">
+        {/* 3-column × 3-row mining grid, each tile square. Top row is
+         * surface (grass), middle is mid-tier ores, bottom row is the
+         * jackpot tier (gold/diamond/obsidian). */}
+        <div className="pixel-mine-card-grid">
+          <span className="pixel-mine-card-block" data-block="grass" />
+          <span className="pixel-mine-card-block" data-block="grass" />
+          <span className="pixel-mine-card-block" data-block="grass" />
+          <span className="pixel-mine-card-block" data-block="stone" />
+          <span className="pixel-mine-card-block" data-block="redstone" />
+          <span className="pixel-mine-card-block" data-block="stone" />
+          <span className="pixel-mine-card-block" data-block="gold" />
+          <span className="pixel-mine-card-block" data-block="diamond" />
+          <span className="pixel-mine-card-block" data-block="obsidian" />
+        </div>
+
+        {/* One chest per column. Same column layout as the grid so each
+         * chest sits dead-centred under the column it belongs to. */}
+        <div className="pixel-mine-card-chests">
+          <span className="pixel-mine-card-chest" />
+          <span className="pixel-mine-card-chest" />
+          <span className="pixel-mine-card-chest" />
+        </div>
+      </div>
     </div>
   )
 }

@@ -1214,72 +1214,178 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
- * Card art used on the home grid + the slot preview modal.
- * Mini reels-on-top + grid-below thumbnail.
+ * Pixel Mine card art (home grid thumbnail + preview modal).
+ * Mirrors the in-game look: sky + cloud, mini reel strip with
+ * iconic symbols, mining-block stack, and a wooden chest at the
+ * base. Animated variant adds a falling-and-rotating pickaxe loop.
  * ───────────────────────────────────────────────────────────── */
 .pixel-mine-slot-card-art {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   overflow: hidden;
-  background: radial-gradient(120% 80% at 50% 0%, #2a1d10 0%, #0c0908 60%, #050404 100%);
+  isolation: isolate;
+  background: linear-gradient(180deg, #87ceeb 0%, #aedaee 55%, #c8e3f3 100%);
 }
-.pixel-mine-card-glow {
+
+.pixel-mine-card-sky {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(60% 50% at 50% 0%, rgba(255, 170, 80, 0.25) 0%, transparent 65%),
-    radial-gradient(70% 50% at 50% 100%, rgba(76, 175, 80, 0.2) 0%, transparent 65%);
   pointer-events: none;
+  background:
+    radial-gradient(50% 35% at 50% 0%, rgba(255, 255, 255, 0.28), transparent 65%),
+    /* faint grass strip near the chest line */
+    linear-gradient(180deg, transparent 70%, rgba(80, 160, 60, 0.18) 70%, rgba(80, 160, 60, 0.30) 100%);
 }
-.pixel-mine-card-grid {
+
+/* A single drifting cloud built from box-shadow chunks (kept inside
+ * the card, never escapes the rounded corners). */
+.pixel-mine-card-cloud {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  top: 12%;
-  bottom: 26%;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  gap: 4px;
-}
-.pixel-mine-card-cell {
-  border-radius: 3px;
+  top: 18%;
+  left: -30%;
+  width: 14%;
+  aspect-ratio: 3 / 1;
+  background: #fff;
+  border-radius: 999px;
+  opacity: 0.85;
   box-shadow:
-    inset 1.5px 1.5px 0 rgba(255, 255, 255, 0.22),
-    inset -1.5px -1.5px 0 rgba(0, 0, 0, 0.32);
+    /* fluffy bumps on top */
+    20% -45% 0 -10% #fff,
+    50% -55% 0 -12% #fff;
 }
-.pixel-mine-card-cell--diamond  { background: linear-gradient(160deg, #b8f1ff, #2fa4cd); }
-.pixel-mine-card-cell--emerald  { background: linear-gradient(160deg, #66f29c, #0f8a4e); }
-.pixel-mine-card-cell--gold     { background: linear-gradient(160deg, #ffeaa1, #d97706); }
-.pixel-mine-card-cell--iron     { background: linear-gradient(160deg, #f1f5fa, #8a96a8); }
-.pixel-mine-card-cell--lapis    { background: linear-gradient(160deg, #6aa1ff, #1d3aa3); }
-.pixel-mine-card-cell--redstone { background: linear-gradient(160deg, #ff8585, #8a0d10); }
-.pixel-mine-card-cell--coal     { background: linear-gradient(160deg, #4a505c, #15181f); }
-.pixel-mine-card-cell--tnt      { background: linear-gradient(160deg, #ff4040, #7a0808); }
-.pixel-mine-card-cell--creeper  { background: linear-gradient(160deg, #b6e860, #4a8a18); }
-.pixel-mine-card-label {
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud {
+  animation: pixel-mine-card-cloud-drift 22s linear infinite;
+}
+@keyframes pixel-mine-card-cloud-drift {
+  from { left: -30%; }
+  to   { left: 130%; }
+}
+
+/* ── Reel strip (3 square cells) ── */
+.pixel-mine-card-reels {
   position: absolute;
-  bottom: 7%;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 14px;
-  font-weight: 950;
-  letter-spacing: 0.05em;
-  color: #fff;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
-  font-family: 'Courier New', monospace;
+  top: 6%;
+  left: 26%;
+  right: 26%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  padding: 1px;
+  background: #6b6b6b;
+  border: 1px solid #2b2b2b;
+  box-shadow:
+    inset 1px 1px 0 #c6c6c6,
+    inset -1px -1px 0 #4a4a4a;
 }
-.pixel-mine-slot-card-art--animated .pixel-mine-card-cell {
-  animation: pixel-mine-card-twinkle 2.6s ease-in-out infinite both;
+.pixel-mine-card-reel-cell {
+  aspect-ratio: 1 / 1;
+  background-color: #8b8b8b;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 86% 86%;
+  box-shadow:
+    inset 1px 1px 0 #555,
+    inset -1px -1px 0 #fff;
+  image-rendering: pixelated;
 }
-.pixel-mine-slot-card-art--animated .pixel-mine-card-cell:nth-child(odd)  { animation-delay: 0.0s; }
-.pixel-mine-slot-card-art--animated .pixel-mine-card-cell:nth-child(even) { animation-delay: 0.6s; }
-@keyframes pixel-mine-card-twinkle {
-  0%, 80%, 100% { transform: scale(1);    filter: brightness(1); }
-  40%           { transform: scale(0.92); filter: brightness(1.25); }
+.pixel-mine-card-reel-cell[data-sym='wood']   { background-image: url('../assets/games/pixel_mine/reels/wood.png'); }
+.pixel-mine-card-reel-cell[data-sym='tnt']    { background-image: url('../assets/games/pixel_mine/reels/tnt.png'); }
+.pixel-mine-card-reel-cell[data-sym='ender']  { background-image: url('../assets/games/pixel_mine/reels/ender.png'); }
+
+/* ── Grid + chests stack — anchored at the top, the chests sit
+ * flush under the grid via flex so card aspect can't push them
+ * over the blocks. Bottom margin protects the parent's title. */
+.pixel-mine-card-stack-wrap {
+  position: absolute;
+  left: 26%;
+  right: 26%;
+  top: 26%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 2;
 }
+
+/* ── 3×3 mining grid (square tiles) ── */
+.pixel-mine-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 1px 1px 0 rgba(0, 0, 0, 0.5),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.12);
+}
+.pixel-mine-card-block {
+  aspect-ratio: 1 / 1;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.28);
+}
+.pixel-mine-card-block[data-block='grass']    { background-image: url('../assets/games/pixel_mine/blocks/grass.png'); }
+.pixel-mine-card-block[data-block='dirt']     { background-image: url('../assets/games/pixel_mine/blocks/dirt.png'); }
+.pixel-mine-card-block[data-block='stone']    { background-image: url('../assets/games/pixel_mine/blocks/stone_block.png'); }
+.pixel-mine-card-block[data-block='redstone'] { background-image: url('../assets/games/pixel_mine/blocks/redstone.png'); }
+.pixel-mine-card-block[data-block='gold']     { background-image: url('../assets/games/pixel_mine/blocks/gold_block.png'); }
+.pixel-mine-card-block[data-block='diamond']  { background-image: url('../assets/games/pixel_mine/blocks/diamond_block.png'); }
+.pixel-mine-card-block[data-block='obsidian'] { background-image: url('../assets/games/pixel_mine/blocks/obsidian.png'); }
+
+/* ── 3 chests row, columns matched to the grid so each chest sits
+ * dead-centre under its column ── */
+.pixel-mine-card-chests {
+  display: grid;
+  /* Same gap as the grid (1px) so column boundaries line up with
+   * the blocks above. */
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+}
+.pixel-mine-card-chest {
+  aspect-ratio: 1 / 1;
+  background-image: url('../assets/games/pixel_mine/chests/chest.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  /* `contain` keeps the chest's true 16:11 ratio (no stretching) and
+   * always centres it inside the square cell. */
+  background-size: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35));
+}
+
+/* ── Falling pickaxe (animated only) — diamond pickaxe variant ── */
+.pixel-mine-card-pickaxe-fly {
+  position: absolute;
+  left: 42%;          /* aligned over the central column of the grid */
+  top: 18%;
+  width: 16%;
+  aspect-ratio: 1 / 1;
+  background-image: url('../assets/games/pixel_mine/reels/diamond.png');
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+  /* Above the grid so the swinging pickaxe always stays in front of
+   * the blocks, never disappears behind them. */
+  z-index: 5;
+  animation: pixel-mine-card-pickaxe-loop 2.4s cubic-bezier(0.42, 0, 0.6, 1) infinite both;
+}
+
+@keyframes pixel-mine-card-pickaxe-loop {
+  /* Drop, hit a block, bounce, fall again, fade out, reset. */
+  0%   { transform: translateY(0)   rotate(0deg);   opacity: 1; }
+  35%  { transform: translateY(70%) rotate(360deg); opacity: 1; }
+  45%  { transform: translateY(70%) rotate(360deg); opacity: 1; }
+  60%  { transform: translateY(35%) rotate(540deg); opacity: 1; }
+  85%  { transform: translateY(70%) rotate(900deg); opacity: 1; }
+  90%  { transform: translateY(70%) rotate(900deg); opacity: 0; }
+  100% { transform: translateY(0)   rotate(0deg);   opacity: 0; }
+}
+
+/* ── Large variant (preview modal) ── */
 .pixel-mine-slot-card-art--large {
   position: relative;
   inset: auto;
@@ -1287,4 +1393,3 @@
   height: 100%;
   border-radius: 26px;
 }
-.pixel-mine-slot-card-art--large .pixel-mine-card-label { font-size: 22px; bottom: 8%; }
