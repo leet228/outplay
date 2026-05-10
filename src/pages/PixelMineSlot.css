@@ -1322,13 +1322,14 @@
   aspect-ratio: 1 / 1;
   background-repeat: no-repeat;
   background-size: 100% 100%;
-  /* Pixelated rendering with vendor fallbacks — keeps the 16×16
-   * source pixels crisp even on the animated left-column blocks
-   * that swap textures during the strike sequence. */
-  image-rendering: pixelated;
-  image-rendering: -webkit-optimize-contrast;
+  /* Vendor prefixes BEFORE `pixelated` so Chrome / Edge / Safari
+   * read `pixelated` as the final value. If `crisp-edges` were
+   * last, Chrome would resolve it to `auto` and silently smooth
+   * the 16×16 textures. */
   image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
+  image-rendering: pixelated;
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.18),
     inset -1px -1px 0 rgba(0, 0, 0, 0.28);
@@ -1358,16 +1359,17 @@
   background-image: url('../assets/games/pixel_mine/chests/chest.png');
   background-repeat: no-repeat;
   background-position: center center;
-  /* `contain` keeps the chest's true 16:11 ratio (no stretching) and
-   * always centres it inside the square cell. */
-  background-size: contain;
-  /* Pixelated rendering with vendor fallbacks. No filter: drop-shadow
-   * here — it would rasterise the chest into a bitmap and blur the
-   * 16×16 source pixels. */
-  image-rendering: pixelated;
-  image-rendering: -webkit-optimize-contrast;
+  /* Match the in-game .pmc-cell stretching (`100% 100%`) — the
+   * chest source is 16×16 already, so this fills the square cell
+   * exactly without any subpixel scaling. */
+  background-size: 100% 100%;
+  /* Vendor prefixes BEFORE `pixelated` so Chrome / Edge / Safari
+   * resolve `pixelated` as the active value. If `crisp-edges` came
+   * last, Chrome would treat it as `auto` and smooth the texture. */
   image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
+  image-rendering: pixelated;
 }
 
 /* ── Falling pickaxe (animated only) — wood pickaxe ──
@@ -1375,74 +1377,90 @@
  * column), 2 on stone (row 1), 5 on gold (row 2). After the last
  * strike the pickaxe rises out of frame so the left chest can pop
  * its 100x multiplier reveal before the sequence loops. */
+/* Outer wrapper — handles VERTICAL drop / bounce only. The inner
+ * .pixel-mine-card-pickaxe-spin element handles rotation. Same
+ * two-element pattern as the in-game .pixel-mine-falling-pickaxe;
+ * splitting translation and rotation across two elements keeps the
+ * compositor bitmap pixel-aligned, which preserves the 16×16 pixel
+ * art crispness through the whole drop. */
 .pixel-mine-card-pickaxe-fly {
   position: absolute;
   /* Start position OVERLAPS the wood reel cell (the leftmost cell
    * of the reel strip) so it visually "drops out" of the slot when
-   * the keyframe begins. Reel strip top = 6 %, cell ~12 % tall on
-   * a 4:5 card → wood cell sits roughly top 7 % - 19 %. Pickaxe is
-   * 14 % wide / aspect 1, so it occupies ~7 % - 18 % at the start —
-   * basically pinned over the wood reel slot. */
+   * the keyframe begins. */
   left: 28%;
   top: 7%;
   width: 14%;
   aspect-ratio: 1 / 1;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.pixel-mine-card-pickaxe-spin {
+  display: block;
+  width: 100%;
+  height: 100%;
   background-image: url('../assets/games/pixel_mine/reels/wood.png');
   background-repeat: no-repeat;
   background-size: 100% 100%;
-  /* Pixelated rendering with vendor fallbacks so 16×16 source pixels
-   * stay sharp at any rendered size, including when the element is
-   * mid-rotation on a GPU compositor layer. NO filter: drop-shadow
-   * here — drop-shadow rasterises the element into a bitmap before
-   * applying the shadow, which blurs the pixel art. */
-  image-rendering: pixelated;
-  image-rendering: -webkit-optimize-contrast;
+  /* Vendor prefixes BEFORE `pixelated` so Chrome / Edge / Safari
+   * read `pixelated` as the final value (their parser ignores the
+   * unknown `crisp-edges` / -webkit-optimize-contrast lines). If
+   * `pixelated` were last-but-not-final, Chrome would resolve
+   * `crisp-edges` to `auto` and silently smooth the texture. */
   image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
-  pointer-events: none;
-  /* Above the grid so the swinging pickaxe always stays in front of
-   * the blocks, never disappears behind them. */
-  z-index: 5;
+  image-rendering: pixelated;
 }
 
 .pixel-mine-slot-card-art--animated .pixel-mine-card-pickaxe-fly {
   animation: pixel-mine-card-pickaxe-loop 8s cubic-bezier(0.4, 0, 0.6, 1) infinite both;
 }
 
+/* Inner sprite spins continuously through the whole loop (~1 rev/s
+ * at 8s = 8 turns per loop), same vibe as the in-game falling
+ * pickaxe. Pure rotate, no translate — keeps the bitmap aligned. */
+.pixel-mine-slot-card-art--animated .pixel-mine-card-pickaxe-spin {
+  animation: pixel-mine-card-pickaxe-spin 1s linear infinite;
+}
+
 @keyframes pixel-mine-card-pickaxe-loop {
-  /* Rest position INSIDE the wood reel cell (translateY 0). When
-   * the loop kicks off the pickaxe drops straight down out of the
-   * cell into the left mining column. translateY values below are
-   * tuned for top: 7 % start position — bigger drops than the old
-   * top: 14 % start. */
-  0%, 2% { transform: translateY(0) rotate(0); opacity: 1; }
+  /* Outer wrapper handles ONLY translateY + opacity. Rotation is
+   * on the inner .pixel-mine-card-pickaxe-spin element. */
+  0%, 2% { transform: translateY(0); opacity: 1; }
 
   /* === Strike 1 — grass (1 hit) === */
-  4%   { transform: translateY(110%) rotate(180deg); opacity: 1; }   /* drop, hit grass */
-  8%   { transform: translateY(0)    rotate(360deg); opacity: 1; }   /* bounce back to slot */
+  4%   { transform: translateY(110%); opacity: 1; }   /* drop, hit grass */
+  8%   { transform: translateY(0);    opacity: 1; }   /* bounce back to slot */
 
   /* === Strikes 2-3 — stone (2 hits) === */
-  12%  { transform: translateY(220%) rotate(540deg); opacity: 1; }   /* drop, hit 1 */
-  16%  { transform: translateY(110%) rotate(720deg); opacity: 1; }   /* bounce */
-  20%  { transform: translateY(220%) rotate(900deg); opacity: 1; }   /* drop, hit 2 */
-  23%  { transform: translateY(110%) rotate(1080deg); opacity: 1; }  /* bounce */
+  12%  { transform: translateY(220%); opacity: 1; }
+  16%  { transform: translateY(110%); opacity: 1; }
+  20%  { transform: translateY(220%); opacity: 1; }
+  23%  { transform: translateY(110%); opacity: 1; }
 
   /* === Strikes 4-8 — gold (5 hits) === */
-  26%  { transform: translateY(330%) rotate(1260deg); opacity: 1; }
-  29%  { transform: translateY(220%) rotate(1440deg); opacity: 1; }
-  32%  { transform: translateY(330%) rotate(1620deg); opacity: 1; }
-  35%  { transform: translateY(220%) rotate(1800deg); opacity: 1; }
-  38%  { transform: translateY(330%) rotate(1980deg); opacity: 1; }
-  41%  { transform: translateY(220%) rotate(2160deg); opacity: 1; }
-  44%  { transform: translateY(330%) rotate(2340deg); opacity: 1; }
-  47%  { transform: translateY(220%) rotate(2520deg); opacity: 1; }
-  50%  { transform: translateY(330%) rotate(2700deg); opacity: 1; }   /* gold shatters */
+  26%  { transform: translateY(330%); opacity: 1; }
+  29%  { transform: translateY(220%); opacity: 1; }
+  32%  { transform: translateY(330%); opacity: 1; }
+  35%  { transform: translateY(220%); opacity: 1; }
+  38%  { transform: translateY(330%); opacity: 1; }
+  41%  { transform: translateY(220%); opacity: 1; }
+  44%  { transform: translateY(330%); opacity: 1; }
+  47%  { transform: translateY(220%); opacity: 1; }
+  50%  { transform: translateY(330%); opacity: 1; }   /* gold shatters */
 
   /* Pickaxe rises out of frame, fading */
-  56%  { transform: translateY(-100%) rotate(2880deg); opacity: 0; }
+  56%  { transform: translateY(-100%); opacity: 0; }
 
   /* Hold off-screen while chest opens + 100x reveal plays out */
-  100% { transform: translateY(-100%) rotate(2880deg); opacity: 0; }
+  100% { transform: translateY(-100%); opacity: 0; }
+}
+
+@keyframes pixel-mine-card-pickaxe-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 /* Wood reel cell: empties when the pickaxe leaves it, restores at

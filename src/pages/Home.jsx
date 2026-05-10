@@ -1719,7 +1719,16 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
        * 8-strike sequence: 1 hit on grass (top of left col),
        * 2 hits on stone (mid row), 5 hits on gold (bottom row),
        * then rises out of frame so the left chest reveal plays. */}
-      {animated && <span className="pixel-mine-card-pickaxe-fly" />}
+      {animated && (
+        <span className="pixel-mine-card-pickaxe-fly">
+          {/* Inner sprite — same two-element trick as the in-game
+           * .pixel-mine-falling-pickaxe (outer = translateY, inner =
+           * rotate). Splitting the transforms across two elements
+           * keeps the bitmap pixel-aligned on the compositor and
+           * preserves the pixel-art look during the strike. */}
+          <span className="pixel-mine-card-pickaxe-spin" />
+        </span>
+      )}
 
       {/* Grid + chests share a wrapper so the chest row always sits
        * flush under the grid regardless of card aspect ratio. */}
