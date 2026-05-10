@@ -9,6 +9,7 @@ import iconTowerStack from '../assets/games/tower_stack.png'
 import iconBlockBlast from '../assets/games/block_blast.png'
 import iconRocket     from '../assets/games/rocket.png'
 import iconPlinko     from '../assets/games/plinko.png'
+import iconPixelMine  from '../assets/games/pixel_mine.png'
 
 import './LiveFeed.css'
 
@@ -22,10 +23,7 @@ const SLOT_ICONS = {
   'tetris-cascade': iconBlockBlast,
   'rocket':         iconRocket,
   'plinko':         iconPlinko,
-  // Pixel Mine has no dedicated icon yet — fall back to Block Blast's
-  // pixel-art icon so the row still renders something on-theme.
-  // Replace the import with `pixel_mine.png` when an asset is ready.
-  'pixel-mine':     iconBlockBlast,
+  'pixel-mine':     iconPixelMine,
 }
 
 /**
