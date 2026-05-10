@@ -1754,15 +1754,18 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
         </div>
 
         {/* One chest per column. The LEFT chest opens at the end of
-         * the strike sequence and pops a "100x" multiplier, then the
-         * loop resets. Other chests stay closed. */}
+         * the strike sequence; other chests stay closed. The "100x"
+         * multiplier text is rendered as a SIBLING of the chests
+         * row (not a child of the chest itself) so the chest stays
+         * an animation-free rasterisation target — having an
+         * animated descendant promotes the parent to a compositor
+         * layer with bilinear filtering, which blurs pixel art. */}
         <div className="pixel-mine-card-chests">
-          <span className="pixel-mine-card-chest" data-anim="open-100x">
-            {animated && <span className="pixel-mine-card-chest-mul">100x</span>}
-          </span>
+          <span className="pixel-mine-card-chest" data-anim="open-100x" />
           <span className="pixel-mine-card-chest" />
           <span className="pixel-mine-card-chest" />
         </div>
+        {animated && <span className="pixel-mine-card-chest-mul">100x</span>}
       </div>
     </div>
   )

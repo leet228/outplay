@@ -1352,9 +1352,11 @@
   gap: 1px;
 }
 .pixel-mine-card-chest {
-  /* relative so the floating "100x" multiplier badge can absolutely
-   * position itself above the chest. */
-  position: relative;
+  /* No `position: relative` — the chest has no animated descendants
+   * any more (the 100x badge moved out as a sibling of the chests
+   * row), so we want the chest to render in the normal flow with
+   * no stacking context. That keeps it off the GPU compositor and
+   * lets `image-rendering: pixelated` keep the texture crisp. */
   aspect-ratio: 1 / 1;
   background-image: url('../assets/games/pixel_mine/chests/chest.png');
   background-repeat: no-repeat;
@@ -1496,80 +1498,97 @@
   animation: pm-card-gold-break 8s linear infinite;
 }
 
-/* Grass — 1 HP, no intermediate damage frames. Hit at 4 % shatters
- * the block instantly.
+/* IMPORTANT — these break keyframes ONLY animate `background-image`
+ * (and box-shadow on shatter). They do NOT animate `opacity` or
+ * `transform`. Both `opacity` and `transform` are "compositor-only"
+ * properties: animating either of them promotes the element to a
+ * GPU compositor layer for the whole animation duration, and that
+ * layer is then resampled with bilinear filtering on every frame —
+ * even with image-rendering: pixelated, the GPU's resample step
+ * blurs 16×16 pixel art. That's why the right-column blocks
+ * (no animation, no GPU layer) look crisp while the left-column
+ * ones (animated, on the layer) used to look blurry.
  *
- * NOTE on rendering: we deliberately animate ONLY opacity (no
- * transform: scale). A scale on a 16×16 pixel-art texture promotes
- * the element to a GPU compositor layer that uses bilinear
- * filtering — even with image-rendering: pixelated set, browsers
- * sometimes still smooth the transformed bitmap, which makes the
- * shattering block look fuzzy compared to its untouched neighbours.
- * Fading-only keeps every block crisp through the whole loop. */
+ * `background-image` is NOT a compositor property — it animates
+ * step-wise without forcing a layer, so the texture stays sampled
+ * through `image-rendering: pixelated` cleanly. To "shatter" the
+ * block we just swap the bg image to `none` (and kill the inset
+ * box-shadow that drew its 3-D border). */
+
+/* Grass — 1 HP, no intermediate damage frames. Hit at 4 % swaps
+ * the bg-image to none, and the cell goes invisible (sky shows
+ * through). */
 @keyframes pm-card-grass-break {
-  0%, 4%   { opacity: 1; }
-  6%       { opacity: 0; }
-  100%     { opacity: 0; }
+  0%, 4% {
+    background-image: url("../assets/games/pixel_mine/blocks/grass.png");
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
+  }
+  6%, 100% {
+    background-image: none;
+    box-shadow: none;
+  }
 }
 
-/* Stone — 2 HP. After the first hit (12 %) the block swaps to its
- * damage frame; after the second hit (20 %) it shatters. */
+/* Stone — 2 HP. Hit 1 (12 %) swaps to damage frame; hit 2 (20 %)
+ * swaps to nothing (shattered). */
 @keyframes pm-card-stone-break {
   0%, 11.9% {
     background-image: url("../assets/games/pixel_mine/blocks/stone_block.png");
-    opacity: 1;
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
   }
   12%, 19.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/stone_block (1).png");
-    opacity: 1;
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
   }
-  22% {
-    background-image: url("../assets/games/pixel_mine/block_damage/stone_block (1).png");
-    opacity: 0;
-  }
-  100% {
-    opacity: 0;
+  22%, 100% {
+    background-image: none;
+    box-shadow: none;
   }
 }
 
-/* Gold — 5 HP. Strike timings 26 % / 32 % / 38 % / 44 % / 50 %.
- * Each strike (except the killing blow) swaps to the next damage
- * frame, mirroring the in-game DAMAGE_TEX behaviour where the
- * displayed frame index = (full_hp - current_hp - 1) i.e.
- *   after strike 1 → (1).png
- *   after strike 2 → (2).png
- *   after strike 3 → (3).png
- *   after strike 4 → (4).png
- *   after strike 5 → destroyed (5th asset frame is unused, matches
- *     the in-game cap at dmg.length-1 since the cell is null after
- *     the final hit). */
+/* Gold — 5 HP. Strikes at 26/32/38/44/50 %. Each strike swaps the
+ * bg-image to the next damage frame, last strike drops it to
+ * `none` (shattered, sky visible). */
 @keyframes pm-card-gold-break {
   0%, 25.9% {
     background-image: url("../assets/games/pixel_mine/blocks/gold_block.png");
-    opacity: 1;
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
   }
   26%, 31.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (1).png");
-    opacity: 1;
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
   }
   32%, 37.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (2).png");
-    opacity: 1;
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
   }
   38%, 43.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (3).png");
-    opacity: 1;
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
   }
   44%, 49.9% {
     background-image: url("../assets/games/pixel_mine/block_damage/gold_block (4).png");
-    opacity: 1;
+    box-shadow:
+      inset 1px 1px 0 rgba(255, 255, 255, 0.18),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.28);
   }
-  52% {
-    background-image: url("../assets/games/pixel_mine/block_damage/gold_block (4).png");
-    opacity: 0;
-  }
-  100% {
-    opacity: 0;
+  52%, 100% {
+    background-image: none;
+    box-shadow: none;
   }
 }
 
@@ -1593,12 +1612,22 @@
 }
 
 /* ── 100x multiplier text ──
- * Pops up out of the chest after it opens, holds, then fades out
- * just before the loop resets. */
+ * Pops up over the LEFT chest after it opens, holds, then fades
+ * out just before the loop resets. Positioned absolutely against
+ * the .pixel-mine-slot-card-art root (not inside the chest cell)
+ * so the chest itself has no animated descendants — that keeps the
+ * chest off the GPU compositor layer and its texture stays crisp.
+ *
+ * Coordinates: chests row sits at top:61% (after stack-wrap top
+ * 26 % + grid 35 %). Left chest spans roughly 26-42 % wide. The
+ * badge centres horizontally over the left chest at ~34 % left,
+ * and floats above the chest at ~50-55 % top so it reads as
+ * "popping out of the chest". */
 .pixel-mine-card-chest-mul {
   position: absolute;
-  bottom: 90%;
-  left: 50%;
+  left: 34%;
+  top: 56%;
+  z-index: 6;
   font-family: 'Impact', 'Arial Black', sans-serif;
   font-size: 14px;
   font-weight: 900;
@@ -1613,7 +1642,7 @@
      0    2px 4px rgba(0, 0, 0, 0.5);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) translateY(20%) scale(0.5);
+  transform: translate(-50%, 20%) scale(0.5);
 }
 
 .pixel-mine-slot-card-art--animated .pixel-mine-card-chest-mul {
@@ -1623,27 +1652,27 @@
 @keyframes pm-card-mul-pop {
   0%, 60% {
     opacity: 0;
-    transform: translateX(-50%) translateY(20%) scale(0.5);
+    transform: translate(-50%, 20%) scale(0.5);
   }
   64% {
     opacity: 1;
-    transform: translateX(-50%) translateY(-10%) scale(1.15);
+    transform: translate(-50%, -10%) scale(1.15);
   }
   68% {
     opacity: 1;
-    transform: translateX(-50%) translateY(-25%) scale(1);
+    transform: translate(-50%, -25%) scale(1);
   }
   88% {
     opacity: 1;
-    transform: translateX(-50%) translateY(-25%) scale(1);
+    transform: translate(-50%, -25%) scale(1);
   }
   95% {
     opacity: 0;
-    transform: translateX(-50%) translateY(-50%) scale(1);
+    transform: translate(-50%, -50%) scale(1);
   }
   100% {
     opacity: 0;
-    transform: translateX(-50%) translateY(20%) scale(0.5);
+    transform: translate(-50%, 20%) scale(0.5);
   }
 }
 
