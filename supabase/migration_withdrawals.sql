@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      UUID NOT NULL REFERENCES users(id),
   amount_rub   INTEGER NOT NULL,            -- total amount deducted from balance
-  fee_rub      INTEGER NOT NULL DEFAULT 0,  -- platform fee (2%)
+  fee_rub      INTEGER NOT NULL DEFAULT 0,  -- platform fee (1%)
   gas_rub      INTEGER NOT NULL DEFAULT 0,  -- estimated gas cost in RUB
   net_rub      INTEGER NOT NULL,            -- amount_rub - fee - gas (what gets converted to TON)
   ton_amount   NUMERIC(20,9),               -- actual TON sent (filled by server)
@@ -59,7 +59,7 @@ DECLARE
   v_net       INTEGER;
   v_wd_id     UUID;
   MIN_AMOUNT  CONSTANT INTEGER := 50;
-  FEE_RATE    CONSTANT NUMERIC := 0.02;
+  FEE_RATE    CONSTANT NUMERIC := 0.01;
   GAS_RUB     CONSTANT INTEGER := 3;  -- ~0.01 TON ≈ 2.5 RUB, rounded up
 BEGIN
   -- Validate amount

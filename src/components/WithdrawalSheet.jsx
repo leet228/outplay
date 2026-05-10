@@ -7,8 +7,8 @@ import { requestWithdrawal } from '../lib/supabase'
 import './WithdrawalSheet.css'
 
 const MIN_WITHDRAW_RUB = 500
-// Combined network fee: includes gas + 2% platform fee
-const FEE_PERCENT = 0.02
+// Combined network fee: includes gas + 1% platform fee
+const FEE_PERCENT = 0.01
 const GAS_TON = 0.01
 const TON_RUB_PRICE = 250
 
