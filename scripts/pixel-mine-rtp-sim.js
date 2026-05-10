@@ -38,10 +38,10 @@ const REEL_TABLE = [
   { sym: 'stone_p',   weight: 18 },
   { sym: 'gold_p',    weight: 7.3 },
   { sym: 'enchanted', weight: 1.02 },
-  { sym: 'tnt',       weight: 6.45 },
+  { sym: 'tnt',       weight: 5.9 },
   { sym: 'book',      weight: 1.65 },
-  { sym: 'ender',     weight: 1.605 },
-  { sym: 'blank',     weight: 28.975 },
+  { sym: 'ender',     weight: 1.52 },
+  { sym: 'blank',     weight: 29.61 },
 ]
 
 // ── Per-row block weights (top → bottom) ──
@@ -219,11 +219,12 @@ function explodeTnt(grid, col, stake) {
   return added
 }
 
-// Multiplicative chest stacking (matches the in-game logic) —
-// the products of all newly-opened chests' mults are applied to
-// the spin's win.
-function openChests(grid, chests) {
-  let mul = 1
+// Detect newly-cleared columns and mark their chests open. Returns
+// an array of multipliers that were "newly opened" this phase.
+// Multipliers are NOT applied here — the caller stacks them across
+// the whole spin / bonus and applies them all at the end.
+function detectChestOpens(grid, chests) {
+  const opens = []
   for (let c = 0; c < GRID_COLS; c++) {
     if (chests[c].open) continue
     let cleared = true
@@ -232,46 +233,65 @@ function openChests(grid, chests) {
     }
     if (cleared) {
       chests[c].open = true
-      mul *= chests[c].mul
+      opens.push(chests[c].mul)
     }
   }
-  return mul
+  return opens
 }
 
+// One spin's RAW win — pickaxes + TNT only, NO chest mults applied.
+// Returns { rawWin, opens } where `opens` is the list of newly-
+// opened chest multipliers in this phase. The caller chains them.
 function runOnePhase(grid, rawReels, chests, stake) {
   const reels = applyBookUpgrades(rawReels)
-  let win = 0
+  let rawWin = 0
   // Pickaxes
   for (let c = 0; c < REEL_COLS; c++) {
     for (let r = 0; r < REEL_ROWS; r++) {
       const sym = reels[r][c]
-      if (PICKAXE_KINDS.has(sym)) win += dropPickaxe(grid, sym, c, stake)
+      if (PICKAXE_KINDS.has(sym)) rawWin += dropPickaxe(grid, sym, c, stake)
     }
   }
   // TNT
   for (let c = 0; c < REEL_COLS; c++) {
     for (let r = 0; r < REEL_ROWS; r++) {
       const sym = reels[r][c]
-      if (sym === 'tnt') win += explodeTnt(grid, c, stake)
+      if (sym === 'tnt') rawWin += explodeTnt(grid, c, stake)
     }
   }
-  // Chests
-  const chestMul = openChests(grid, chests)
-  if (chestMul > 1) win *= chestMul
-  return win
+  const opens = detectChestOpens(grid, chests)
+  return { rawWin, opens }
 }
 
+// One full round (trigger spin + optional 4 FS). Chest mults from
+// EVERY opened chest across the round multiply the CUMULATIVE raw
+// win at the end — not piecewise per spin. This matches the in-
+// game reveal sequence.
 function runFullSpin(stake) {
   const rawReels = generateReels()
   const grid = generateGrid()
   const chests = generateChests()
-  let total = runOnePhase(grid, rawReels, chests, stake)
+
+  let cumulativeRaw = 0
+  const allOpens = []
+
+  const trig = runOnePhase(grid, rawReels, chests, stake)
+  cumulativeRaw += trig.rawWin
+  allOpens.push(...trig.opens)
+
   if (countEnders(rawReels) >= SCATTER_TRIGGER) {
     for (let i = 0; i < FS_COUNT; i++) {
       const fsReels = generateReelsNoEnder()
-      total += runOnePhase(grid, fsReels, chests, stake)
+      const fs = runOnePhase(grid, fsReels, chests, stake)
+      cumulativeRaw += fs.rawWin
+      allOpens.push(...fs.opens)
     }
   }
+
+  // Apply all chest mults to the cumulative raw, in detection order.
+  let total = cumulativeRaw
+  for (const m of allOpens) total = Math.round(total * m)
+
   // Server-side cap
   if (total > stake * PAYOUT_CAP) total = stake * PAYOUT_CAP
   return total
@@ -350,35 +370,50 @@ function diagnose(spins) {
     const rawReels = generateReels()
     const grid = generateGrid()
     const chests = generateChests()
-    const baseSpin = runOnePhase(grid, rawReels, chests, stake)
-    baseWin += Math.min(baseSpin, stake * PAYOUT_CAP)
 
-    // Count chests opened during base
-    const baseOpens = chests.filter(c => c.open).length
-    chestOpensBaseOnly += baseOpens
+    // Trigger spin — raw + opens.
+    const trig = runOnePhase(grid, rawReels, chests, stake)
+    let cumulativeRaw = trig.rawWin
+    const allOpens = trig.opens.slice()
 
-    if (countEnders(rawReels) >= SCATTER_TRIGGER) {
+    // Count chests opened during base only (before FS started).
+    chestOpensBaseOnly += chests.filter(c => c.open).length
+
+    let isBonus = countEnders(rawReels) >= SCATTER_TRIGGER
+    if (isBonus) {
       bonusEntries++
-      let fs = 0
       for (let j = 0; j < FS_COUNT; j++) {
         const fsReels = generateReelsNoEnder()
-        fs += runOnePhase(grid, fsReels, chests, stake)
+        const fs = runOnePhase(grid, fsReels, chests, stake)
+        cumulativeRaw += fs.rawWin
+        allOpens.push(...fs.opens)
       }
-      const fsCapped = Math.min(fs, stake * PAYOUT_CAP)
-      bonusWin += fsCapped
+    }
 
-      // Distribution
-      bonusWinSum   += fsCapped
-      bonusWinSqSum += fsCapped * fsCapped
-      if (fsCapped > bonusBest) bonusBest = fsCapped
-      if (fsCapped === 0)            bonusZero++
-      if (fsCapped > 0)              bonusGtZero++
-      if (fsCapped >= stake)         bonusGteStake++
-      if (fsCapped >= stake * 10)    bonusGte10x++
-      if (fsCapped >= stake * 50)    bonusGte50x++
-      if (fsCapped >= stake * 100)   bonusGte100x++
-      if (fsCapped >= stake * 500)   bonusGte500x++
-      if (fsCapped >= stake * PAYOUT_CAP) bonusGteCap++
+    // Stack all chest mults at the end.
+    let total = cumulativeRaw
+    for (const m of allOpens) total = Math.round(total * m)
+    const totalCapped = Math.min(total, stake * PAYOUT_CAP)
+
+    if (isBonus) {
+      bonusWin += totalCapped       // entire round (incl. trigger raw)
+      // For distribution buckets we look at the WHOLE round's payout
+      // when a bonus fires — that's what the player actually walks
+      // away with, and it's the relevant number for "did the bonus
+      // pay back its cost?" questions.
+      bonusWinSum   += totalCapped
+      bonusWinSqSum += totalCapped * totalCapped
+      if (totalCapped > bonusBest) bonusBest = totalCapped
+      if (totalCapped === 0)             bonusZero++
+      if (totalCapped > 0)               bonusGtZero++
+      if (totalCapped >= stake)          bonusGteStake++
+      if (totalCapped >= stake * 10)     bonusGte10x++
+      if (totalCapped >= stake * 50)     bonusGte50x++
+      if (totalCapped >= stake * 100)    bonusGte100x++
+      if (totalCapped >= stake * 500)    bonusGte500x++
+      if (totalCapped >= stake * PAYOUT_CAP) bonusGteCap++
+    } else {
+      baseWin += totalCapped
     }
 
     chestOpensTotal += chests.filter(c => c.open).length

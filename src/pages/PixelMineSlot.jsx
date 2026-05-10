@@ -229,21 +229,26 @@ const COLUMN_ROW_TABLES = [
 
 // ── Reel symbol weights ──
 // Tuned via scripts/pixel-mine-rtp-sim.js (5 M-spin Monte Carlo)
-// to land long-run RTP at ≈ 94.66 %, just under the 95 % design
-// ceiling. Wood + Stone pickaxes do most of the chipping; Gold
-// and Enchanted are rarer but punchier; TNT + Book add surprise
-// factor; Eye-of-Ender scatter at 1.605 fires the bonus ≈ 1 in
-// 630 spins. Blanks fill the remainder so a single base spin
+// to land long-run RTP at ≈ 94.3 %, just under the 95 % design
+// ceiling. Tuned for the "stack-at-end" chest mechanic — every
+// chest opened across trigger + bonus stacks one big multiplier
+// chain on the cumulative raw win, so freq has to be tighter
+// than under per-spin chest math.
+//
+// Wood + Stone pickaxes do most of the chipping; Gold and
+// Enchanted are rarer but punchier; TNT + Book add surprise
+// factor; Eye-of-Ender scatter at 1.52 fires the bonus ≈ 1 in
+// 820 spins. Blanks fill the remainder so a single base spin
 // can't flatten the field on its own.
 const REEL_TABLE = [
   { sym: 'wood',      weight: 35,     kind: 'pickaxe' },
   { sym: 'stone_p',   weight: 18,     kind: 'pickaxe' },
   { sym: 'gold_p',    weight: 7.3,    kind: 'pickaxe' },
   { sym: 'enchanted', weight: 1.02,   kind: 'pickaxe' },
-  { sym: 'tnt',       weight: 6.45,   kind: 'tnt'     },
+  { sym: 'tnt',       weight: 5.9,    kind: 'tnt'     },
   { sym: 'book',      weight: 1.65,   kind: 'book'    },
-  { sym: 'ender',     weight: 1.605,  kind: 'scatter' },
-  { sym: 'blank',     weight: 28.975, kind: 'blank'   },
+  { sym: 'ender',     weight: 1.52,   kind: 'scatter' },
+  { sym: 'blank',     weight: 29.61,  kind: 'blank'   },
 ]
 const REEL_TOTAL_W = REEL_TABLE.reduce((s, e) => s + e.weight, 0)
 
@@ -1048,16 +1053,18 @@ export default function PixelMineSlot() {
       }
     }
 
-    // 5 — chest opening sequence. Only newly-cleared columns open
-    // a chest (already-open ones stay open). Each newly-opened
-    // chest's multiplier multiplies THIS spin's win.
+    // 5 — chest detection (visuals + multiplier MATH are deferred).
     //
-    // We read the CURRENT chests via chestsRef (not React state)
-    // so consecutive FS spins always see the latest open-flags,
-    // even if the previous spin's setChests hasn't flushed through
-    // a render yet. We compute newlyOpened FIRST (no side effects
-    // in the React updater), then push the new array to both ref
-    // and state in one shot.
+    // We mark any column that just cleared in chestsRef.current
+    // (truth state used to prevent double-counting across spins),
+    // but we DO NOT pop the chest visually here, and we DO NOT
+    // multiply this spin's win. The caller batches every chest
+    // open across the whole bonus / single base spin and applies
+    // the multipliers as one chained pop sequence at the end.
+    //
+    // This matches the "all multipliers applied to the cumulative
+    // raw win at the end" mechanic — chests stack into one big
+    // payout reveal, not piecewise per spin.
     const clearedCols = []
     for (let c = 0; c < GRID_COLS; c++) {
       let cleared = true
@@ -1066,42 +1073,61 @@ export default function PixelMineSlot() {
       }
       if (cleared) clearedCols.push(c)
     }
+    const pendingChestOpens = []
     if (clearedCols.length > 0) {
       const currentChests = chestsRef.current
-      const newlyOpened = []
       const nextChests = currentChests.map(c => ({ ...c }))
       for (const col of clearedCols) {
         if (!nextChests[col].open) {
           nextChests[col].open = true
-          newlyOpened.push({ col, mul: nextChests[col].mul })
+          pendingChestOpens.push({ col, mul: nextChests[col].mul })
         }
       }
-      if (newlyOpened.length > 0) {
-        // Sync both: ref FIRST (so any reentry inside this spin
-        // sees the truth), then state (drives the visual pop).
+      if (pendingChestOpens.length > 0) {
+        // Truth state moves forward immediately; visual state stays
+        // closed until the caller runs the reveal sequence.
         chestsRef.current = nextChests
-        setChests(nextChests)
-        await sleep(60)
-        let chestMul = 1
-        for (const { mul } of newlyOpened) {
-          if (cancelRef.current) break
-          haptic('success')
-          await sleep(580)
-          chestMul *= mul
-        }
-        if (chestMul > 1 && win > 0) {
-          const beforeChest = win
-          win = Math.round(win * chestMul)
-          const extra = win - beforeChest
-          setLastWin(prev => Math.round(prev + extra))
-          setBalanceBounce(true)
-          setTimeout(() => setBalanceBounce(false), 360)
-          haptic('success')
-        }
       }
     }
 
-    return { grid: g, win, finalReels }
+    return { grid: g, win, finalReels, pendingChestOpens }
+  }
+
+  // ── revealChestsSequential ──
+  // Pops every pending chest one at a time, multiplying the
+  // running cumulative win by that chest's multiplier and bumping
+  // the on-screen win counter as the reveal lands.
+  //
+  //   opens          — [{col, mul}, ...] in detection order
+  //   startingWin    — sum of pickaxe + TNT raw payouts (no chest
+  //                    mults applied yet) over the spin or bonus.
+  //   onRunningChange — receives the new cumulative win after each
+  //                    chest pop, so the caller can keep its own
+  //                    running total in sync (used for the
+  //                    server-side cap + final balance bump).
+  //
+  // Returns the final cumulative win after every chest is opened.
+  async function revealChestsSequential(opens, startingWin, onRunningChange) {
+    let running = startingWin
+    for (const { col, mul } of opens) {
+      if (cancelRef.current) break
+      // 1. Pop this chest in React state — drives the bounce/pop.
+      setChests(prev => {
+        const next = prev.map(c => ({ ...c }))
+        next[col].open = true
+        return next
+      })
+      // 2. Multiply the running total — the lastWin display jumps
+      //    up to the new cumulative figure as the chest lands.
+      running = Math.round(running * mul)
+      if (typeof onRunningChange === 'function') onRunningChange(running)
+      setLastWin(running)
+      setBalanceBounce(true)
+      setTimeout(() => setBalanceBounce(false), 360)
+      haptic('success')
+      await sleep(580)
+    }
+    return running
   }
 
   // ── One full spin: server start → reel result → process pickaxes
@@ -1193,21 +1219,27 @@ export default function PixelMineSlot() {
     let g = targetGrid.map(row => row.map(cell => cell ? { ...cell } : null))
 
     // ── Trigger spin: full pipeline including grid fill ──
+    // runSpinPhases now returns RAW spin win (pickaxes + TNT only,
+    // no chest mults applied) plus the list of chests that just
+    // cleared. Chest mults are applied at the end via one big
+    // sequential reveal that multiplies the cumulative raw win.
     let result = await runSpinPhases(g, rawReels, {
       fillGrid: true,
       gridForFill: targetGrid,
     })
     if (cancelRef.current) return
     g = result.grid
-    let totalWin = result.win
+    let cumulativeRaw = result.win
     const triggerReels = result.finalReels
+    const pendingOpens = (result.pendingChestOpens || []).slice()
 
     // ── Free-Spins bonus trigger ──
     // 3+ Eye-of-Ender scatters on the trigger spin → 4 free spins
     // on the SAME GRID (no reset). After the announcement overlay,
     // each FS runs the same phase pipeline minus the grid fill.
     const enderCount = countEnders(triggerReels)
-    if (enderCount >= 3) {
+    let isBonus = enderCount >= 3
+    if (isBonus) {
       const FS_TOTAL = 4
       // Intro overlay — "FREE SPINS / 4" big-pop reveal.
       setBonusOverlay({ kind: 'intro', spins: FS_TOTAL })
@@ -1217,7 +1249,6 @@ export default function PixelMineSlot() {
       if (cancelRef.current) return
 
       setBonusActive(true)
-      let fsTotal = 0
       for (let i = 0; i < FS_TOTAL; i++) {
         if (cancelRef.current) break
         // Counter shows REMAINING spins after this one — so the
@@ -1230,15 +1261,35 @@ export default function PixelMineSlot() {
         const fsResult = await runSpinPhases(g, fsRawReels, { fillGrid: false })
         if (cancelRef.current) break
         g = fsResult.grid
-        fsTotal += fsResult.win
+        cumulativeRaw += fsResult.win
+        if (fsResult.pendingChestOpens?.length) {
+          pendingOpens.push(...fsResult.pendingChestOpens)
+        }
         await sleep(280)             // breath between free spins
       }
-      totalWin += fsTotal
       setBonusActive(false)
       setBonusSpinsLeft(0)
+    }
 
-      // Bonus-end overlay — totals up the FS payout.
-      setBonusOverlay({ kind: 'end', total: fsTotal })
+    // ── Chest reveal ──
+    // Trigger spin (no FS): reveal at the end of this spin.
+    // Bonus path: reveal AFTER all FS finish, BEFORE the bonus-end
+    // overlay — every chest that opened anywhere across the
+    // trigger + 4 FS pops one by one and multiplies the
+    // cumulative raw win.
+    let totalWin = cumulativeRaw
+    if (pendingOpens.length > 0) {
+      totalWin = await revealChestsSequential(pendingOpens, cumulativeRaw)
+    }
+
+    if (isBonus) {
+      // Bonus-end overlay — totals up the bonus payout (cumulative
+      // raw + chest mults). For the "end" card we show the bonus
+      // contribution = totalWin - (whatever the trigger raw was),
+      // but since chest mults stack across the whole bonus we just
+      // show totalWin as the bonus total (matches what the player
+      // is now holding from this round).
+      setBonusOverlay({ kind: 'end', total: totalWin })
       await sleep(2200)
       setBonusOverlay(null)
     }
