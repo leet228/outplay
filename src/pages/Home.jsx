@@ -29,6 +29,7 @@ import './Home.css'
 import './RocketSlot.css'
 import './PlinkoSlot.css'
 import './PixelMineSlot.css'
+import './DiceSlot.css'
 import LiveFeed from '../components/LiveFeed'
 
 /* ── Icons ── */
@@ -1479,6 +1480,15 @@ const SLOTS = [
     accent: '#84cc16',
     shadow: '#3f6212',
   },
+  {
+    id: 'dice',
+    category: 'popular',
+    titleKey: 'slotDiceTitle',
+    subKey: 'slotDiceSub',
+    route: '/slots/dice',
+    accent: '#22c55e',
+    shadow: '#14532d',
+  },
 ]
 
 function TowerSlotArtwork({ large = false, animated = false }) {
@@ -1982,11 +1992,22 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
   )
 }
 
+function DiceSlotArtwork({ large = false }) {
+  return (
+    <div className={`dice-slot-card-art ${large ? 'dice-slot-card-art--large' : ''}`} aria-hidden="true">
+      <span className="dice-card-bar" />
+      <span className="dice-card-cube">62</span>
+      <span className="dice-card-label">DICE</span>
+    </div>
+  )
+}
+
 function renderSlotArtwork(slot, opts = {}) {
   if (slot.id === 'tetris-cascade') return <TetrisSlotArtwork {...opts} />
   if (slot.id === 'rocket')         return <RocketSlotArtwork {...opts} />
   if (slot.id === 'plinko')         return <PlinkoSlotArtwork {...opts} />
   if (slot.id === 'pixel-mine')     return <PixelMineSlotArtwork {...opts} />
+  if (slot.id === 'dice')           return <DiceSlotArtwork {...opts} />
   return <TowerSlotArtwork {...opts} />
 }
 
@@ -1995,6 +2016,7 @@ function slotKickerKey(id) {
   if (id === 'rocket')         return 'slotRocketKicker'
   if (id === 'plinko')         return 'slotPlinkoKicker'
   if (id === 'pixel-mine')     return 'slotPixelMineKicker'
+  if (id === 'dice')           return 'slotDiceKicker'
   return 'slotTowerKicker'
 }
 
@@ -2003,6 +2025,7 @@ function slotPreviewKey(id) {
   if (id === 'rocket')         return 'slotRocketPreview'
   if (id === 'plinko')         return 'slotPlinkoPreview'
   if (id === 'pixel-mine')     return 'slotPixelMinePreview'
+  if (id === 'dice')           return 'slotDicePreview'
   return 'slotTowerPreview'
 }
 

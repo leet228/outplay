@@ -1,0 +1,639 @@
+/* ─────────────────────────────────────────────────────────────
+ * Dice — classic above/below threshold game.
+ *
+ * Layout (top → bottom):
+ *   1. History row  — last N rolls as pill badges
+ *   2. Slider area  — 0..100 bar split red/green by the target +
+ *                     mode; draggable handle; result cube lands
+ *                     on the rolled value
+ *   3. HUD          — multiplier / target+mode toggle / win chance
+ *   4. Win bar      — last-spin payout
+ *   5. Controls     — balance / roll button / stake stepper
+ * ───────────────────────────────────────────────────────────── */
+
+.dice-slot-page {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding:
+    calc(var(--safe-top, 0px) + 64px)
+    14px
+    calc(var(--safe-bottom, 0px) + 18px);
+  overflow: hidden;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background:
+    radial-gradient(ellipse at 50% 0%,  #1a1d2e 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 90%, #1c2030 0%, transparent 60%),
+    linear-gradient(180deg, #060812 0%, #0a0d18 50%, #0c0a18 100%);
+}
+
+.dice-game-window {
+  position: relative;
+  width: min(100%, 560px);
+  height: min(820px, calc(100svh - var(--safe-top, 0px) - var(--safe-bottom, 0px) - 86px));
+  min-height: 660px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 32px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(60, 80, 130, 0.18) 0%, transparent 65%),
+    linear-gradient(180deg, #0d101c 0%, #06070d 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  isolation: isolate;
+  padding: 14px 14px 18px;
+}
+
+.dice-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 35% at 50% 5%, rgba(120, 140, 200, 0.12) 0%, transparent 70%),
+    linear-gradient(180deg, #0a0d18 0%, #04050a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 40px rgba(0, 0, 0, 0.45);
+  padding: 14px 14px 18px;
+}
+
+.dice-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 25% at 50% 5%, rgba(120, 140, 200, 0.10) 0%, transparent 80%);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * History row — recent rolls as pill badges.
+ * ───────────────────────────────────────────────────────────── */
+.dice-history {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  padding: 2px 0 6px;
+}
+
+.dice-history-pill {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.dice-history-pill.is-empty {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.03);
+  color: transparent;
+}
+
+.dice-history-pill.is-loss {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.dice-history-pill.is-win {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  color: #052e16;
+  border-color: rgba(34, 197, 94, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 4px 10px rgba(34, 197, 94, 0.25);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Slider area
+ * ───────────────────────────────────────────────────────────── */
+.dice-slider-area {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px 4px 40px;
+}
+
+.dice-scale {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 0 4px;
+}
+
+.dice-bar {
+  position: relative;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.4),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  touch-action: none;
+}
+.dice-bar.is-disabled { cursor: not-allowed; }
+
+.dice-bar-red,
+.dice-bar-green {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  border-radius: 999px;
+  transition: left 0.16s ease-out, right 0.16s ease-out;
+}
+
+.dice-bar-red {
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+}
+
+.dice-bar-green {
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+}
+
+/* Draggable threshold handle — vertical white pill. */
+.dice-handle {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 38px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 4px 10px rgba(0, 0, 0, 0.55);
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(15, 23, 42, 0.5);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 0;
+  cursor: ew-resize;
+  z-index: 3;
+  transition: left 0.12s ease-out;
+}
+.dice-bar.is-disabled .dice-handle { cursor: not-allowed; }
+
+/* Result cube — lands on the rolled value with a soft pop. The
+ * cube is drawn as a white square with a green/red shadow so the
+ * win/loss read is instant. */
+.dice-cube {
+  position: absolute;
+  top: -38px;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+  transform: translate(-50%, 0);
+  z-index: 2;
+  pointer-events: none;
+  animation: dice-cube-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.dice-cube.is-win  {
+  color: #15803d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 6px 16px rgba(34, 197, 94, 0.45);
+}
+.dice-cube.is-loss {
+  color: #b91c1c;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 6px 16px rgba(239, 68, 68, 0.42);
+}
+
+@keyframes dice-cube-pop {
+  0%   { transform: translate(-50%, -16px) scale(0.6); opacity: 0; }
+  50%  { transform: translate(-50%, 4px)   scale(1.12); opacity: 1; }
+  100% { transform: translate(-50%, 0)     scale(1);    opacity: 1; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * HUD — Multiplier / Target+Mode / Win chance
+ * ───────────────────────────────────────────────────────────── */
+.dice-hud {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dice-hud-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  min-height: 56px;
+  justify-content: center;
+}
+
+.dice-hud-box--center {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dice-hud-target {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dice-hud-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dice-hud-value {
+  font-size: 17px;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dice-mode-toggle {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.14s ease, transform 0.10s ease;
+}
+.dice-mode-toggle:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+.dice-mode-toggle:active:not(:disabled) { transform: translateY(1px); }
+.dice-mode-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─────────────────────────────────────────────────────────────
+ * Win bar — last-spin payout summary.
+ * ───────────────────────────────────────────────────────────── */
+.dice-winbar {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.dice-winbar.is-win {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.5);
+}
+.dice-winbar-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+}
+.dice-winbar-value {
+  font-size: 18px;
+  font-weight: 950;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Bottom controls — balance / roll button / stake stepper
+ * ───────────────────────────────────────────────────────────── */
+.dice-controls {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.dice-balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.dice-balance span {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.dice-balance strong {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.dice-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.dice-roll-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 6px 14px rgba(59, 130, 246, 0.45);
+  transition: transform 0.14s ease, filter 0.14s ease;
+}
+.dice-roll-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.06); }
+.dice-roll-btn:active:not(:disabled) { transform: translateY(1px); }
+.dice-roll-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.dice-stake-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.dice-stake-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.dice-stake-step {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: none;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.dice-stake-step:hover:not(:disabled) { background: rgba(255, 255, 255, 0.10); }
+.dice-stake-step:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.dice-stake {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding-right: 4px;
+}
+.dice-stake span {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 700;
+}
+.dice-stake strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Exit-confirmation dialog — shared visual with the other slots.
+ * ───────────────────────────────────────────────────────────── */
+.dice-exit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(3, 7, 18, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.dice-exit-card {
+  width: min(100%, 340px);
+  padding: 22px;
+  border-radius: 26px;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    #0a1222;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+}
+
+.dice-exit-card h3 {
+  margin: 0 0 8px;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: -0.55px;
+}
+
+.dice-exit-card p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.dice-exit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.dice-exit-actions button {
+  min-height: 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.dice-exit-actions button:last-child {
+  color: #431407;
+  background: linear-gradient(180deg, #fff7b4 0%, #ffc247 13%, #f97316 100%);
+  border-color: rgba(255, 230, 137, 0.7);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Card art for the home grid (and the preview modal). Minimal —
+ * just the abstract red/green slider with a single white cube and
+ * a "DICE" label, so it reads even at thumbnail size.
+ * ───────────────────────────────────────────────────────────── */
+.dice-slot-card-art {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 40% at 50% 12%, rgba(96, 165, 250, 0.18) 0%, transparent 65%),
+    linear-gradient(180deg, #0d121f 0%, #0a0d18 100%);
+}
+
+.dice-slot-card-art--large {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+}
+
+.dice-slot-card-art .dice-card-bar {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 50%;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  transform: translateY(-50%);
+}
+.dice-slot-card-art .dice-card-bar::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: 35%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+}
+.dice-slot-card-art .dice-card-bar::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 35%;
+  right: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+}
+.dice-slot-card-art .dice-card-cube {
+  position: absolute;
+  left: 60%;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  margin-top: -28px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #fff, #e2e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 950;
+  color: #15803d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 3px 8px rgba(0, 0, 0, 0.45);
+}
+.dice-slot-card-art .dice-card-label {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.dice-slot-card-art--large .dice-card-label { font-size: 26px; bottom: 24px; }
