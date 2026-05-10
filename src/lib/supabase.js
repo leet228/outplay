@@ -1107,6 +1107,34 @@ export async function finishPlinkoRound(roundId, totalPayoutRub) {
   return data
 }
 
+// ── Pixel Mine RPCs ────────────────────────────
+// Server is a pass-through validator like Plinko:
+//   start_pixel_mine_round  — atomic stake debit. Returns
+//                             { round_id, balance, deficit_active }.
+//   finish_pixel_mine_round — accepts the client's claimed total
+//                             cluster payout (sum across natural
+//                             cascades + scatter-explosion bonuses).
+//                             Caps at stake × 1000 + 1 000 000 ₽
+//                             absolute. Applies the deficit breaker.
+export async function startPixelMineRound(userId, stakeRub, isBuyBonus = false) {
+  const { data, error } = await supabase.rpc('start_pixel_mine_round', {
+    p_user_id: userId,
+    p_stake_rub: stakeRub,
+    p_is_buy_bonus: !!isBuyBonus,
+  })
+  if (error) { console.error('startPixelMineRound error:', error); return { error: error.message } }
+  return data
+}
+
+export async function finishPixelMineRound(roundId, payoutRub) {
+  const { data, error } = await supabase.rpc('finish_pixel_mine_round', {
+    p_round_id: roundId,
+    p_payout_rub: Math.max(0, Math.round(payoutRub || 0)),
+  })
+  if (error) { console.error('finishPixelMineRound error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Admin: slot stats ───────────────────────
 export async function adminGetSlotStats() {
   const { data, error } = await supabase.rpc('admin_get_slot_stats')

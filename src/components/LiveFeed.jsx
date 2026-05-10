@@ -22,6 +22,10 @@ const SLOT_ICONS = {
   'tetris-cascade': iconBlockBlast,
   'rocket':         iconRocket,
   'plinko':         iconPlinko,
+  // Pixel Mine has no dedicated icon yet — fall back to Block Blast's
+  // pixel-art icon so the row still renders something on-theme.
+  // Replace the import with `pixel_mine.png` when an asset is ready.
+  'pixel-mine':     iconBlockBlast,
 }
 
 /**

@@ -15,6 +15,7 @@ import './Home.css'
 // not just when the player opens the slot itself.
 import './RocketSlot.css'
 import './PlinkoSlot.css'
+import './PixelMineSlot.css'
 import LiveFeed from '../components/LiveFeed'
 
 /* ── Icons ── */
@@ -1456,6 +1457,15 @@ const SLOTS = [
     accent: '#6366f1',
     shadow: '#312e81',
   },
+  {
+    id: 'pixel-mine',
+    category: 'popular',
+    titleKey: 'slotPixelMineTitle',
+    subKey: 'slotPixelMineSub',
+    route: '/slots/pixel-mine',
+    accent: '#84cc16',
+    shadow: '#3f6212',
+  },
 ]
 
 function TowerSlotArtwork({ large = false, animated = false }) {
@@ -1678,10 +1688,37 @@ function PlinkoSlotArtwork({ large = false, animated = false }) {
   )
 }
 
+// Pixel Mine card art — pixelated grid of mine blocks (4×3) with a
+// "PIXEL MINE" label across the bottom. Animated variant runs a soft
+// zoom-pulse on the cells (alternating odd/even) for a "blocks
+// twinkling under torchlight" feel.
+function PixelMineSlotArtwork({ large = false, animated = false }) {
+  // Pre-positioned palette of cells — chosen to read as a Minecraft
+  // ore wall at a glance: gold, diamond, emerald, redstone, lapis,
+  // iron, coal, plus one TNT and one creeper for theme.
+  const cells = [
+    'gold',     'diamond', 'emerald', 'lapis',
+    'iron',     'creeper', 'redstone','gold',
+    'coal',     'tnt',     'lapis',   'emerald',
+  ]
+  return (
+    <div className={`pixel-mine-slot-card-art ${large ? 'pixel-mine-slot-card-art--large' : ''} ${animated ? 'pixel-mine-slot-card-art--animated' : ''}`} aria-hidden="true">
+      <span className="pixel-mine-card-glow" />
+      <div className="pixel-mine-card-grid">
+        {cells.map((c, i) => (
+          <span key={i} className={`pixel-mine-card-cell pixel-mine-card-cell--${c}`} />
+        ))}
+      </div>
+      <span className="pixel-mine-card-label">PIXEL MINE</span>
+    </div>
+  )
+}
+
 function renderSlotArtwork(slot, opts = {}) {
   if (slot.id === 'tetris-cascade') return <TetrisSlotArtwork {...opts} />
   if (slot.id === 'rocket')         return <RocketSlotArtwork {...opts} />
   if (slot.id === 'plinko')         return <PlinkoSlotArtwork {...opts} />
+  if (slot.id === 'pixel-mine')     return <PixelMineSlotArtwork {...opts} />
   return <TowerSlotArtwork {...opts} />
 }
 
@@ -1689,6 +1726,7 @@ function slotKickerKey(id) {
   if (id === 'tetris-cascade') return 'slotTetrisKicker'
   if (id === 'rocket')         return 'slotRocketKicker'
   if (id === 'plinko')         return 'slotPlinkoKicker'
+  if (id === 'pixel-mine')     return 'slotPixelMineKicker'
   return 'slotTowerKicker'
 }
 
@@ -1696,6 +1734,7 @@ function slotPreviewKey(id) {
   if (id === 'tetris-cascade') return 'slotTetrisPreview'
   if (id === 'rocket')         return 'slotRocketPreview'
   if (id === 'plinko')         return 'slotPlinkoPreview'
+  if (id === 'pixel-mine')     return 'slotPixelMinePreview'
   return 'slotTowerPreview'
 }
 

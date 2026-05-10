@@ -1,0 +1,1287 @@
+/* ─────────────────────────────────────────────────────────────
+ * Pixel Mine — Minecraft-style mining slot.
+ * Two-layer board: 5×3 reels on top (tool generator) + 5×7
+ * mining field below (stack of breakable blocks).
+ *
+ * Every block / pickaxe / scatter symbol is an inline SVG data URI
+ * so the slot needs zero extra HTTP requests and `image-rendering:
+ * pixelated` keeps the textures crisp at any scale.
+ * ───────────────────────────────────────────────────────────── */
+
+/* Shared pixel-noise overlay for the mining-field blocks. */
+:root {
+  --pm-noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><g fill='%23000' fill-opacity='.20'><rect x='1' y='2' width='1' height='1'/><rect x='5' y='4' width='1' height='1'/><rect x='9' y='1' width='1' height='1'/><rect x='13' y='5' width='1' height='1'/><rect x='2' y='9' width='1' height='1'/><rect x='7' y='10' width='1' height='1'/><rect x='11' y='8' width='1' height='1'/><rect x='14' y='13' width='1' height='1'/><rect x='4' y='14' width='1' height='1'/><rect x='10' y='12' width='1' height='1'/><rect x='6' y='2' width='1' height='1'/><rect x='12' y='3' width='1' height='1'/></g><g fill='%23fff' fill-opacity='.28'><rect x='3' y='1' width='1' height='1'/><rect x='8' y='3' width='1' height='1'/><rect x='12' y='6' width='1' height='1'/><rect x='1' y='7' width='1' height='1'/><rect x='6' y='8' width='1' height='1'/><rect x='15' y='10' width='1' height='1'/><rect x='3' y='11' width='1' height='1'/><rect x='9' y='13' width='1' height='1'/><rect x='14' y='2' width='1' height='1'/></g></svg>");
+}
+
+.pixel-mine-page {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding:
+    calc(var(--safe-top, 0px) + 64px)
+    14px
+    calc(var(--safe-bottom, 0px) + 18px);
+  overflow: hidden;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Bright Minecraft overworld: blue sky → grass → dirt. */
+  background:
+    linear-gradient(180deg,
+      #87ceeb 0%,
+      #aedaee 30%,
+      #5fa83d 55%,
+      #3e7227 70%,
+      #6b4f2b 85%,
+      #4a3520 100%
+    );
+}
+
+.pixel-mine-window {
+  position: relative;
+  width: min(100%, 560px);
+  height: min(820px, calc(100svh - var(--safe-top, 0px) - var(--safe-bottom, 0px) - 86px));
+  min-height: 660px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px;
+  /* Oak-plank window — horizontal grain, two darker grout lines
+   * between every plank to read as a wood frame around the slot. */
+  background:
+    repeating-linear-gradient(180deg,
+      #b08158 0px, #b08158 22px,
+      #6b4520 22px, #6b4520 24px,
+      #a07349 24px, #a07349 46px,
+      #6b4520 46px, #6b4520 48px
+    );
+  border: 4px solid #5a3a1c;
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.18),
+    inset 4px 4px 0 rgba(255, 255, 255, 0.10),
+    inset -4px -4px 0 rgba(0, 0, 0, 0.20);
+  isolation: isolate;
+  padding: 10px 10px 14px;
+  image-rendering: pixelated;
+}
+
+.pixel-mine-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  /* Pure Minecraft sky from top to bottom — no grass band.
+   * Chests rest on the cobblestone platform (rendered via the
+   * stage's ::after) and clouds drift across at all heights. */
+  background: linear-gradient(180deg,
+    #87ceeb 0%,
+    #aedaee 50%,
+    #c8e3f3 100%
+  );
+  image-rendering: pixelated;
+  border: 3px solid #3d3f42;
+  box-shadow:
+    inset 4px 4px 0 rgba(255, 255, 255, 0.12),
+    inset -4px -4px 0 rgba(0, 0, 0, 0.30);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* Bigger gaps between the reels strip → mining grid → chests row
+   * so each section reads as its own zone (the user's reference
+   * keeps the inventory and the field clearly separated). */
+  gap: 18px;
+  padding: 12px 10px;
+}
+
+.pixel-mine-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* Just a faint sky-edge fade so the corners blend with the
+   * window frame — no heavy vignette over the new bright sky. */
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.18) 0%, transparent 60%);
+  opacity: 1;
+}
+
+/* ── Clouds ──
+ * Drift across the sky behind the blocks and the chests. Container
+ * fills the entire stage (down to the platform) so clouds float at
+ * all heights — behind the reels, behind the grid blocks (visible
+ * through any cell that's been broken), and behind the chests.
+ * Each cloud is a pixel-art Minecraft rectangle built from
+ * box-shadow chunks for crisp 8-px-grid stair-step edges. */
+.pixel-mine-clouds {
+  position: absolute;
+  inset: 0 0 8% 0;             /* down to the chest platform */
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* Smooth, rounded clouds — soft white blobs with two overlapping
+ * "puffs" on top so they read as fluffy clouds instead of pure
+ * ellipses. No pixel-block edges; anti-aliasing on. The drifting
+ * animation is `linear` so they cross the sky at a steady,
+ * unhurried pace. */
+.pixel-mine-cloud {
+  position: absolute;
+  width: 64px;
+  height: 22px;
+  background: #ffffff;
+  border-radius: 999px;
+  opacity: 0.88;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
+}
+.pixel-mine-cloud::before,
+.pixel-mine-cloud::after {
+  content: '';
+  position: absolute;
+  background: #ffffff;
+  border-radius: 50%;
+}
+.pixel-mine-cloud::before {
+  width: 32px;
+  height: 32px;
+  top: -14px;
+  left: 12px;
+}
+.pixel-mine-cloud::after {
+  width: 24px;
+  height: 24px;
+  top: -10px;
+  left: 36px;
+}
+
+/* 8 variants spread vertically across the full stage height —
+ * upper sky AND down behind / between the blocks and chests.
+ * Each runs at its own speed so the parallax never syncs. */
+.pixel-mine-cloud--a { top:  4%; transform: scale(0.9); animation: pixel-mine-cloud-drift 36s linear infinite; animation-delay: -2s;  }
+.pixel-mine-cloud--b { top: 12%; transform: scale(1.4); animation: pixel-mine-cloud-drift 56s linear infinite; animation-delay: -22s; }
+.pixel-mine-cloud--c { top: 22%; transform: scale(1.1); animation: pixel-mine-cloud-drift 48s linear infinite; animation-delay: -32s; }
+.pixel-mine-cloud--d { top: 35%; transform: scale(1.7); animation: pixel-mine-cloud-drift 70s linear infinite; animation-delay: -55s; }
+.pixel-mine-cloud--e { top: 48%; transform: scale(1.0); animation: pixel-mine-cloud-drift 52s linear infinite; animation-delay: -10s; }
+.pixel-mine-cloud--f { top: 60%; transform: scale(1.3); animation: pixel-mine-cloud-drift 64s linear infinite; animation-delay: -38s; }
+.pixel-mine-cloud--g { top: 72%; transform: scale(0.8); animation: pixel-mine-cloud-drift 44s linear infinite; animation-delay: -18s; }
+.pixel-mine-cloud--h { top: 84%; transform: scale(1.5); animation: pixel-mine-cloud-drift 75s linear infinite; animation-delay: -60s; }
+
+@keyframes pixel-mine-cloud-drift {
+  from { left: -28%; }
+  to   { left: 130%; }
+}
+
+/* ── Cell-size driver ──
+ * Every cell across reels / grid / chests must be the SAME square
+ * size. We achieve that by:
+ *
+ *   1. Putting the right `aspect-ratio` on each section
+ *      (reels = 5/3, grid = 5/7, chests = 5/1) — cells inside use
+ *      grid 1fr × 1fr so they fall out as squares.
+ *
+ *   2. Giving every section the SAME width via `--pm-board-w`,
+ *      which is the smaller of:
+ *        - 100 % of the stage's content width
+ *        - whatever width keeps the COMBINED height of all three
+ *          sections (3 + 7 + 1 = 11 cells tall) inside the stage's
+ *          available vertical space.
+ *
+ * The svh-based calc subtracts a fixed budget for everything around
+ * the stage (window padding, winbar, controls, safe areas). 360 px
+ * is a conservative estimate that fits the existing chrome on
+ * mobile portrait and shrinks the cells gracefully on smaller
+ * screens. */
+.pixel-mine-stage {
+  --pm-board-w: min(100%, calc((100svh - 360px) * 5 / 11));
+}
+
+/* ── REEL STRIP (5 × 3) — Minecraft inventory style ──
+ * Light gray fill with darker recessed slots, exactly like the
+ * vanilla Minecraft inventory hot-bar. Each cell is INVERTED voxel
+ * (top-left dark = recessed, bottom-right light = catches light
+ * from above) — that's how depressed slots look in the game. */
+.pixel-mine-reels {
+  position: relative;
+  z-index: 2;
+  width: var(--pm-board-w);
+  aspect-ratio: 5 / 3;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  padding: 4px;
+  background: #6b6b6b;     /* darker outer frame */
+  border: 2px solid #2b2b2b;
+  box-shadow:
+    inset 2px 2px 0 #c6c6c6, /* light catches the top-left of the frame */
+    inset -2px -2px 0 #4a4a4a;
+}
+
+.pmr-cell {
+  position: relative;
+  display: block;
+  background-color: #8b8b8b;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  box-shadow:
+    inset 2px 2px 0 #555555,    /* dark top-left = recessed slot */
+    inset -2px -2px 0 #ffffff;  /* light bottom-right = catches light */
+  image-rendering: pixelated;
+  /* Spin mode: clip the rolling strip so only one symbol is
+   * visible at a time. */
+  overflow: hidden;
+}
+
+/* ── Spinning strip ──
+ * Vertical column of 4 symbols (final → mid2 → mid1 → start, top
+ * to bottom). The strip is 4 cell-heights tall and animates
+ * translateY from -75 % (showing `start` at the bottom-most
+ * position visible) to 0 % (showing `final`), so symbols visibly
+ * scroll TOP to BOTTOM through the cell viewport. The first ~3
+ * symbols slide past, then `final` settles and locks. */
+.pmr-cell--strip {
+  background-image: none !important;   /* strip carries the visuals */
+}
+
+.pmr-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 400%;            /* 4 stacked symbols, each = 1 cell height */
+  display: flex;
+  flex-direction: column;
+  will-change: transform;
+}
+
+.pmr-strip-symbol {
+  flex: 0 0 25%;           /* each child is 1/4 of strip = 1 cell tall */
+  width: 100%;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+}
+
+/* Symbol textures are applied via inline `style.backgroundImage` in
+ * the JSX so the artist can drop fresh PNGs into the assets folder
+ * without touching CSS. The per-symbol classes below only carry
+ * subtle effects (glow rings, drop-shadows) — the texture itself
+ * lives in the inline style. Blank cells get no inline image and
+ * just show the base recessed-slot look. */
+
+.pmr-cell--enchanted { filter: drop-shadow(0 0 4px rgba(112, 201, 217, 0.6)); }
+.pmr-cell--book      { filter: drop-shadow(0 0 3px rgba(160, 111, 230, 0.7)); }
+.pmr-cell--ender     { filter: drop-shadow(0 0 5px rgba(98, 232, 158, 0.8)); }
+
+/* ── Enchantment Book pre-pass ──
+ * While a book is doing its upgrade pass, every reel cell NOT in
+ * the active column dims down (bright drops, colours flatten) so
+ * the player's eye locks onto the column being enchanted. */
+.pmr-cell.is-dimmed {
+  filter: brightness(0.35) saturate(0.25);
+  transition: filter 0.32s ease;
+}
+
+/* The cell mid-transformation gets a cyan + violet radial flash
+ * burst that scales up over the swap moment. The cell's normal
+ * texture swaps to the Enchanted pickaxe DURING this flash, so
+ * the change is hidden behind the burst.
+ *
+ * Override overflow so the burst can extend BEYOND the cell into
+ * the surrounding reel area for a more impactful effect. */
+.pmr-cell.is-book-flash {
+  overflow: visible;
+  z-index: 5;
+}
+.pmr-cell.is-book-flash::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 255, 255, 1.0)   0%,
+    rgba(160, 232, 255, 0.95) 22%,
+    rgba(160, 111, 230, 0.75) 50%,
+    transparent 80%
+  );
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 4;
+  animation: pm-book-flash 0.32s ease-out forwards;
+  filter: blur(1px);
+  mix-blend-mode: screen;
+}
+
+@keyframes pm-book-flash {
+  0%   { transform: scale(0.4); opacity: 0; }
+  35%  { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* ── MINING GRID (5 × 7) ──
+ * NO container background, NO frame, NO padding — the blocks just
+ * "stand" against the sky/grass backdrop, like an invisible
+ * structure holding them in place. When a top-row block breaks the
+ * cell becomes transparent and you see straight through to the
+ * sky + clouds behind. */
+.pixel-mine-grid {
+  position: relative;
+  z-index: 2;
+  width: var(--pm-board-w);
+  aspect-ratio: 5 / 7;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(7, 1fr);
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.pmg-cell {
+  position: relative;
+  display: block;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.55),
+    inset 2px 2px 0 rgba(255, 255, 255, 0.18),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.32);
+  image-rendering: pixelated;
+  transition: transform 0.12s ease-out;
+}
+
+/* Empty slot (block destroyed) — fully transparent so the sky and
+ * drifting clouds behind the grid show through, like a hole carved
+ * into the world. No box-shadow or background. */
+.pmg-cell--empty {
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+}
+
+/* Block textures are applied via inline `style.backgroundImage` in
+ * the JSX from the artist-supplied PNGs in
+ * src/assets/games/pixel_mine/blocks/. CSS only handles the cell's
+ * voxel shading + animations — no per-block colour rules needed. */
+
+/* ── Chests row — sits at the very bottom of the mining area, one
+ * chest per column. Like the grid, no visible frame: the chests
+ * just "stand" on the platform underneath them. */
+.pixel-mine-chests {
+  position: relative;
+  z-index: 3;
+  width: var(--pm-board-w);
+  aspect-ratio: 5 / 1;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Platform that sits under the chests. Stone-slab band drawn via
+ * a horizontal stripe in the stage's ::after pseudo so the chests
+ * have a "floor" to rest on — Minecraft-style cobblestone path. */
+.pixel-mine-stage::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8%;
+  background:
+    /* darker line at the very bottom = mossy edge */
+    linear-gradient(180deg,
+      transparent 0%,
+      transparent 70%,
+      rgba(0, 0, 0, 0.25) 70%,
+      rgba(0, 0, 0, 0.25) 100%
+    ),
+    /* stone-brick tile pattern */
+    repeating-linear-gradient(90deg,
+      #8c8c8c 0px,    #8c8c8c 16px,
+      #6e6e6e 16px,   #6e6e6e 18px
+    );
+  background-size: 100% 100%, 18px 100%;
+  border-top: 2px solid #4a4a4a;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.30);
+  image-rendering: pixelated;
+}
+
+.pmc-cell {
+  position: relative;
+  display: block;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  image-rendering: pixelated;
+}
+
+/* Chest textures are applied via inline `style.backgroundImage` in
+ * the JSX from chests/chest.png (closed) and chests/opened_chest.png
+ * (open). When a chest first switches to .pmc-cell--open it does a
+ * brief pop scale to celebrate the unlock. */
+.pmc-cell--open {
+  animation: pmc-chest-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes pmc-chest-pop {
+  0%   { transform: scale(1.00); }
+  35%  { transform: scale(1.18) translateY(-6%); }
+  70%  { transform: scale(1.06) translateY(-2%); }
+  100% { transform: scale(1.00) translateY(0); }
+}
+
+/* Multiplier reveal — chunky white "Nx" text that pops UP out of
+ * the chest when it opens. The text-shadow stack fakes a 3-D
+ * extrusion effect (every cardinal + diagonal offset draws a hard
+ * black outline; a deeper offset down-right drops a long shadow,
+ * making the letters feel like they're floating in mid-air above
+ * the chest. */
+.pmc-mul {
+  position: absolute;
+  /* Float well ABOVE the chest cell — chests row is short, so the
+   * reveal can extend up into the grid area. */
+  bottom: 90%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  font-weight: 900;
+  font-size: clamp(18px, 5vw, 32px);
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  color: #ffffff;
+  text-shadow:
+    /* 1-px hard outline in 8 directions for crisp pixel edge */
+    -2px -2px 0 #1a1a1a,
+     2px -2px 0 #1a1a1a,
+    -2px  2px 0 #1a1a1a,
+     2px  2px 0 #1a1a1a,
+     0   -2px 0 #1a1a1a,
+     0    2px 0 #1a1a1a,
+    -2px  0   0 #1a1a1a,
+     2px  0   0 #1a1a1a,
+    /* drop-shadow stack for the "extruded 3-D" look */
+     0    3px 0 #2c2c2c,
+     0    4px 0 #2c2c2c,
+     0    5px 0 #2c2c2c,
+     0    6px 0 #2c2c2c,
+     0    8px 8px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 10;
+  animation: pmc-mul-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes pmc-mul-pop {
+  0%   { transform: translateX(-50%) translateY(40%) scale(0.30); opacity: 0; }
+  45%  { transform: translateX(-50%) translateY(-8%) scale(1.30); opacity: 1; }
+  70%  { transform: translateX(-50%) translateY(0)    scale(1.10); opacity: 1; }
+  100% { transform: translateX(-50%) translateY(0)    scale(1.15); opacity: 1; }
+}
+
+/* ── Active hit pulse — block being chipped right now ── */
+.pmg-cell.is-hit {
+  animation: pmg-cell-hit 0.20s ease-out both;
+  z-index: 4;
+}
+.pmg-cell.is-hit::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: rgba(255, 240, 180, 0.55);
+  pointer-events: none;
+  animation: pmg-cell-hit-flash 0.20s ease-out both;
+  z-index: 3;
+}
+@keyframes pmg-cell-hit {
+  0%   { transform: scale(1.00); }
+  35%  { transform: scale(1.10); }
+  70%  { transform: scale(0.96); }
+  100% { transform: scale(1.00); }
+}
+@keyframes pmg-cell-hit-flash {
+  0%   { opacity: 0; }
+  35%  { opacity: 0.95; }
+  100% { opacity: 0; }
+}
+
+/* ── Falling pickaxe sprite ──
+ * Two-element setup so position and rotation animate independently:
+ *
+ *   .pixel-mine-falling-pickaxe   ← outer wrapper, controls vertical
+ *                                   position via translateY driven
+ *                                   by JS-supplied --ty / --td / --ease.
+ *   .pixel-mine-pickaxe-spin      ← inner sprite that holds the
+ *                                   texture and spins continuously
+ *                                   around its own centre.
+ *
+ * --ty is in row units (0 = on top of row 0, R = on top of row R,
+ * −1 = one row above the grid). The JS animates by mutating --ty
+ * step-by-step with different durations + easings for the drop,
+ * the bounce, and the final fade. */
+.pixel-mine-falling-pickaxe {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  width: calc(100% / 5 - 4px);
+  aspect-ratio: 1 / 1;
+  left: calc(var(--col, 0) * (100% / 5) + 2px);
+  top: 4px;
+  transform: translateY(var(--ty, -100%));
+  transition:
+    transform var(--td, 200ms) var(--ease, cubic-bezier(0.4, 0, 1, 0.6)),
+    opacity   160ms ease;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.55));
+}
+
+/* Inner sprite — texture supplied via inline JSX backgroundImage,
+ * rotation driven by a CSS keyframe so it keeps spinning while the
+ * outer element bounces. */
+.pixel-mine-pickaxe-spin {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  animation: pixel-mine-pickaxe-spin 0.55s linear infinite;
+}
+
+@keyframes pixel-mine-pickaxe-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Falling TNT sprite ──
+ * Same vertical-translate system as the pickaxe (uses --col, --ty,
+ * --td, --ease) but the inner sprite stays UPRIGHT — TNT is a
+ * crate, not a tool, so no spin. The phase classes drive the
+ * three pre-explosion beats:
+ *
+ *   .fuse   → brightness + scale pulse (fuse burning)
+ *   .expand → big scale-up flash before the bang
+ */
+.pixel-mine-falling-tnt {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  width: calc(100% / 5 - 4px);
+  aspect-ratio: 1 / 1;
+  left: calc(var(--col, 0) * (100% / 5) + 2px);
+  top: 4px;
+  transform: translateY(var(--ty, -100%));
+  transition: transform var(--td, 200ms) var(--ease, cubic-bezier(0.4, 0, 1, 0.6));
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.55));
+}
+
+.pixel-mine-tnt-sprite {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  transform-origin: 50% 50%;
+}
+
+.pixel-mine-falling-tnt.fuse .pixel-mine-tnt-sprite {
+  animation: pm-tnt-fuse 0.16s ease-in-out infinite alternate;
+}
+.pixel-mine-falling-tnt.expand .pixel-mine-tnt-sprite {
+  animation: pm-tnt-expand 0.16s ease-out forwards;
+}
+
+@keyframes pm-tnt-fuse {
+  from { transform: scale(1.00); filter: brightness(1.00) drop-shadow(0 0 0 rgba(255, 200, 60, 0)); }
+  to   { transform: scale(1.10); filter: brightness(1.55) drop-shadow(0 0 8px rgba(255, 200, 60, 0.6)); }
+}
+
+@keyframes pm-tnt-expand {
+  0%   { transform: scale(1.10); filter: brightness(1.4); }
+  100% { transform: scale(1.55); filter: brightness(2.2); }
+}
+
+/* ── TNT explosion overlay ──
+ * Radial blast cloud that covers a 3-column × 3-row patch centred
+ * on the detonation cell. Yellow→orange→red gradient, pixelated
+ * round shape, scales up + fades out over ~480 ms.
+ *
+ * Positioning math:
+ *   centre x of cell (col, row)
+ *     = (col + 0.5) * (100 % / GRID_COLS)
+ *   centre y of cell (col, row)
+ *     = (row + 0.5) * (100 % / GRID_ROWS)
+ *   blast is 60 % wide × 42.86 % tall (3/5 cols × 3/7 rows), so
+ *   top-left corner = centre minus half size.
+ */
+.pixel-mine-explosion {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  width: 60%;             /* 3 cells across */
+  height: 42.86%;         /* 3 cells tall (3 / 7) */
+  left: calc((var(--ex-col, 0) + 0.5) * (100% / 5) - 30%);
+  top:  calc((var(--ex-row, 0) + 0.5) * (100% / 7) - 21.43%);
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 248, 180, 1.0)  0%,
+    rgba(255, 200,  60, 0.95) 22%,
+    rgba(255, 130,  30, 0.80) 45%,
+    rgba(220,  60,  20, 0.55) 65%,
+    transparent 85%
+  );
+  border-radius: 50%;
+  filter: blur(1px);
+  animation: pm-explosion-burst 0.50s ease-out forwards;
+  mix-blend-mode: screen;
+}
+
+@keyframes pm-explosion-burst {
+  0%   { transform: scale(0.30); opacity: 0.0; }
+  18%  { transform: scale(1.00); opacity: 1.0; }
+  55%  { transform: scale(1.30); opacity: 0.85; }
+  100% { transform: scale(1.65); opacity: 0.0; }
+}
+
+/* ── Win bar ── */
+.pixel-mine-winbar {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.10),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.30);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.pixel-mine-winbar.is-win {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.55);
+}
+.pixel-mine-winbar-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.62);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 900;
+}
+.pixel-mine-winbar-value {
+  font-size: 18px;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+.pixel-mine-winbar.is-win .pixel-mine-winbar-value { color: #34d399; }
+
+/* ── Controls (Tetris-style) ── */
+.pixel-mine-controls {
+  position: relative;
+  flex: 0 0 auto;
+  margin-top: 10px;
+  padding: 4px 4px calc(4px + var(--safe-bottom, 0px) * 0.4);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.pixel-mine-balance {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pixel-mine-stake {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) 26px;
+  column-gap: 10px;
+  align-items: center;
+  justify-content: end;
+  text-align: right;
+}
+
+.pixel-mine-stake-info {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  text-align: right;
+}
+
+.pixel-mine-balance > span,
+.pixel-mine-stake-info span {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+.pixel-mine-balance > strong,
+.pixel-mine-stake-info strong {
+  font-size: 16px;
+  color: #fff;
+  font-weight: 950;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+.pixel-mine-stake-buttons {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pixel-mine-stake-buttons button {
+  width: 26px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  background: #8a8a8a;
+  color: #1c1c1c;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.4),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.4);
+  transition: transform 0.08s ease, background 0.15s;
+}
+.pixel-mine-stake-buttons button:hover:not(:disabled) { background: #a0a0a0; }
+.pixel-mine-stake-buttons button:disabled { opacity: 0.3; cursor: not-allowed; }
+.pixel-mine-stake-buttons button:active:not(:disabled) { transform: scale(0.92); }
+
+.pixel-mine-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pixel-mine-spin-btn {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.92);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0.25), transparent 38%),
+    linear-gradient(180deg, #6dd923 0%, #2f7a14 100%);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.45),
+    0 0 0 6px rgba(109, 217, 35, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+  transition: transform 0.08s ease, filter 0.15s, box-shadow 0.2s;
+}
+.pixel-mine-spin-btn:active:not(:disabled) { transform: scale(0.95); filter: brightness(1.15); }
+.pixel-mine-spin-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.pixel-mine-spin-btn.is-auto {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  border-color: #fde68a;
+}
+
+.pixel-mine-auto-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.30);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.08s;
+}
+.pixel-mine-auto-btn:active:not(:disabled) { transform: scale(0.96); }
+.pixel-mine-auto-btn:disabled { opacity: 0.45; }
+.pixel-mine-auto-btn.is-on {
+  background: linear-gradient(180deg, #f59e0b 0%, #d97706 100%);
+  border-color: rgba(252, 211, 77, 0.7);
+  color: #fff;
+}
+
+/* ── Buy Bonus FAB ──
+ * Circular Minecraft-styled icon button overlaid on the bottom-
+ * left of the stage. Soft purple/cyan gradient evoking the
+ * Eye-of-Ender colour palette so its purpose (trigger Free Spins)
+ * reads at a glance. Tapping opens the confirmation modal. */
+.pixel-mine-buy-bonus-fab {
+  position: absolute;
+  z-index: 9;
+  /* Tucked into the bottom-left of the stage, sitting on the
+   * platform strip just inside the wood frame. */
+  left: 0;
+  bottom: 2%;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid #2a2a2a;
+  background:
+    radial-gradient(circle at 35% 30%, #c896ff 0%, #8a4ad6 45%, #4a1d80 100%);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.40),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.45),
+    0 6px 16px rgba(0, 0, 0, 0.55),
+    0 0 12px rgba(160, 111, 230, 0.55);
+  transition: transform 0.10s ease, filter 0.15s ease;
+}
+.pixel-mine-buy-bonus-fab:hover:not(:disabled) { filter: brightness(1.10); }
+.pixel-mine-buy-bonus-fab:active:not(:disabled) { transform: scale(0.94); }
+.pixel-mine-buy-bonus-fab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+}
+
+.pixel-mine-buy-bonus-fab-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  line-height: 1;
+}
+
+.pixel-mine-buy-bonus-fab-eye {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #131313 0%, #131313 28%, #ffea75 30%, #ffea75 56%, #62e89e 58%, #62e89e 100%);
+  border: 2px solid #1f7a3d;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 6px rgba(98, 232, 158, 0.7);
+  margin-bottom: 2px;
+}
+
+.pixel-mine-buy-bonus-fab-text {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.7);
+}
+
+/* ── Buy Bonus confirmation modal ──
+ * Stage-darkening backdrop + a chunky wood-bordered card. Two
+ * actions: red "Отмена" and green "Купить". Tapping the backdrop
+ * also dismisses (acts as cancel). */
+.pixel-mine-buy-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(3, 7, 18, 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: pm-bonus-overlay-fade 0.2s ease both;
+}
+
+.pixel-mine-buy-modal-card {
+  width: min(100%, 320px);
+  text-align: center;
+  padding: 18px 18px 16px;
+  background:
+    repeating-linear-gradient(180deg,
+      #b08158 0px, #b08158 22px,
+      #6b4520 22px, #6b4520 24px,
+      #a07349 24px, #a07349 46px,
+      #6b4520 46px, #6b4520 48px
+    );
+  border: 4px solid #5a3a1c;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.18),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.32),
+    0 16px 40px rgba(0, 0, 0, 0.65);
+  image-rendering: pixelated;
+  animation: pm-bonus-card-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+.pixel-mine-buy-modal-title {
+  margin: 0 0 8px;
+  font-family: 'Impact', sans-serif;
+  font-weight: 900;
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow:
+    -2px -2px 0 #1a1a1a,
+     2px -2px 0 #1a1a1a,
+    -2px  2px 0 #1a1a1a,
+     2px  2px 0 #1a1a1a,
+     0    4px 0 #2c2c2c,
+     0    6px 8px rgba(0, 0, 0, 0.6);
+}
+
+.pixel-mine-buy-modal-text {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #fff5d6;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+  font-family: sans-serif;
+  font-weight: 600;
+}
+
+.pixel-mine-buy-modal-cost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px;
+  margin: 0 auto 14px;
+  background: linear-gradient(180deg, #ffe066, #ffae20);
+  border: 3px solid #4a1d04;
+  color: #4a1d04;
+  font-family: 'Impact', sans-serif;
+  letter-spacing: 0.05em;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.5),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.3);
+  width: fit-content;
+}
+.pixel-mine-buy-modal-cost span {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.pixel-mine-buy-modal-cost strong {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.pixel-mine-buy-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.pixel-mine-buy-modal-cancel,
+.pixel-mine-buy-modal-buy {
+  padding: 10px 0;
+  border: 3px solid #2a2a2a;
+  font-family: 'Impact', sans-serif;
+  font-weight: 900;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  cursor: pointer;
+  text-shadow:
+    -1px -1px 0 #000,
+     1px -1px 0 #000,
+    -1px  1px 0 #000,
+     1px  1px 0 #000,
+     0    2px 0 rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.35),
+    0 4px 0 #1a1a1a;
+  transition: transform 0.08s ease, filter 0.15s;
+}
+.pixel-mine-buy-modal-cancel { background: linear-gradient(180deg, #b03030, #6f1818); }
+.pixel-mine-buy-modal-buy    { background: linear-gradient(180deg, #6dd923, #2f7a14); }
+.pixel-mine-buy-modal-cancel:active,
+.pixel-mine-buy-modal-buy:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+    inset -2px -2px 0 rgba(0, 0, 0, 0.35),
+    0 2px 0 #1a1a1a;
+}
+
+/* ── Free-Spins indicator ──
+ * Small badge that floats at the top-right of the stage during
+ * the bonus run. Shows "FREE SPINS / N". */
+.pixel-mine-bonus-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 9;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.78);
+  border: 2px solid #ffd54a;
+  color: #fff;
+  font-family: 'Impact', sans-serif;
+  font-weight: 900;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: pmc-mul-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+.pixel-mine-bonus-indicator span {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: #ffd54a;
+  text-transform: uppercase;
+}
+.pixel-mine-bonus-indicator strong {
+  font-size: 22px;
+  color: #fff;
+  text-shadow: 0 2px 0 #2a2a2a;
+}
+
+/* ── Bonus full-stage announcement overlay ──
+ * Blurs/dims the stage and shows a giant 3-D white "FREE SPINS"
+ * heading + golden spin count (or completion total). */
+.pixel-mine-bonus-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: pm-bonus-overlay-fade 0.32s ease both;
+}
+
+@keyframes pm-bonus-overlay-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.pixel-mine-bonus-card {
+  text-align: center;
+  animation: pm-bonus-card-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@keyframes pm-bonus-card-pop {
+  0%   { transform: scale(0.30) rotate(-8deg); opacity: 0; }
+  55%  { transform: scale(1.10) rotate( 2deg); opacity: 1; }
+  80%  { transform: scale(0.95) rotate( 0deg); }
+  100% { transform: scale(1.00) rotate( 0deg); }
+}
+
+.pixel-mine-bonus-title {
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  font-weight: 900;
+  font-size: clamp(24px, 7vw, 42px);
+  color: #ffffff;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow:
+    -2px -2px 0 #1a1a1a,
+     2px -2px 0 #1a1a1a,
+    -2px  2px 0 #1a1a1a,
+     2px  2px 0 #1a1a1a,
+     0    4px 0 #2a2a2a,
+     0    6px 0 #2a2a2a,
+     0    8px 12px rgba(0, 0, 0, 0.6);
+}
+
+.pixel-mine-bonus-count {
+  margin-top: 12px;
+  font-family: 'Impact', sans-serif;
+  font-weight: 900;
+  font-size: clamp(72px, 22vw, 144px);
+  color: #ffd54a;
+  text-shadow:
+    -3px -3px 0 #2a2a2a,
+     3px -3px 0 #2a2a2a,
+    -3px  3px 0 #2a2a2a,
+     3px  3px 0 #2a2a2a,
+     0    8px 0 #3a3a3a,
+     0   10px 0 #3a3a3a,
+     0   12px 0 #3a3a3a,
+     0   14px 16px rgba(0, 0, 0, 0.7);
+  animation: pm-bonus-count-pulse 1.0s ease-in-out infinite alternate;
+}
+
+@keyframes pm-bonus-count-pulse {
+  from { transform: scale(1.00); }
+  to   { transform: scale(1.06); }
+}
+
+.pixel-mine-bonus-total {
+  margin-top: 16px;
+  font-family: 'Impact', sans-serif;
+  font-weight: 900;
+  font-size: clamp(28px, 7vw, 52px);
+  color: #66f29c;          /* win-green for celebration */
+  text-shadow:
+    -2px -2px 0 #1a1a1a,
+     2px -2px 0 #1a1a1a,
+    -2px  2px 0 #1a1a1a,
+     2px  2px 0 #1a1a1a,
+     0    5px 0 #0a3a1f,
+     0    7px 0 #0a3a1f,
+     0    9px 14px rgba(0, 0, 0, 0.7);
+}
+
+/* ── Exit confirm ── */
+.pixel-mine-exit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(3, 7, 18, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.pixel-mine-exit-card {
+  width: min(100%, 340px);
+  padding: 22px;
+  border-radius: 26px;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    #0a1222;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+}
+.pixel-mine-exit-card h3 {
+  margin: 0 0 8px;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: -0.55px;
+}
+.pixel-mine-exit-card p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.pixel-mine-exit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+.pixel-mine-exit-actions button {
+  min-height: 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.pixel-mine-exit-actions button:last-child {
+  color: #052e1a;
+  background: linear-gradient(180deg, #66f29c 0%, #1ec370 100%);
+  border-color: rgba(102, 242, 156, 0.7);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Card art used on the home grid + the slot preview modal.
+ * Mini reels-on-top + grid-below thumbnail.
+ * ───────────────────────────────────────────────────────────── */
+.pixel-mine-slot-card-art {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  background: radial-gradient(120% 80% at 50% 0%, #2a1d10 0%, #0c0908 60%, #050404 100%);
+}
+.pixel-mine-card-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 50% at 50% 0%, rgba(255, 170, 80, 0.25) 0%, transparent 65%),
+    radial-gradient(70% 50% at 50% 100%, rgba(76, 175, 80, 0.2) 0%, transparent 65%);
+  pointer-events: none;
+}
+.pixel-mine-card-grid {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 12%;
+  bottom: 26%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 4px;
+}
+.pixel-mine-card-cell {
+  border-radius: 3px;
+  box-shadow:
+    inset 1.5px 1.5px 0 rgba(255, 255, 255, 0.22),
+    inset -1.5px -1.5px 0 rgba(0, 0, 0, 0.32);
+}
+.pixel-mine-card-cell--diamond  { background: linear-gradient(160deg, #b8f1ff, #2fa4cd); }
+.pixel-mine-card-cell--emerald  { background: linear-gradient(160deg, #66f29c, #0f8a4e); }
+.pixel-mine-card-cell--gold     { background: linear-gradient(160deg, #ffeaa1, #d97706); }
+.pixel-mine-card-cell--iron     { background: linear-gradient(160deg, #f1f5fa, #8a96a8); }
+.pixel-mine-card-cell--lapis    { background: linear-gradient(160deg, #6aa1ff, #1d3aa3); }
+.pixel-mine-card-cell--redstone { background: linear-gradient(160deg, #ff8585, #8a0d10); }
+.pixel-mine-card-cell--coal     { background: linear-gradient(160deg, #4a505c, #15181f); }
+.pixel-mine-card-cell--tnt      { background: linear-gradient(160deg, #ff4040, #7a0808); }
+.pixel-mine-card-cell--creeper  { background: linear-gradient(160deg, #b6e860, #4a8a18); }
+.pixel-mine-card-label {
+  position: absolute;
+  bottom: 7%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: 0.05em;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+  font-family: 'Courier New', monospace;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cell {
+  animation: pixel-mine-card-twinkle 2.6s ease-in-out infinite both;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cell:nth-child(odd)  { animation-delay: 0.0s; }
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cell:nth-child(even) { animation-delay: 0.6s; }
+@keyframes pixel-mine-card-twinkle {
+  0%, 80%, 100% { transform: scale(1);    filter: brightness(1); }
+  40%           { transform: scale(0.92); filter: brightness(1.25); }
+}
+.pixel-mine-slot-card-art--large {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+}
+.pixel-mine-slot-card-art--large .pixel-mine-card-label { font-size: 22px; bottom: 8%; }
