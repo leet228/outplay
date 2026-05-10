@@ -1344,6 +1344,9 @@
   gap: 1px;
 }
 .pixel-mine-card-chest {
+  /* relative so the floating "100x" multiplier badge can absolutely
+   * position itself above the chest. */
+  position: relative;
   aspect-ratio: 1 / 1;
   background-image: url('../assets/games/pixel_mine/chests/chest.png');
   background-repeat: no-repeat;
@@ -1355,14 +1358,18 @@
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35));
 }
 
-/* ── Falling pickaxe (animated only) — diamond pickaxe variant ── */
+/* ── Falling pickaxe (animated only) — wood pickaxe ──
+ * 8-second loop with 8 distinct strikes: 1 on grass (row 0 of mid
+ * column), 2 on stone (row 1), 5 on gold (row 2). After the last
+ * strike the pickaxe rises out of frame so the left chest can pop
+ * its 100x multiplier reveal before the sequence loops. */
 .pixel-mine-card-pickaxe-fly {
   position: absolute;
-  left: 42%;          /* aligned over the central column of the grid */
-  top: 18%;
-  width: 16%;
+  left: 43%;          /* aligned over the central column of the grid */
+  top: 14%;
+  width: 14%;
   aspect-ratio: 1 / 1;
-  background-image: url('../assets/games/pixel_mine/reels/diamond.png');
+  background-image: url('../assets/games/pixel_mine/reels/wood.png');
   background-repeat: no-repeat;
   background-size: 100% 100%;
   image-rendering: pixelated;
@@ -1371,21 +1378,163 @@
   /* Above the grid so the swinging pickaxe always stays in front of
    * the blocks, never disappears behind them. */
   z-index: 5;
-  animation: pixel-mine-card-pickaxe-loop 2.4s cubic-bezier(0.42, 0, 0.6, 1) infinite both;
+}
+
+.pixel-mine-slot-card-art--animated .pixel-mine-card-pickaxe-fly {
+  animation: pixel-mine-card-pickaxe-loop 8s cubic-bezier(0.4, 0, 0.6, 1) infinite both;
 }
 
 @keyframes pixel-mine-card-pickaxe-loop {
-  /* Drop, hit a block, bounce, fall again, fade out, reset. */
-  0%   { transform: translateY(0)   rotate(0deg);   opacity: 1; }
-  35%  { transform: translateY(70%) rotate(360deg); opacity: 1; }
-  45%  { transform: translateY(70%) rotate(360deg); opacity: 1; }
-  60%  { transform: translateY(35%) rotate(540deg); opacity: 1; }
-  85%  { transform: translateY(70%) rotate(900deg); opacity: 1; }
-  90%  { transform: translateY(70%) rotate(900deg); opacity: 0; }
-  100% { transform: translateY(0)   rotate(0deg);   opacity: 0; }
+  /* Rest above the grid */
+  0%   { transform: translateY(0)    rotate(0);      opacity: 1; }
+
+  /* === Strike 1 — grass (1 hit) === */
+  4%   { transform: translateY(70%)  rotate(180deg); opacity: 1; }   /* drop, hit grass */
+  8%   { transform: translateY(0)    rotate(360deg); opacity: 1; }   /* bounce up */
+
+  /* === Strikes 2-3 — stone (2 hits) === */
+  12%  { transform: translateY(170%) rotate(540deg); opacity: 1; }   /* drop, hit 1 */
+  16%  { transform: translateY(70%)  rotate(720deg); opacity: 1; }   /* bounce */
+  20%  { transform: translateY(170%) rotate(900deg); opacity: 1; }   /* drop, hit 2 */
+  23%  { transform: translateY(70%)  rotate(1080deg); opacity: 1; }  /* bounce */
+
+  /* === Strikes 4-8 — gold (5 hits) === */
+  26%  { transform: translateY(270%) rotate(1260deg); opacity: 1; }
+  29%  { transform: translateY(170%) rotate(1440deg); opacity: 1; }
+  32%  { transform: translateY(270%) rotate(1620deg); opacity: 1; }
+  35%  { transform: translateY(170%) rotate(1800deg); opacity: 1; }
+  38%  { transform: translateY(270%) rotate(1980deg); opacity: 1; }
+  41%  { transform: translateY(170%) rotate(2160deg); opacity: 1; }
+  44%  { transform: translateY(270%) rotate(2340deg); opacity: 1; }
+  47%  { transform: translateY(170%) rotate(2520deg); opacity: 1; }
+  50%  { transform: translateY(270%) rotate(2700deg); opacity: 1; }   /* gold shatters */
+
+  /* Pickaxe rises out of frame, fading */
+  56%  { transform: translateY(-100%) rotate(2880deg); opacity: 0; }
+
+  /* Hold off-screen while chest opens + 100x reveal plays out */
+  100% { transform: translateY(-100%) rotate(2880deg); opacity: 0; }
 }
 
-/* ── Large variant (preview modal) ── */
+/* ── Block break animations (animated variant only) ──
+ * Each middle-column block holds its texture until the strike that
+ * destroyed it lands, then fades + scales down to "shatter". The
+ * strike timing percentages are the same ones used in the pickaxe
+ * keyframe above so visuals stay aligned. */
+
+.pixel-mine-slot-card-art--animated .pixel-mine-card-block[data-anim='break-grass'] {
+  animation: pm-card-grass-break 8s linear infinite;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-block[data-anim='break-stone'] {
+  animation: pm-card-stone-break 8s linear infinite;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-block[data-anim='break-gold'] {
+  animation: pm-card-gold-break 8s linear infinite;
+}
+
+@keyframes pm-card-grass-break {
+  0%, 4%   { opacity: 1; transform: scale(1); }
+  6%       { opacity: 0; transform: scale(0.5); }
+  100%     { opacity: 0; transform: scale(0.5); }
+}
+
+@keyframes pm-card-stone-break {
+  0%, 20%  { opacity: 1; transform: scale(1); }
+  22%      { opacity: 0; transform: scale(0.5); }
+  100%     { opacity: 0; transform: scale(0.5); }
+}
+
+@keyframes pm-card-gold-break {
+  0%, 50%  { opacity: 1; transform: scale(1); }
+  52%      { opacity: 0; transform: scale(0.5); }
+  100%     { opacity: 0; transform: scale(0.5); }
+}
+
+/* ── Left chest opens after the gold shatters ──
+ * Texture swap chest → opened_chest at 60% with a brief pop scale,
+ * then holds. */
+.pixel-mine-slot-card-art--animated .pixel-mine-card-chest[data-anim='open-100x'] {
+  animation: pm-card-chest-open 8s linear infinite;
+}
+
+@keyframes pm-card-chest-open {
+  0%, 56% {
+    background-image: url('../assets/games/pixel_mine/chests/chest.png');
+    transform: scale(1);
+  }
+  58% {
+    transform: scale(1.15);
+  }
+  60% {
+    background-image: url('../assets/games/pixel_mine/chests/opened_chest.png');
+    transform: scale(1.15);
+  }
+  64%, 100% {
+    background-image: url('../assets/games/pixel_mine/chests/opened_chest.png');
+    transform: scale(1);
+  }
+}
+
+/* ── 100x multiplier text ──
+ * Pops up out of the chest after it opens, holds, then fades out
+ * just before the loop resets. */
+.pixel-mine-card-chest-mul {
+  position: absolute;
+  bottom: 90%;
+  left: 50%;
+  font-family: 'Impact', 'Arial Black', sans-serif;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow:
+    -1px -1px 0 #1a1a1a,
+     1px -1px 0 #1a1a1a,
+    -1px  1px 0 #1a1a1a,
+     1px  1px 0 #1a1a1a,
+     0    2px 4px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(20%) scale(0.5);
+}
+
+.pixel-mine-slot-card-art--animated .pixel-mine-card-chest-mul {
+  animation: pm-card-mul-pop 8s linear infinite;
+}
+
+@keyframes pm-card-mul-pop {
+  0%, 60% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20%) scale(0.5);
+  }
+  64% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-10%) scale(1.15);
+  }
+  68% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-25%) scale(1);
+  }
+  88% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-25%) scale(1);
+  }
+  95% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20%) scale(0.5);
+  }
+}
+
+/* ── Large variant (preview modal) — bigger 100x text ── */
+.pixel-mine-slot-card-art--large .pixel-mine-card-chest-mul {
+  font-size: 28px;
+}
+
 .pixel-mine-slot-card-art--large {
   position: relative;
   inset: auto;

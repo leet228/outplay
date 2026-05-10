@@ -1713,32 +1713,42 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
         <span className="pixel-mine-card-reel-cell" data-sym="ender" />
       </div>
 
-      {/* Falling pickaxe — only for the animated variant. Drops into
-       * the middle column and bounces in a loop. */}
+      {/* Wood pickaxe — animated variant only. The CSS keyframe runs
+       * an 8-strike sequence: 1 hit on grass (top of mid column),
+       * 2 hits on stone (mid row), 5 hits on gold (bottom row),
+       * then rises out of frame so the chest reveal can play. */}
       {animated && <span className="pixel-mine-card-pickaxe-fly" />}
 
       {/* Grid + chests share a wrapper so the chest row always sits
        * flush under the grid regardless of card aspect ratio. */}
       <div className="pixel-mine-card-stack-wrap">
-        {/* 3-column × 3-row mining grid, each tile square. Top row is
-         * surface (grass), middle is mid-tier ores, bottom row is the
-         * jackpot tier (gold/diamond/obsidian). */}
+        {/* 3-column × 3-row mining grid. The MIDDLE column is the
+         * one the pickaxe targets in the animation: grass(1HP) →
+         * stone(2HP) → gold(5HP) for a clean "1 + 2 + 5 = 8 strikes"
+         * cadence. Outer columns add visual variety with a wider
+         * tier range (stone, redstone, diamond, obsidian). */}
         <div className="pixel-mine-card-grid">
+          {/* Row 0 — surface */}
           <span className="pixel-mine-card-block" data-block="grass" />
+          <span className="pixel-mine-card-block" data-block="grass" data-anim="break-grass" />
           <span className="pixel-mine-card-block" data-block="grass" />
-          <span className="pixel-mine-card-block" data-block="grass" />
+          {/* Row 1 — stone band */}
           <span className="pixel-mine-card-block" data-block="stone" />
+          <span className="pixel-mine-card-block" data-block="stone" data-anim="break-stone" />
           <span className="pixel-mine-card-block" data-block="redstone" />
-          <span className="pixel-mine-card-block" data-block="stone" />
-          <span className="pixel-mine-card-block" data-block="gold" />
+          {/* Row 2 — jackpot tier */}
           <span className="pixel-mine-card-block" data-block="diamond" />
+          <span className="pixel-mine-card-block" data-block="gold" data-anim="break-gold" />
           <span className="pixel-mine-card-block" data-block="obsidian" />
         </div>
 
-        {/* One chest per column. Same column layout as the grid so each
-         * chest sits dead-centred under the column it belongs to. */}
+        {/* One chest per column. The LEFT chest opens at the end of
+         * the strike sequence and pops a "100x" multiplier, then the
+         * loop resets. Other chests stay closed. */}
         <div className="pixel-mine-card-chests">
-          <span className="pixel-mine-card-chest" />
+          <span className="pixel-mine-card-chest" data-anim="open-100x">
+            {animated && <span className="pixel-mine-card-chest-mul">100x</span>}
+          </span>
           <span className="pixel-mine-card-chest" />
           <span className="pixel-mine-card-chest" />
         </div>
