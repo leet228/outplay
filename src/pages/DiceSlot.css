@@ -80,6 +80,11 @@
 
 /* ─────────────────────────────────────────────────────────────
  * History row — recent rolls as pill badges.
+ *
+ * Pills are flexed across the row with a fat horizontal aspect
+ * (wider than tall) so they read as ovals, not round chips. We
+ * cap the row at 10 entries — fewer pills = each pill is broader
+ * = clearly landscape rather than nearly-square.
  * ───────────────────────────────────────────────────────────── */
 .dice-history {
   position: relative;
@@ -89,19 +94,19 @@
   overflow: hidden;
   flex-wrap: nowrap;
   justify-content: flex-start;
-  padding: 2px 0 6px;
+  padding: 2px 0 8px;
 }
 
 .dice-history-pill {
   flex: 1 1 0;
   min-width: 0;
-  height: 28px;
+  height: 36px;
   border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 900;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   background: rgba(255, 255, 255, 0.06);
