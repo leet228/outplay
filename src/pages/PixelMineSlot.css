@@ -1366,14 +1366,14 @@
  * its 100x multiplier reveal before the sequence loops. */
 .pixel-mine-card-pickaxe-fly {
   position: absolute;
-  /* Aligned over the LEFT column of the grid — same column as the
-   * wood pickaxe icon in the reel strip, so the pickaxe visually
-   * "drops out of its reel cell" and into the left mining column.
-   * Grid spans 26%-74% (48% wide, 3 cols of 16%). Left col centre
-   * is at 26% + 8% = 34%. Pickaxe is 14% wide → left = 27% to
-   * centre at 34%. */
-  left: 27%;
-  top: 14%;
+  /* Start position OVERLAPS the wood reel cell (the leftmost cell
+   * of the reel strip) so it visually "drops out" of the slot when
+   * the keyframe begins. Reel strip top = 6 %, cell ~12 % tall on
+   * a 4:5 card → wood cell sits roughly top 7 % - 19 %. Pickaxe is
+   * 14 % wide / aspect 1, so it occupies ~7 % - 18 % at the start —
+   * basically pinned over the wood reel slot. */
+  left: 28%;
+  top: 7%;
   width: 14%;
   aspect-ratio: 1 / 1;
   background-image: url('../assets/games/pixel_mine/reels/wood.png');
@@ -1392,35 +1392,56 @@
 }
 
 @keyframes pixel-mine-card-pickaxe-loop {
-  /* Rest above the grid */
-  0%   { transform: translateY(0)    rotate(0);      opacity: 1; }
+  /* Rest position INSIDE the wood reel cell (translateY 0). When
+   * the loop kicks off the pickaxe drops straight down out of the
+   * cell into the left mining column. translateY values below are
+   * tuned for top: 7 % start position — bigger drops than the old
+   * top: 14 % start. */
+  0%, 2% { transform: translateY(0) rotate(0); opacity: 1; }
 
   /* === Strike 1 — grass (1 hit) === */
-  4%   { transform: translateY(70%)  rotate(180deg); opacity: 1; }   /* drop, hit grass */
-  8%   { transform: translateY(0)    rotate(360deg); opacity: 1; }   /* bounce up */
+  4%   { transform: translateY(110%) rotate(180deg); opacity: 1; }   /* drop, hit grass */
+  8%   { transform: translateY(0)    rotate(360deg); opacity: 1; }   /* bounce back to slot */
 
   /* === Strikes 2-3 — stone (2 hits) === */
-  12%  { transform: translateY(170%) rotate(540deg); opacity: 1; }   /* drop, hit 1 */
-  16%  { transform: translateY(70%)  rotate(720deg); opacity: 1; }   /* bounce */
-  20%  { transform: translateY(170%) rotate(900deg); opacity: 1; }   /* drop, hit 2 */
-  23%  { transform: translateY(70%)  rotate(1080deg); opacity: 1; }  /* bounce */
+  12%  { transform: translateY(220%) rotate(540deg); opacity: 1; }   /* drop, hit 1 */
+  16%  { transform: translateY(110%) rotate(720deg); opacity: 1; }   /* bounce */
+  20%  { transform: translateY(220%) rotate(900deg); opacity: 1; }   /* drop, hit 2 */
+  23%  { transform: translateY(110%) rotate(1080deg); opacity: 1; }  /* bounce */
 
   /* === Strikes 4-8 — gold (5 hits) === */
-  26%  { transform: translateY(270%) rotate(1260deg); opacity: 1; }
-  29%  { transform: translateY(170%) rotate(1440deg); opacity: 1; }
-  32%  { transform: translateY(270%) rotate(1620deg); opacity: 1; }
-  35%  { transform: translateY(170%) rotate(1800deg); opacity: 1; }
-  38%  { transform: translateY(270%) rotate(1980deg); opacity: 1; }
-  41%  { transform: translateY(170%) rotate(2160deg); opacity: 1; }
-  44%  { transform: translateY(270%) rotate(2340deg); opacity: 1; }
-  47%  { transform: translateY(170%) rotate(2520deg); opacity: 1; }
-  50%  { transform: translateY(270%) rotate(2700deg); opacity: 1; }   /* gold shatters */
+  26%  { transform: translateY(330%) rotate(1260deg); opacity: 1; }
+  29%  { transform: translateY(220%) rotate(1440deg); opacity: 1; }
+  32%  { transform: translateY(330%) rotate(1620deg); opacity: 1; }
+  35%  { transform: translateY(220%) rotate(1800deg); opacity: 1; }
+  38%  { transform: translateY(330%) rotate(1980deg); opacity: 1; }
+  41%  { transform: translateY(220%) rotate(2160deg); opacity: 1; }
+  44%  { transform: translateY(330%) rotate(2340deg); opacity: 1; }
+  47%  { transform: translateY(220%) rotate(2520deg); opacity: 1; }
+  50%  { transform: translateY(330%) rotate(2700deg); opacity: 1; }   /* gold shatters */
 
   /* Pickaxe rises out of frame, fading */
   56%  { transform: translateY(-100%) rotate(2880deg); opacity: 0; }
 
   /* Hold off-screen while chest opens + 100x reveal plays out */
   100% { transform: translateY(-100%) rotate(2880deg); opacity: 0; }
+}
+
+/* Wood reel cell: empties when the pickaxe leaves it, restores at
+ * the loop reset so the next cycle starts with the cell visually
+ * "loaded" with the wood pickaxe again. The slot looks like it
+ * spit out the pickaxe rather than coexisting with a duplicate. */
+.pixel-mine-slot-card-art--animated .pixel-mine-card-reel-cell[data-sym='wood'] {
+  animation: pm-card-wood-cell 8s linear infinite;
+}
+
+@keyframes pm-card-wood-cell {
+  0%, 3% {
+    background-image: url("../assets/games/pixel_mine/reels/wood.png");
+  }
+  4%, 100% {
+    background-image: none;
+  }
 }
 
 /* ── Block break animations (animated variant only) ──
