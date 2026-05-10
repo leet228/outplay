@@ -684,13 +684,27 @@ export default function PixelMineSlot() {
   //              brightens-and-pulses to read as the fuse burning.
   //   3. Expand — TNT scales up ~50 % in 160 ms (the "flash before
   //              the bang" beat).
-  //   4. BOOM  — radial blast overlay covers a 3-column × 3-row
-  //              area centred on the TNT's resting cell. Damage
-  //              of 2 HP is applied to the TOP block of:
-  //                - this column
-  //                - the column to the LEFT  (if any)
-  //                - the column to the RIGHT (if any)
-  //              Destroyed blocks pay out and clear instantly.
+  //   4. BOOM  — fixed 3-column × 3-row blast centred on the TNT's
+  //              own resting cell (which sits one row above the top
+  //              block of its column). Every block inside that 3×3
+  //              window takes 2 HP of damage. Destroyed blocks pay
+  //              out and clear instantly.
+  //
+  //              IMPORTANT — this is a 3×3 area blast (matches the
+  //              published Mine Slot mechanic), NOT a "top block of
+  //              each column" hit. Implication:
+  //                - In TNT's own column, only its top block is hit
+  //                  (rows above are empty by definition).
+  //                - In adjacent columns it depends on their state:
+  //                  if a neighbour is less mined than the TNT
+  //                  column, multiple blocks of that neighbour can
+  //                  fall inside the 3×3 zone and all take damage;
+  //                  if a neighbour is more mined, its top block
+  //                  may sit BELOW the 3×3 zone and survive intact.
+  //
+  //              The RTP simulator (scripts/pixel-mine-rtp-sim.js)
+  //              uses the same geometry — keep them in sync.
+  //
   //              The flash holds for ~450 ms then fades.
   async function explodeTntFromReel(reelRow, col, currentGrid, currentStake) {
     if (cancelRef.current) return { grid: currentGrid, added: 0 }
