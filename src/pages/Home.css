@@ -442,7 +442,14 @@
   box-shadow:
     0 7px 0 0 #04102f,
     0 12px 28px rgba(0, 0, 0, 0.36);
-  transform: translateY(0);
+  /* NO resting `transform: translateY(0)` here — even an identity
+   * transform forces the card onto a GPU compositor layer and the
+   * GPU then resamples pixel-art descendants (Pixel Mine card art)
+   * with bilinear filtering, blurring the 16×16 textures.
+   *
+   * The :active press-down still uses translateY for tactile feel.
+   * That's only during the brief tap, so the momentary blur is
+   * acceptable. */
   transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
@@ -890,12 +897,18 @@
   box-shadow:
     0 32px 90px rgba(0, 0, 0, 0.66),
     inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  /* Fade-in only — no transform on the modal card. Previously the
+   * keyframe ended with `transform: translateY(0) scale(1)` and
+   * `fill-mode: both` left that scale(1) permanently applied,
+   * which promoted the entire modal subtree to a GPU compositor
+   * layer with bilinear filtering. That's what was blurring the
+   * Pixel Mine pixel-art chest / blocks / pickaxe inside. */
   animation: slotPreviewRise 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes slotPreviewRise {
-  from { opacity: 0; transform: translateY(18px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .slot-preview-close {
