@@ -1461,15 +1461,16 @@
  * out just before the loop resets. Positioned absolutely against
  * the .pixel-mine-slot-card-art root — the chests row sits at
  * roughly top: 63 % of the card-art height (stack-wrap top 26 % +
- * grid 36 % + gap 1 %), so we float the badge just above it at
- * top: 58 %. Centred horizontally over the LEFT chest by left:
- * 34 % + translate(-50%) — the left column centre lines up with
- * the wood-pickaxe reel cell at 34 % too, keeping the visual
- * vertically aligned. */
+ * grid 36 % + gap 1 %), so we anchor the badge low enough that
+ * even with its `translate(-50%, -25%)` settled offset it lands
+ * right on top of the chest visual (≈ top: 67 %). Centred
+ * horizontally over the LEFT chest by left: 34 % + translate(-50%) —
+ * the left column centre lines up with the wood-pickaxe reel cell
+ * at 34 % too, keeping the visual vertically aligned. */
 .pixel-mine-card-chest-mul {
   position: absolute;
   left: 34%;
-  top: 58%;
+  top: 72%;
   z-index: 6;
   font-family: 'Impact', 'Arial Black', sans-serif;
   font-size: 14px;
