@@ -1713,32 +1713,34 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
         <span className="pixel-mine-card-reel-cell" data-sym="ender" />
       </div>
 
-      {/* Wood pickaxe — animated variant only. The CSS keyframe runs
-       * an 8-strike sequence: 1 hit on grass (top of mid column),
+      {/* Wood pickaxe — animated variant only. Drops from the LEFT
+       * reel cell (where the wood pickaxe sprite sits in the slot's
+       * reel strip) straight down into the LEFT column of the grid.
+       * 8-strike sequence: 1 hit on grass (top of left col),
        * 2 hits on stone (mid row), 5 hits on gold (bottom row),
-       * then rises out of frame so the chest reveal can play. */}
+       * then rises out of frame so the left chest reveal plays. */}
       {animated && <span className="pixel-mine-card-pickaxe-fly" />}
 
       {/* Grid + chests share a wrapper so the chest row always sits
        * flush under the grid regardless of card aspect ratio. */}
       <div className="pixel-mine-card-stack-wrap">
-        {/* 3-column × 3-row mining grid. The MIDDLE column is the
-         * one the pickaxe targets in the animation: grass(1HP) →
+        {/* 3-column × 3-row mining grid. The LEFT column is the one
+         * the pickaxe targets in the animation: grass(1HP) →
          * stone(2HP) → gold(5HP) for a clean "1 + 2 + 5 = 8 strikes"
-         * cadence. Outer columns add visual variety with a wider
+         * cadence. Other columns add visual variety with a wider
          * tier range (stone, redstone, diamond, obsidian). */}
         <div className="pixel-mine-card-grid">
           {/* Row 0 — surface */}
-          <span className="pixel-mine-card-block" data-block="grass" />
           <span className="pixel-mine-card-block" data-block="grass" data-anim="break-grass" />
           <span className="pixel-mine-card-block" data-block="grass" />
+          <span className="pixel-mine-card-block" data-block="grass" />
           {/* Row 1 — stone band */}
-          <span className="pixel-mine-card-block" data-block="stone" />
           <span className="pixel-mine-card-block" data-block="stone" data-anim="break-stone" />
           <span className="pixel-mine-card-block" data-block="redstone" />
+          <span className="pixel-mine-card-block" data-block="stone" />
           {/* Row 2 — jackpot tier */}
-          <span className="pixel-mine-card-block" data-block="diamond" />
           <span className="pixel-mine-card-block" data-block="gold" data-anim="break-gold" />
+          <span className="pixel-mine-card-block" data-block="diamond" />
           <span className="pixel-mine-card-block" data-block="obsidian" />
         </div>
 

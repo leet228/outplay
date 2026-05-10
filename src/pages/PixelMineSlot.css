@@ -1307,15 +1307,16 @@
   z-index: 2;
 }
 
-/* ── 3×3 mining grid (square tiles) ── */
+/* ── 3×3 mining grid (square tiles) ──
+ * No background frame — when blocks shatter in the animation we
+ * want the sky / cloud BG to show straight through, not a dark
+ * panel underneath. Gaps stay at 1 px for a clean tile separation
+ * but they read as sky too. */
 .pixel-mine-card-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
-  background: rgba(0, 0, 0, 0.35);
-  box-shadow:
-    inset 1px 1px 0 rgba(0, 0, 0, 0.5),
-    inset -1px -1px 0 rgba(255, 255, 255, 0.12);
+  background: transparent;
 }
 .pixel-mine-card-block {
   aspect-ratio: 1 / 1;
@@ -1365,7 +1366,13 @@
  * its 100x multiplier reveal before the sequence loops. */
 .pixel-mine-card-pickaxe-fly {
   position: absolute;
-  left: 43%;          /* aligned over the central column of the grid */
+  /* Aligned over the LEFT column of the grid — same column as the
+   * wood pickaxe icon in the reel strip, so the pickaxe visually
+   * "drops out of its reel cell" and into the left mining column.
+   * Grid spans 26%-74% (48% wide, 3 cols of 16%). Left col centre
+   * is at 26% + 8% = 34%. Pickaxe is 14% wide → left = 27% to
+   * centre at 34%. */
+  left: 27%;
   top: 14%;
   width: 14%;
   aspect-ratio: 1 / 1;
