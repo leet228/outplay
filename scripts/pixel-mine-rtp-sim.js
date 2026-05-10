@@ -331,6 +331,20 @@ function diagnose(spins) {
   let chestOpensTotal = 0
   let chestOpensBaseOnly = 0
 
+  // Bonus payout distribution buckets — tracks how many triggered
+  // bonuses paid back at various profit thresholds.
+  let bonusZero        = 0   // 0 payout
+  let bonusGtZero      = 0   // > 0
+  let bonusGteStake    = 0   // ≥ 1× stake (covered the trigger spin's bet)
+  let bonusGte10x      = 0   // ≥ 10× stake (decent run)
+  let bonusGte50x      = 0   // ≥ 50× stake
+  let bonusGte100x     = 0   // ≥ 100× stake (covered Buy Bonus cost)
+  let bonusGte500x     = 0   // ≥ 500× stake (good hit)
+  let bonusGteCap      = 0   // hit the 5000× cap
+  let bonusWinSum      = 0
+  let bonusWinSqSum    = 0
+  let bonusBest        = 0
+
   for (let i = 0; i < spins; i++) {
     totalBet += stake
     const rawReels = generateReels()
@@ -350,19 +364,52 @@ function diagnose(spins) {
         const fsReels = generateReelsNoEnder()
         fs += runOnePhase(grid, fsReels, chests, stake)
       }
-      bonusWin += Math.min(fs, stake * PAYOUT_CAP)
+      const fsCapped = Math.min(fs, stake * PAYOUT_CAP)
+      bonusWin += fsCapped
+
+      // Distribution
+      bonusWinSum   += fsCapped
+      bonusWinSqSum += fsCapped * fsCapped
+      if (fsCapped > bonusBest) bonusBest = fsCapped
+      if (fsCapped === 0)            bonusZero++
+      if (fsCapped > 0)              bonusGtZero++
+      if (fsCapped >= stake)         bonusGteStake++
+      if (fsCapped >= stake * 10)    bonusGte10x++
+      if (fsCapped >= stake * 50)    bonusGte50x++
+      if (fsCapped >= stake * 100)   bonusGte100x++
+      if (fsCapped >= stake * 500)   bonusGte500x++
+      if (fsCapped >= stake * PAYOUT_CAP) bonusGteCap++
     }
 
     chestOpensTotal += chests.filter(c => c.open).length
   }
+
+  const avgBonus = bonusEntries > 0 ? bonusWinSum / bonusEntries : 0
+  const varBonus = bonusEntries > 0
+    ? Math.max(0, bonusWinSqSum / bonusEntries - avgBonus * avgBonus)
+    : 0
 
   return {
     rtp:           (baseWin + bonusWin) / totalBet,
     baseRtp:       baseWin / totalBet,
     bonusRtp:      bonusWin / totalBet,
     bonusFreq:     bonusEntries / spins,
+    bonusEntries,
     avgChestsBase: chestOpensBaseOnly / spins,
     avgChestsAll:  chestOpensTotal / spins,
+
+    // Bonus distribution (% of triggered bonuses)
+    bonusAvg:        avgBonus,
+    bonusBest:       bonusBest,
+    bonusStdDev:     Math.sqrt(varBonus),
+    pctBonusZero:    bonusEntries > 0 ? bonusZero      / bonusEntries : 0,
+    pctBonusGtZero:  bonusEntries > 0 ? bonusGtZero    / bonusEntries : 0,
+    pctBonusGteStake:bonusEntries > 0 ? bonusGteStake  / bonusEntries : 0,
+    pctBonus10x:     bonusEntries > 0 ? bonusGte10x    / bonusEntries : 0,
+    pctBonus50x:     bonusEntries > 0 ? bonusGte50x    / bonusEntries : 0,
+    pctBonus100x:    bonusEntries > 0 ? bonusGte100x   / bonusEntries : 0,
+    pctBonus500x:    bonusEntries > 0 ? bonusGte500x   / bonusEntries : 0,
+    pctBonusCap:     bonusEntries > 0 ? bonusGteCap    / bonusEntries : 0,
   }
 }
 
@@ -371,7 +418,9 @@ const SPINS = parseInt(process.argv[2] || '300000', 10)
 console.log(`Running ${SPINS.toLocaleString()} spins...`)
 const t0 = Date.now()
 const r = simulate(SPINS)
-const d = diagnose(Math.min(SPINS, 100_000))
+// Bonus is ~1 in 600 spins, so push diagnose() through enough spins
+// to land at least a few thousand bonus samples.
+const d = diagnose(Math.min(SPINS, 5_000_000))
 const elapsed = ((Date.now() - t0) / 1000).toFixed(1)
 
 console.log('')
@@ -387,4 +436,18 @@ console.log(`Bonus freq:    1 in ${(1 / r.bonusFreq).toFixed(0)} (~${(r.bonusFre
 console.log(`Chests / spin: ${d.avgChestsBase.toFixed(3)} (base) / ${d.avgChestsAll.toFixed(3)} (incl. FS)`)
 console.log(`Volatility σ:  ${r.volatility.toFixed(2)}`)
 console.log(`Time:          ${elapsed} s`)
+console.log('═'.repeat(50))
+console.log('Bonus payout distribution:')
+console.log(`  Sample size:        ${d.bonusEntries.toLocaleString()} bonus rounds`)
+console.log(`  Avg bonus payout:   ${d.bonusAvg.toFixed(2)} × stake`)
+console.log(`  Best bonus seen:    ${d.bonusBest.toFixed(0)} × stake`)
+console.log(`  σ (volatility):     ${d.bonusStdDev.toFixed(2)} × stake`)
+console.log(`  % paying 0:         ${(d.pctBonusZero    * 100).toFixed(2)} %`)
+console.log(`  % paying > 0:       ${(d.pctBonusGtZero  * 100).toFixed(2)} %`)
+console.log(`  % paying ≥ 1×:      ${(d.pctBonusGteStake* 100).toFixed(2)} %  (covered the trigger bet)`)
+console.log(`  % paying ≥ 10×:     ${(d.pctBonus10x     * 100).toFixed(2)} %`)
+console.log(`  % paying ≥ 50×:     ${(d.pctBonus50x     * 100).toFixed(2)} %`)
+console.log(`  % paying ≥ 100×:    ${(d.pctBonus100x    * 100).toFixed(2)} %  (Buy Bonus break-even)`)
+console.log(`  % paying ≥ 500×:    ${(d.pctBonus500x    * 100).toFixed(2)} %`)
+console.log(`  % hitting cap 5000×:${(d.pctBonusCap     * 100).toFixed(3)} %`)
 console.log('═'.repeat(50))

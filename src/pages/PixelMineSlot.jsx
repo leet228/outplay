@@ -479,8 +479,14 @@ export default function PixelMineSlot() {
   const [bookActiveCol, setBookActiveCol] = useState(null) // number | null
   const [bookFlashCell, setBookFlashCell] = useState(null) // {row, col} | null
   // 5 chests — one per column. Each holds a random multiplier
-  // and an `open` flag. Re-rolled at the start of every spin.
+  // and an `open` flag. Re-rolled at the start of every base spin
+  // (FS iterations REUSE the trigger spin's chests).
+  //
+  // chestsRef shadows the state so the spin pipeline can read the
+  // current chests synchronously across awaits — avoids stale
+  // closures when multiple FS spins fire one after another.
   const [chests, setChests]               = useState(() => generateChests())
+  const chestsRef                          = useRef(chests)
   // Buy-Bonus confirmation modal — `true` when the user has
   // tapped the Buy Bonus FAB but hasn't confirmed yet.
   const [buyBonusConfirm, setBuyBonusConfirm] = useState(false)
@@ -512,6 +518,7 @@ export default function PixelMineSlot() {
   useEffect(() => { balanceRef.current = balance },   [balance])
   useEffect(() => { stakeRef.current   = stake },     [stake])
   useEffect(() => { autoRef.current    = autoSpin },  [autoSpin])
+  useEffect(() => { chestsRef.current  = chests },    [chests])
   useEffect(() => () => { cancelRef.current = true }, [])
 
   // ── Telegram BackButton ──
@@ -1044,6 +1051,13 @@ export default function PixelMineSlot() {
     // 5 — chest opening sequence. Only newly-cleared columns open
     // a chest (already-open ones stay open). Each newly-opened
     // chest's multiplier multiplies THIS spin's win.
+    //
+    // We read the CURRENT chests via chestsRef (not React state)
+    // so consecutive FS spins always see the latest open-flags,
+    // even if the previous spin's setChests hasn't flushed through
+    // a render yet. We compute newlyOpened FIRST (no side effects
+    // in the React updater), then push the new array to both ref
+    // and state in one shot.
     const clearedCols = []
     for (let c = 0; c < GRID_COLS; c++) {
       let cleared = true
@@ -1053,33 +1067,37 @@ export default function PixelMineSlot() {
       if (cleared) clearedCols.push(c)
     }
     if (clearedCols.length > 0) {
-      let openedMuls = []
-      setChests(prev => {
-        const next = prev.map(c => ({ ...c }))
-        for (const col of clearedCols) {
-          if (!next[col].open) {
-            next[col].open = true
-            openedMuls.push({ col, mul: next[col].mul })
-          }
+      const currentChests = chestsRef.current
+      const newlyOpened = []
+      const nextChests = currentChests.map(c => ({ ...c }))
+      for (const col of clearedCols) {
+        if (!nextChests[col].open) {
+          nextChests[col].open = true
+          newlyOpened.push({ col, mul: nextChests[col].mul })
         }
-        return next
-      })
-      await sleep(60)
-      let chestMul = 1
-      for (const { mul } of openedMuls) {
-        if (cancelRef.current) break
-        haptic('success')
-        await sleep(580)
-        chestMul *= mul
       }
-      if (chestMul > 1 && win > 0) {
-        const beforeChest = win
-        win = Math.round(win * chestMul)
-        const extra = win - beforeChest
-        setLastWin(prev => Math.round(prev + extra))
-        setBalanceBounce(true)
-        setTimeout(() => setBalanceBounce(false), 360)
-        haptic('success')
+      if (newlyOpened.length > 0) {
+        // Sync both: ref FIRST (so any reentry inside this spin
+        // sees the truth), then state (drives the visual pop).
+        chestsRef.current = nextChests
+        setChests(nextChests)
+        await sleep(60)
+        let chestMul = 1
+        for (const { mul } of newlyOpened) {
+          if (cancelRef.current) break
+          haptic('success')
+          await sleep(580)
+          chestMul *= mul
+        }
+        if (chestMul > 1 && win > 0) {
+          const beforeChest = win
+          win = Math.round(win * chestMul)
+          const extra = win - beforeChest
+          setLastWin(prev => Math.round(prev + extra))
+          setBalanceBounce(true)
+          setTimeout(() => setBalanceBounce(false), 360)
+          haptic('success')
+        }
       }
     }
 
@@ -1165,7 +1183,11 @@ export default function PixelMineSlot() {
     // Re-roll the chests with fresh multipliers — each base spin
     // gets its own loadout. (FS iterations REUSE the chests from
     // the trigger spin; they're not regenerated below.)
-    setChests(generateChests())
+    // Update the ref synchronously too so step 5 can read the new
+    // loadout without waiting for the useEffect tick.
+    const freshChests = generateChests()
+    chestsRef.current = freshChests
+    setChests(freshChests)
 
     // Working grid copy — the source of truth for damage tracking.
     let g = targetGrid.map(row => row.map(cell => cell ? { ...cell } : null))
