@@ -1909,13 +1909,19 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
       <div className="pixel-mine-card-stack-wrap">
         {/* 3×3 mining grid. The LEFT column is the one the pickaxe
          * works through: grass(1HP) → stone(2HP) → gold(5HP), 8
-         * strikes total. Other columns stay decorative. */}
+         * strikes total. Other columns stay decorative. When a
+         * left-column block is destroyed (texture goes to null),
+         * we also drop the inset box-shadow inline so the cell
+         * goes fully empty — no ghost border outline left behind. */}
         <div className="pixel-mine-card-grid">
           {/* Row 0 — surface */}
           <span
             className="pixel-mine-card-block"
             data-block="grass"
-            style={{ backgroundImage: grassTex ? `url("${grassTex}")` : 'none' }}
+            style={{
+              backgroundImage: grassTex ? `url("${grassTex}")` : 'none',
+              boxShadow: grassTex ? undefined : 'none',
+            }}
           />
           <span className="pixel-mine-card-block" data-block="grass" />
           <span className="pixel-mine-card-block" data-block="grass" />
@@ -1923,7 +1929,10 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
           <span
             className="pixel-mine-card-block"
             data-block="stone"
-            style={{ backgroundImage: stoneTex ? `url("${stoneTex}")` : 'none' }}
+            style={{
+              backgroundImage: stoneTex ? `url("${stoneTex}")` : 'none',
+              boxShadow: stoneTex ? undefined : 'none',
+            }}
           />
           <span className="pixel-mine-card-block" data-block="redstone" />
           <span className="pixel-mine-card-block" data-block="stone" />
@@ -1931,7 +1940,10 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
           <span
             className="pixel-mine-card-block"
             data-block="gold"
-            style={{ backgroundImage: goldTex ? `url("${goldTex}")` : 'none' }}
+            style={{
+              backgroundImage: goldTex ? `url("${goldTex}")` : 'none',
+              boxShadow: goldTex ? undefined : 'none',
+            }}
           />
           <span className="pixel-mine-card-block" data-block="diamond" />
           <span className="pixel-mine-card-block" data-block="obsidian" />
@@ -1946,21 +1958,26 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
           <span className="pixel-mine-card-chest" />
           <span className="pixel-mine-card-chest" />
         </div>
-        {/* "100x" multiplier badge — sibling of the chests row so the
-         * chest itself has no animated descendants. Position +
-         * opacity driven by inline style from the JS phase. */}
-        {animated && (
-          <span
-            className="pixel-mine-card-chest-mul"
-            style={{
-              opacity: mulOpacity,
-              transform: `translate(-50%, ${mulY}%) scale(${mulScale})`,
-            }}
-          >
-            100x
-          </span>
-        )}
       </div>
+
+      {/* "100x" multiplier badge — direct child of the card-art root
+       * (NOT inside stack-wrap) so its `top` percentage resolves
+       * against the card-art's full height and we can pin it
+       * directly above the LEFT chest. The chests row sits at
+       * roughly top: 63 % of the card; the badge floats above it
+       * at top: 58 % so it reads as "popping out of the chest".
+       * Position + opacity driven by inline style from JS phase. */}
+      {animated && (
+        <span
+          className="pixel-mine-card-chest-mul"
+          style={{
+            opacity: mulOpacity,
+            transform: `translate(-50%, ${mulY}%) scale(${mulScale})`,
+          }}
+        >
+          100x
+        </span>
+      )}
     </div>
   )
 }

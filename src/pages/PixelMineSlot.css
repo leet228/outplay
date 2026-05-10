@@ -1459,19 +1459,17 @@
 /* ── 100x multiplier text ──
  * Pops up over the LEFT chest after it opens, holds, then fades
  * out just before the loop resets. Positioned absolutely against
- * the .pixel-mine-slot-card-art root (not inside the chest cell)
- * so the chest itself has no animated descendants — that keeps the
- * chest off the GPU compositor layer and its texture stays crisp.
- *
- * Coordinates: chests row sits at top:61% (after stack-wrap top
- * 26 % + grid 35 %). Left chest spans roughly 26-42 % wide. The
- * badge centres horizontally over the left chest at ~34 % left,
- * and floats above the chest at ~50-55 % top so it reads as
- * "popping out of the chest". */
+ * the .pixel-mine-slot-card-art root — the chests row sits at
+ * roughly top: 63 % of the card-art height (stack-wrap top 26 % +
+ * grid 36 % + gap 1 %), so we float the badge just above it at
+ * top: 58 %. Centred horizontally over the LEFT chest by left:
+ * 34 % + translate(-50%) — the left column centre lines up with
+ * the wood-pickaxe reel cell at 34 % too, keeping the visual
+ * vertically aligned. */
 .pixel-mine-card-chest-mul {
   position: absolute;
   left: 34%;
-  top: 56%;
+  top: 58%;
   z-index: 6;
   font-family: 'Impact', 'Arial Black', sans-serif;
   font-size: 14px;
