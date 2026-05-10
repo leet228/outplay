@@ -1132,12 +1132,29 @@ export default function PixelMineSlot() {
 
   // ── One full spin: server start → reel result → process pickaxes
   // by column → settle → server finish ──
+  //
+  // CRITICAL: the whole body lives inside a try/finally. If anything
+  // (a thrown JS error, a server hiccup, a cancel mid-bonus) blows up
+  // the gameplay, the finally block STILL runs the server finalize
+  // (with whatever totalWin we computed up to the throw point) and
+  // resets phase → 'idle'. Without this, a single throw would leave
+  // the slot stuck (`phase != 'idle'` blocks every subsequent spin
+  // and Buy Bonus) AND leave the round un-finalized server-side, so
+  // the cost stays debited but the user sees nothing back until
+  // they reload.
   async function spin(opts = {}) {
     const { isBuyBonus = false, forceEnders: forceEndersOpt = false } = opts
     if (cancelRef.current) return
     if (phase !== 'idle') return
     if (finalizingRef.current) return
-    if (balanceRef.current < stakeRef.current) {
+
+    // Cost gate — Buy Bonus is 100× stake, normal spin is 1× stake.
+    // Need to check against the FULL cost, not just stake, so a
+    // user with 50 × stake balance can't accidentally burn a Buy
+    // Bonus that they can't actually afford.
+    const baseStake = stakeRef.current
+    const cost      = isBuyBonus ? baseStake * 100 : baseStake
+    if (balanceRef.current < cost) {
       setAutoSpin(false); autoRef.current = false
       return
     }
@@ -1154,181 +1171,197 @@ export default function PixelMineSlot() {
     setReels(Array.from({ length: REEL_ROWS }, () => Array(REEL_COLS).fill('blank')))
     haptic('light')
 
-    // ── Cost ──
-    // Normal spin = 1 × stake. Buy Bonus = 100 × stake (paid up
-    // front to guarantee a 3-Eye-of-Ender trigger). Server-side
-    // start_pixel_mine_round still gets called with `stake` because
-    // we don't have a buy-bonus RPC yet — for real-money users the
-    // extra 99 × stake is debited client-side here as a hold; this
-    // would be replaced with a proper start_buy_bonus RPC when we
-    // wire the server side.
-    const baseStake = stakeRef.current
-    const cost      = isBuyBonus ? baseStake * 100 : baseStake
-    if (balanceRef.current < cost) {
-      setAutoSpin(false); autoRef.current = false
-      setPhase('idle')
-      return
-    }
-
-    // Server round.
     const isDev = !user || user.id === 'dev'
-    let round
-    if (isDev) {
-      const next = balanceRef.current - cost
-      balanceRef.current = next
-      setBalance(next)
-      round = { ok: true, round_id: `dev-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, balance: next }
-    } else {
-      // The server RPC handles BOTH normal (1× stake) and buy-bonus
-      // (100× stake) debits atomically — we just pass the flag.
-      const res = await startPixelMineRound(user.id, baseStake, isBuyBonus)
-      if (cancelRef.current) return
-      if (!res || res.error || !res.ok) {
-        console.error('startPixelMineRound failed:', res)
-        setAutoSpin(false); autoRef.current = false
-        setPhase('idle')
-        return
-      }
-      round = res
-      setBalance(round.balance)
-      balanceRef.current = round.balance
-    }
-    currentRoundRef.current = round
+    let round = null
+    let totalWin = 0
+    let startFailed = false
 
-    // ── Decide the trigger-spin reel layout ──
-    let rawReels
-    if (forceEndersOpt) {
-      // Buy Bonus (or bonus-bet) — guarantee at least 3 Eye-of-
-      // Ender scatters so the trigger spin always activates the
-      // free-spins bonus.
-      rawReels = generateReelsWithMinEnders(3)
-    } else {
-      rawReels = generateReels()
-    }
-    const targetGrid = generateGrid()
-    // Re-roll the chests with fresh multipliers — each base spin
-    // gets its own loadout. (FS iterations REUSE the chests from
-    // the trigger spin; they're not regenerated below.)
-    // Update the ref synchronously too so step 5 can read the new
-    // loadout without waiting for the useEffect tick.
-    const freshChests = generateChests()
-    chestsRef.current = freshChests
-    setChests(freshChests)
-
-    // Working grid copy — the source of truth for damage tracking.
-    let g = targetGrid.map(row => row.map(cell => cell ? { ...cell } : null))
-
-    // ── Trigger spin: full pipeline including grid fill ──
-    // runSpinPhases now returns RAW spin win (pickaxes + TNT only,
-    // no chest mults applied) plus the list of chests that just
-    // cleared. Chest mults are applied at the end via one big
-    // sequential reveal that multiplies the cumulative raw win.
-    let result = await runSpinPhases(g, rawReels, {
-      fillGrid: true,
-      gridForFill: targetGrid,
-    })
-    if (cancelRef.current) return
-    g = result.grid
-    let cumulativeRaw = result.win
-    const triggerReels = result.finalReels
-    const pendingOpens = (result.pendingChestOpens || []).slice()
-
-    // ── Free-Spins bonus trigger ──
-    // 3+ Eye-of-Ender scatters on the trigger spin → 4 free spins
-    // on the SAME GRID (no reset). After the announcement overlay,
-    // each FS runs the same phase pipeline minus the grid fill.
-    const enderCount = countEnders(triggerReels)
-    let isBonus = enderCount >= 3
-    if (isBonus) {
-      const FS_TOTAL = 4
-      // Intro overlay — "FREE SPINS / 4" big-pop reveal.
-      setBonusOverlay({ kind: 'intro', spins: FS_TOTAL })
-      haptic('success')
-      await sleep(2400)
-      setBonusOverlay(null)
-      if (cancelRef.current) return
-
-      setBonusActive(true)
-      for (let i = 0; i < FS_TOTAL; i++) {
-        if (cancelRef.current) break
-        // Counter shows REMAINING spins after this one — so the
-        // first FS spin shows (FS_TOTAL - 1), the last shows 0.
-        setBonusSpinsLeft(FS_TOTAL - 1 - i)
-        // FS reels — `generateReelsNoEnder` strips Eye-of-Ender
-        // scatters (mapped to `blank`) so a bonus can never
-        // re-trigger inside itself. The 4 free spins are sealed.
-        const fsRawReels = generateReelsNoEnder()
-        const fsResult = await runSpinPhases(g, fsRawReels, { fillGrid: false })
-        if (cancelRef.current) break
-        g = fsResult.grid
-        cumulativeRaw += fsResult.win
-        if (fsResult.pendingChestOpens?.length) {
-          pendingOpens.push(...fsResult.pendingChestOpens)
+    try {
+      // ── Server round start (or dev simulate) ──
+      // Normal spin = 1 × stake. Buy Bonus = 100 × stake (server
+      // RPC debits atomically based on the isBuyBonus flag).
+      if (isDev) {
+        const next = balanceRef.current - cost
+        balanceRef.current = next
+        setBalance(next)
+        round = { ok: true, round_id: `dev-${Date.now()}-${Math.random().toString(36).slice(2,8)}`, balance: next }
+      } else {
+        const res = await startPixelMineRound(user.id, baseStake, isBuyBonus)
+        if (cancelRef.current) return
+        if (!res || res.error || !res.ok) {
+          console.error('startPixelMineRound failed:', res)
+          setAutoSpin(false); autoRef.current = false
+          startFailed = true
+          return        // finally still runs → resets phase
         }
-        await sleep(280)             // breath between free spins
+        round = res
+        setBalance(round.balance)
+        balanceRef.current = round.balance
       }
-      setBonusActive(false)
-      setBonusSpinsLeft(0)
-    }
+      currentRoundRef.current = round
 
-    // ── Chest reveal ──
-    // Trigger spin (no FS): reveal at the end of this spin.
-    // Bonus path: reveal AFTER all FS finish, BEFORE the bonus-end
-    // overlay — every chest that opened anywhere across the
-    // trigger + 4 FS pops one by one and multiplies the
-    // cumulative raw win.
-    let totalWin = cumulativeRaw
-    if (pendingOpens.length > 0) {
-      totalWin = await revealChestsSequential(pendingOpens, cumulativeRaw)
-    }
+      // ── Decide the trigger-spin reel layout ──
+      let rawReels
+      if (forceEndersOpt) {
+        // Buy Bonus (or bonus-bet) — guarantee at least 3 Eye-of-
+        // Ender scatters so the trigger spin always activates the
+        // free-spins bonus.
+        rawReels = generateReelsWithMinEnders(3)
+      } else {
+        rawReels = generateReels()
+      }
+      const targetGrid = generateGrid()
+      // Re-roll the chests with fresh multipliers — each base spin
+      // gets its own loadout. (FS iterations REUSE the chests from
+      // the trigger spin; they're not regenerated below.)
+      // Update the ref synchronously too so step 5 can read the new
+      // loadout without waiting for the useEffect tick.
+      const freshChests = generateChests()
+      chestsRef.current = freshChests
+      setChests(freshChests)
 
-    if (isBonus) {
-      // Bonus-end overlay — totals up the bonus payout (cumulative
-      // raw + chest mults). For the "end" card we show the bonus
-      // contribution = totalWin - (whatever the trigger raw was),
-      // but since chest mults stack across the whole bonus we just
-      // show totalWin as the bonus total (matches what the player
-      // is now holding from this round).
-      setBonusOverlay({ kind: 'end', total: totalWin })
-      await sleep(2200)
-      setBonusOverlay(null)
-    }
+      // Working grid copy — the source of truth for damage tracking.
+      let g = targetGrid.map(row => row.map(cell => cell ? { ...cell } : null))
 
-    // Cap the locally-claimed total at the server's hard cap so we
-    // don't show a number we'll have to walk back at finalize.
-    const localCap = baseStake * 5000
-    if (totalWin > localCap) totalWin = localCap
+      // ── Trigger spin: full pipeline including grid fill ──
+      // runSpinPhases now returns RAW spin win (pickaxes + TNT only,
+      // no chest mults applied) plus the list of chests that just
+      // cleared. Chest mults are applied at the end via one big
+      // sequential reveal that multiplies the cumulative raw win.
+      let result = await runSpinPhases(g, rawReels, {
+        fillGrid: true,
+        gridForFill: targetGrid,
+      })
+      if (cancelRef.current) return
+      g = result.grid
+      let cumulativeRaw = result.win
+      const triggerReels = result.finalReels
+      const pendingOpens = (result.pendingChestOpens || []).slice()
 
-    if (totalWin > 0) {
-      const next = balanceRef.current + totalWin
-      balanceRef.current = next
-      setBalance(next)
-      setBalanceBounce(true)
-      setTimeout(() => setBalanceBounce(false), 600)
-      setLastWin(Math.round(totalWin))
-      haptic('success')
-    } else {
-      setLastWin(0)
-    }
-
-    // Server finalize.
-    setPhase('finishing')
-    if (!isDev && round.round_id && !round.round_id.startsWith('dev-')) {
-      finalizingRef.current = true
-      setFinalizing(true)
+      // ── Free-Spins bonus trigger ──
+      // 3+ Eye-of-Ender scatters on the trigger spin → 4 free spins
+      // on the SAME GRID (no reset). After the announcement overlay,
+      // each FS runs the same phase pipeline minus the grid fill.
+      const enderCount = countEnders(triggerReels)
+      const isBonus = enderCount >= 3
       try {
-        const res = await finishPixelMineRound(round.round_id, Math.round(totalWin))
-        if (res && typeof res.balance === 'number' && !cancelRef.current) {
-          setBalance(res.balance)
-          balanceRef.current = res.balance
+        if (isBonus) {
+          const FS_TOTAL = 4
+          // Intro overlay — "FREE SPINS / 4" big-pop reveal.
+          setBonusOverlay({ kind: 'intro', spins: FS_TOTAL })
+          haptic('success')
+          await sleep(2400)
+          setBonusOverlay(null)
+          if (cancelRef.current) return
+
+          setBonusActive(true)
+          for (let i = 0; i < FS_TOTAL; i++) {
+            if (cancelRef.current) break
+            // Counter shows REMAINING spins after this one — so the
+            // first FS spin shows (FS_TOTAL - 1), the last shows 0.
+            setBonusSpinsLeft(FS_TOTAL - 1 - i)
+            // FS reels — `generateReelsNoEnder` strips Eye-of-Ender
+            // scatters (mapped to `blank`) so a bonus can never
+            // re-trigger inside itself. The 4 free spins are sealed.
+            const fsRawReels = generateReelsNoEnder()
+            const fsResult = await runSpinPhases(g, fsRawReels, { fillGrid: false })
+            if (cancelRef.current) break
+            g = fsResult.grid
+            cumulativeRaw += fsResult.win
+            if (fsResult.pendingChestOpens?.length) {
+              pendingOpens.push(...fsResult.pendingChestOpens)
+            }
+            await sleep(280)             // breath between free spins
+          }
         }
       } finally {
-        finalizingRef.current = false
-        setFinalizing(false)
+        // Make sure the bonus banner state never leaks past the
+        // bonus loop, even if it threw mid-iteration.
+        setBonusActive(false)
+        setBonusSpinsLeft(0)
       }
+
+      // ── Chest reveal ──
+      // Trigger spin (no FS): reveal at the end of this spin.
+      // Bonus path: reveal AFTER all FS finish, BEFORE the bonus-end
+      // overlay — every chest that opened anywhere across the
+      // trigger + 4 FS pops one by one and multiplies the
+      // cumulative raw win.
+      totalWin = cumulativeRaw
+      if (pendingOpens.length > 0) {
+        totalWin = await revealChestsSequential(pendingOpens, cumulativeRaw)
+      }
+
+      if (isBonus) {
+        // Bonus-end overlay — totals up the bonus payout (cumulative
+        // raw + chest mults). Since chest mults stack across the whole
+        // bonus we show totalWin as the bonus total (matches what the
+        // player is now holding from this round).
+        setBonusOverlay({ kind: 'end', total: totalWin })
+        await sleep(2200)
+        setBonusOverlay(null)
+      }
+
+      // Cap the locally-claimed total at the server's hard cap so we
+      // don't show a number we'll have to walk back at finalize.
+      const localCap = baseStake * 5000
+      if (totalWin > localCap) totalWin = localCap
+
+      if (totalWin > 0) {
+        const next = balanceRef.current + totalWin
+        balanceRef.current = next
+        setBalance(next)
+        setBalanceBounce(true)
+        setTimeout(() => setBalanceBounce(false), 600)
+        setLastWin(Math.round(totalWin))
+        haptic('success')
+      } else {
+        setLastWin(0)
+      }
+    } catch (err) {
+      // Any unhandled error during gameplay — reels, runSpinPhases,
+      // chest reveal, etc. We still want to finalize the server
+      // round (with whatever totalWin we accumulated) so the cost
+      // doesn't stay debited forever, and we want phase to reset
+      // so the slot doesn't lock up.
+      console.error('Pixel Mine spin failed:', err)
+      setAutoSpin(false); autoRef.current = false
+      // Defensive: clear bonus / animation state so the UI returns
+      // to a sane visible state even after an error.
+      setBonusActive(false)
+      setBonusSpinsLeft(0)
+      setBonusOverlay(null)
+      setFlyingPickaxe(null)
+      setFlyingTnt(null)
+      setExplodingTnt(null)
+      setActiveBlock(null)
+    } finally {
+      // ── Server finalize ──
+      // ALWAYS finalize a real-money round we successfully started,
+      // even if gameplay threw. Sending the totalWin we computed up
+      // to the throw point is the cleanest move: server already has
+      // the cost debited, the finalize call credits whatever we
+      // claim (server caps it at baseStake × 5000 anyway).
+      if (round && !isDev && !startFailed && round.round_id && !round.round_id.startsWith('dev-')) {
+        setPhase('finishing')
+        finalizingRef.current = true
+        setFinalizing(true)
+        try {
+          const res = await finishPixelMineRound(round.round_id, Math.round(totalWin))
+          if (res && typeof res.balance === 'number' && !cancelRef.current) {
+            setBalance(res.balance)
+            balanceRef.current = res.balance
+          }
+        } catch (finErr) {
+          console.error('Pixel Mine finalize failed:', finErr)
+        } finally {
+          finalizingRef.current = false
+          setFinalizing(false)
+        }
+      }
+      currentRoundRef.current = null
+      setPhase('idle')
     }
-    currentRoundRef.current = null
-    setPhase('idle')
   }
 
   // ── Auto-spin loop ──
