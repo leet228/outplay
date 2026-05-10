@@ -704,3 +704,74 @@
 .plinko-slot-card-art--large .plinko-card-peg { width: 7px; height: 7px; margin-left: -3.5px; margin-top: -3.5px; }
 .plinko-slot-card-art--large .plinko-card-ball { width: 16px; height: 16px; margin-left: -8px; margin-top: -8px; }
 .plinko-slot-card-art--large .plinko-card-slot { height: 20px; font-size: clamp(9px, 1.4vw, 12px); }
+
+/* ─────────────────────────────────────────────────────────────
+ * Exit-confirmation dialog. Mirrors the Tower Stack / Block Blast
+ * dialogs visually so the prompt feels native across slots.
+ * Triggered when the user taps the Telegram BackButton mid-launch.
+ * ───────────────────────────────────────────────────────────── */
+.plinko-exit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+  background: rgba(3, 7, 18, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.plinko-exit-card {
+  width: min(100%, 340px);
+  padding: 22px;
+  border-radius: 26px;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    #0a1222;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+}
+
+.plinko-exit-card h3 {
+  margin: 0 0 8px;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: -0.55px;
+}
+
+.plinko-exit-card p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.plinko-exit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.plinko-exit-actions button {
+  min-height: 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+/* "Leave" button uses the warm gradient like Tower Stack so it reads
+ * as the destructive option without further explanation. */
+.plinko-exit-actions button:last-child {
+  color: #431407;
+  background: linear-gradient(180deg, #fff7b4 0%, #ffc247 13%, #f97316 100%);
+  border-color: rgba(255, 230, 137, 0.7);
+}

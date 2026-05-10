@@ -192,6 +192,12 @@ export default function PlinkoSlot() {
   const launchTotalWinRef   = useRef(0)
   const finalizingRef       = useRef(false)
   const [finalizing, setFinalizing] = useState(false)
+  // Exit-confirmation dialog. Shown when the user taps the Telegram
+  // BackButton while a launch is in progress (balls in flight, finalize
+  // pending, or auto-spin armed) — same UX as the other slots so the
+  // user can't accidentally walk away mid-round and lose track of their
+  // stake. Mirrors Tower Stack / Block Blast / Rocket exit prompts.
+  const [exitConfirm, setExitConfirm] = useState(false)
   // True while ANY ball from the active launch is still in flight.
   // Flipped on at dropLaunch start, off only when the last ball of the
   // launch has fully landed (just before finalizeLaunch fires). New
@@ -216,14 +222,35 @@ export default function PlinkoSlot() {
   const canAfford  = balance >= totalBet
 
   // ── Telegram BackButton ──
+  // Re-binds when launch-active state changes so the handler captures
+  // the latest values. If the user taps Back while balls are still in
+  // flight, finalize is pending, or auto-spin is on — show the same
+  // exit-confirm dialog the other slots use. Otherwise leave silently.
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return
     tg.BackButton.show()
-    const back = () => { haptic('light'); navigate('/') }
+    const back = () => {
+      haptic('light')
+      const launchActive = balls.length > 0 || finalizing || autoSpin || inFlightRef.current
+      if (launchActive) setExitConfirm(true)
+      else navigate('/')
+    }
     tg.BackButton.onClick(back)
     return () => { tg.BackButton.offClick(back); tg.BackButton.hide() }
-  }, [navigate])
+  }, [navigate, balls.length, finalizing, autoSpin])
+
+  // Confirm exit — cancel auto-spin and tear down the page. cancelRef
+  // gates all in-flight async work (animateBall loops, autoLoop, the
+  // rAF flushers) so leaving doesn't trigger zombie setBalance calls
+  // after the component is gone.
+  function confirmExit() {
+    haptic('medium')
+    cancelRef.current = true
+    setAutoSpin(false); autoRef.current = false
+    setExitConfirm(false)
+    navigate('/')
+  }
 
   // Auto-clamp stake when balance drops.
   useEffect(() => {
@@ -789,6 +816,19 @@ export default function PlinkoSlot() {
           </div>
         </section>
       </div>
+
+      {exitConfirm && (
+        <div className="plinko-exit-backdrop">
+          <div className="plinko-exit-card">
+            <h3>{t.slotExitTitle}</h3>
+            <p>{t.slotExitText}</p>
+            <div className="plinko-exit-actions">
+              <button type="button" onClick={() => { haptic('light'); setExitConfirm(false) }}>{t.slotExitStay}</button>
+              <button type="button" onClick={confirmExit}>{t.slotExitLeave}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
