@@ -648,27 +648,47 @@
   100% { left: 50%; top: 14%; }
 }
 
+/* Slot row sits just under the peg field — not pinned to the bottom
+ * of the card — so the labels read as "the buckets directly under the
+ * pegs" instead of floating in their own band. Side insets are tight
+ * so even the longest label (×0.5) fits in its column. */
 .plinko-card-slots {
   position: absolute;
-  left: 8%;
-  right: 8%;
-  bottom: 8%;
+  left: 5%;
+  right: 6%;
+  /* Sit right under the bottom row of pegs (last peg row sits at
+   * ~47 % from the bottom of the card; slot height takes ~8 %, so
+   * bottom: 32 % puts the slots tucked just below the funnel). */
+  bottom: 32%;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 3px;
+  /* Weighted columns: the centre slot holds ×0.5 (4 chars) and needs
+   * extra room over the 2-char neighbours. The 1.5fr middle column
+   * gives it ~50 % more width without pushing the row outside the
+   * card edges. */
+  grid-template-columns: 1fr 1fr 1fr 1.5fr 1fr 1fr 1fr;
+  gap: 2px;
 }
 
 .plinko-card-slot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 18px;
-  border-radius: 4px;
-  font-size: 9px;
+  min-width: 0;            /* let grid 1fr actually shrink */
+  height: 13px;
+  border-radius: 3px;
+  /* Smaller + tighter letter-spacing so even ×0.5 fits cleanly inside
+   * its column without ellipsis or clipping. clamp lets the modal
+   * preview (.plinko-slot-card-art--large) push the size up via its
+   * own override below. */
+  font-size: clamp(5.5px, 1.5vw, 7.5px);
   font-weight: 800;
   color: #fff;
   border: 1px solid rgba(0, 0, 0, 0.35);
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  letter-spacing: -0.07em;
+  padding: 0;
+  white-space: nowrap;
+  line-height: 1;
 }
 .plinko-card-slot--hot  { background: linear-gradient(180deg, #ffffff, #93c5fd); color: #1e3a8a; }
 .plinko-card-slot--warm { background: linear-gradient(180deg, #60a5fa, #2563eb); }
@@ -683,4 +703,4 @@
 }
 .plinko-slot-card-art--large .plinko-card-peg { width: 7px; height: 7px; margin-left: -3.5px; margin-top: -3.5px; }
 .plinko-slot-card-art--large .plinko-card-ball { width: 16px; height: 16px; margin-left: -8px; margin-top: -8px; }
-.plinko-slot-card-art--large .plinko-card-slot { height: 26px; font-size: 11px; }
+.plinko-slot-card-art--large .plinko-card-slot { height: 20px; font-size: clamp(9px, 1.4vw, 12px); }
