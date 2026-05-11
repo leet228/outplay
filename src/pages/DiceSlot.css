@@ -854,7 +854,7 @@
   /* Cube sits right above the slider bar — the bottom vertex of
    * the hexagon almost touches the bar's top edge, so the cube
    * reads as "landing on" the slider strip when it rolls. */
-  top: 52%;
+  top: 55%;
   left: 60%;
   width: 22px;
   height: 26px;

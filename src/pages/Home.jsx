@@ -2407,17 +2407,9 @@ export default function Home() {
                     <span className="slot-card-title">{t[slot.titleKey]}</span>
                   </button>
                 ))}
-                {[1, 2, 3].map(i => (
-                  <div key={`q-soon-${i}`} className="slot-card slot-card--scroll slot-card--placeholder" aria-hidden="true">
-                    <span className="slot-card-placeholder-icon">
-                      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="9"/>
-                        <path d="M12 7v5l3 3"/>
-                      </svg>
-                    </span>
-                    <span className="slot-card-title">{t.slotsPopularEmpty}</span>
-                  </div>
-                ))}
+                {/* Quick games row no longer pads with "coming soon"
+                 * placeholders — the four real fast slots (Tower
+                 * Stack / Rocket / Plinko / Dice) fill the row. */}
               </div>
             </div>
 
