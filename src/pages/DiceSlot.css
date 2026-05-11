@@ -851,10 +851,10 @@
 /* ── 3D hex cube above the bar ── */
 .dice-slot-card-art .dice-card-cube {
   position: absolute;
-  /* Anchor the cube near the top of the card, above the bar.
-   * In the animated variant it slides horizontally — see the
-   * keyframe below; in the static variant it sits at 60 %. */
-  top: 22%;
+  /* Cube sits right above the slider bar — the bottom vertex of
+   * the hexagon almost touches the bar's top edge, so the cube
+   * reads as "landing on" the slider strip when it rolls. */
+  top: 52%;
   left: 60%;
   width: 22px;
   height: 26px;
@@ -924,39 +924,7 @@
   100%     { opacity: 1; }   /* loop seam */
 }
 
-/* The handle also slides along with the cube so the visual link
- * between "cube at this number" and "slider threshold here" stays
- * intact through the animation. */
-.dice-slot-card-art--animated .dice-card-handle {
-  animation: dice-card-handle-roll 8s ease-in-out infinite;
-}
-@keyframes dice-card-handle-roll {
-  0%, 18%   { left: 70%; }
-  25%, 43%  { left: 22%; }
-  50%, 68%  { left: 88%; }
-  75%, 93%  { left: 18%; }
-  100%      { left: 70%; }
-}
-
-/* Red / green stripe widths flip with the handle so the win / loss
- * zones stay on the right side of where the handle is parked. */
-.dice-slot-card-art--animated .dice-card-bar-red {
-  animation: dice-card-red-roll 8s ease-in-out infinite;
-}
-.dice-slot-card-art--animated .dice-card-bar-green {
-  animation: dice-card-green-roll 8s ease-in-out infinite;
-}
-@keyframes dice-card-red-roll {
-  0%, 18%   { width: 70%; }
-  25%, 43%  { width: 22%; }
-  50%, 68%  { width: 88%; }
-  75%, 93%  { width: 18%; }
-  100%      { width: 70%; }
-}
-@keyframes dice-card-green-roll {
-  0%, 18%   { width: 30%; }
-  25%, 43%  { width: 78%; }
-  50%, 68%  { width: 12%; }
-  75%, 93%  { width: 82%; }
-  100%      { width: 30%; }
-}
+/* Handle + red / green stripe widths stay PUT during the animation
+ * — only the cube rolls. The threshold visual reads as a fixed
+ * "above ~35" prediction while different dice faces (62 / 15 / 88
+ * / 9) demonstrate the slot's range of outcomes. */
