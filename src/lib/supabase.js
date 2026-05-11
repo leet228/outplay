@@ -1135,6 +1135,29 @@ export async function finishPixelMineRound(roundId, payoutRub) {
   return data
 }
 
+// ── Dice ───────────────────────
+// Classic above/below threshold game. start_dice_round atomically
+// debits the stake and opens a round; finish_dice_round caps the
+// client-claimed payout at stake × 100 000 with a 1 000 000 ₽
+// absolute ceiling and credits the user's balance.
+export async function startDiceRound(userId, stakeRub) {
+  const { data, error } = await supabase.rpc('start_dice_round', {
+    p_user_id: userId,
+    p_stake_rub: stakeRub,
+  })
+  if (error) { console.error('startDiceRound error:', error); return { error: error.message } }
+  return data
+}
+
+export async function finishDiceRound(roundId, payoutRub) {
+  const { data, error } = await supabase.rpc('finish_dice_round', {
+    p_round_id: roundId,
+    p_payout_rub: Math.max(0, Math.round(payoutRub || 0)),
+  })
+  if (error) { console.error('finishDiceRound error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Admin: slot stats ───────────────────────
 export async function adminGetSlotStats() {
   const { data, error } = await supabase.rpc('admin_get_slot_stats')

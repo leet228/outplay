@@ -26,10 +26,9 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
-  background:
-    radial-gradient(ellipse at 50% 0%,  #1a1d2e 0%, transparent 55%),
-    radial-gradient(ellipse at 20% 90%, #1c2030 0%, transparent 60%),
-    linear-gradient(180deg, #060812 0%, #0a0d18 50%, #0c0a18 100%);
+  /* Premium dark navy-blue (#0B1220 from the brief) — flat, no
+   * spotlights, no gradients up top. */
+  background: #0b1220;
 }
 
 .dice-game-window {
@@ -41,9 +40,8 @@
   flex-direction: column;
   overflow: hidden;
   border-radius: 32px;
-  background:
-    radial-gradient(ellipse at 50% 0%, rgba(60, 80, 130, 0.18) 0%, transparent 65%),
-    linear-gradient(180deg, #0d101c 0%, #06070d 100%);
+  /* Plain navy fill matching the page bg. */
+  background: #0b1220;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
     0 30px 90px rgba(0, 0, 0, 0.65),
@@ -60,9 +58,9 @@
   flex-direction: column;
   border-radius: 22px;
   overflow: hidden;
-  background:
-    radial-gradient(60% 35% at 50% 5%, rgba(120, 140, 200, 0.12) 0%, transparent 70%),
-    linear-gradient(180deg, #0a0d18 0%, #04050a 100%);
+  /* Stage fill — slightly darker than the window so the slider /
+   * HUD sit in a visibly framed area. */
+  background: #08101c;
   border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
@@ -74,8 +72,9 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(40% 25% at 50% 5%, rgba(120, 140, 200, 0.10) 0%, transparent 80%);
+  /* Background spotlight removed — kept the element so JSX stays
+   * valid, but it no longer paints anything. */
+  background: transparent;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -127,7 +126,10 @@
 }
 
 .dice-history-pill.is-win {
-  background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  /* Same darker green gradient as .dice-bar-green — keeps the
+   * win indicator visually consistent across the slider strip,
+   * the cube number, and the history pills. */
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
   color: #052e16;
   border-color: rgba(34, 197, 94, 0.55);
   box-shadow:
@@ -156,167 +158,270 @@
   font-size: 12px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.45);
-  padding: 0 4px;
+  /* Scale's outer box exactly matches .dice-bar-inner's geometry
+   * (26 px margin = 4 px slider-area padding + 10 px bar border +
+   * 16 px inner inset, mirrored). Then padding 13 % inside that
+   * narrower box places "0" at 13 % of the inner-wrapper width
+   * from its left edge — i.e. exactly where the handle's centre
+   * sits when target = 13. "100" gets the same inset from the
+   * right. */
+  margin: 0 26px;
+  /* Scale labels are DECOUPLED from the handle's reachable range:
+   * the handle still stops at 14 % / 86 % (RANGE_PAD_PCT), but
+   * the "0" / "100" labels sit at 8 % / 92 % — a touch wider than
+   * the handle range so the gap between labels is bigger than the
+   * handle's stride, but not all the way to the corners. */
+  padding: 0 9%;
 }
 
+/* Outer pill — three visible nested layers like the reference:
+ *   1. Outer ring: gray border, 3 px wide  (#475569 / slate-600)
+ *   2. Inner bg : dark blue-gray fill      (#161e2d, darker than
+ *                 the page bg so the contrast against the gray
+ *                 ring reads clearly)
+ *   3. Inside this bg sits the thin red / green stripe (12 px
+ *      tall, centred vertically, 15 px gutter top & bottom).
+ *
+ * Drop-shadow underneath gives the slider that floating "premium
+ * dashboard" feel. */
 .dice-bar {
   position: relative;
-  /* Taller container so the inner bar reads fat — matches the
-   * reference where the green stripe is ~75 % of the container's
-   * height with a small dark gutter top + bottom. */
-  height: 42px;
+  /* Thicker outer gray ring + dark interior + the thin coloured
+   * stripe deep inside, all nested. 60 px total, of which 10 px
+   * is the gray ring on top + bottom; an inner wrapper insets
+   * the coloured stripe and handle by another 16 px on each end
+   * (horizontally) so there's a clear dark gutter past the
+   * stripe before the ring on the LEFT and RIGHT ends too. */
+  height: 60px;
   border-radius: 999px;
-  background: #181a22;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #161e2d;
+  border: 10px solid #475569;
   box-shadow:
     inset 0 2px 6px rgba(0, 0, 0, 0.55),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 6px 20px rgba(0, 0, 0, 0.55);
   cursor: pointer;
   touch-action: none;
 }
+
+/* Horizontal inset wrapper — keeps the coloured stripe + handle
+ * + result cube + dots inside a narrower coordinate system so the
+ * dark navy gutter stays visible on the LEFT / RIGHT ends, past
+ * the stripe but inside the gray ring. */
+.dice-bar-inner {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 16px;
+  right: 16px;
+  pointer-events: none;
+}
 .dice-bar.is-disabled { cursor: not-allowed; }
 
+/* Glowing end-cap dots removed per design feedback — just the
+ * coloured stripe + handle now. */
+
+/* THIN coloured stripes inside the dark pill — split into a loss
+ * zone (red, dim) and a win zone (green, neon). 12 px tall in a
+ * 42 px container leaves a clear ~15 px gutter on each side. */
 .dice-bar-red,
 .dice-bar-green {
   position: absolute;
-  /* Snug fit — leave just a 6 px gutter on each side so the bar
-   * fills the dark container almost edge-to-edge. */
-  top: 6px;
-  bottom: 6px;
+  top: 50%;
+  height: 12px;
+  margin-top: -6px;
   border-radius: 999px;
-  /* NO `transition` here on purpose — we want the bar halves to
-   * snap to the new integer threshold the instant the slider
-   * ticks past it, no smooth-slide. */
+  z-index: 1;
+  /* NO transition — bar snaps on every tick of the slider. */
 }
 
 .dice-bar-red {
-  background: linear-gradient(180deg, #ff5b5b 0%, #d11f1f 100%);
+  /* Deeper, slightly muted reds — less neon, more "casino felt". */
+  background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
     inset 0 -1px 0 rgba(0, 0, 0, 0.32);
 }
 
 .dice-bar-green {
-  background: linear-gradient(180deg, #3ddc7a 0%, #22c55e 100%);
+  /* Forest-y greens — darker than the original neon while staying
+   * vivid against the dark navy stage. */
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.32);
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.30);
 }
 
-/* Draggable threshold handle — white pill that pokes slightly
- * above and below the bar like in the reference design. Three
- * vertical grip lines drawn via inline `<span>`. */
+/* Draggable handle — perfect SQUARE white thumb (1:1) with three
+ * short vertical grip lines inside. Floats above the track with
+ * a soft realistic drop-shadow. Same shape as the reference shot. */
 .dice-handle {
   position: absolute;
   top: 50%;
-  width: 30px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
-  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
-  border: 1px solid rgba(0, 0, 0, 0.55);
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid rgba(15, 23, 42, 0.4);
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.10),
-    0 4px 12px rgba(0, 0, 0, 0.55);
+    inset 0 -2px 0 rgba(0, 0, 0, 0.08),
+    0 6px 14px rgba(0, 0, 0, 0.55),
+    0 1px 0 rgba(255, 255, 255, 0.08);
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: ew-resize;
-  z-index: 3;
-  /* NO smooth transition on `left` — the slider snaps integer to
-   * integer when the player drags, so the handle should JUMP
-   * between positions rather than glide. */
+  z-index: 4;
+  /* NO transition on `left` — the slider snaps integer-to-integer
+   * for the ratchet feel. */
 }
 .dice-bar.is-disabled .dice-handle { cursor: not-allowed; }
 
-/* Three grip lines stacked vertically inside the handle, like
- * the reference design. */
+/* Three short vertical grip bars inside the square handle. */
 .dice-handle-grip {
   display: flex;
-  gap: 3px;
+  gap: 4px;
   align-items: center;
   pointer-events: none;
 }
 .dice-handle-grip span {
   display: block;
-  width: 2px;
+  width: 3px;
   height: 18px;
   border-radius: 2px;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgba(71, 85, 105, 0.7);
 }
 
-/* Result cube — lands on the rolled value with a soft pop. The
- * cube is drawn as a white square with a green/red shadow so the
- * win/loss read is instant. */
+/* Result cube — isometric 3-face hexagon. The hexagonal silhouette
+ * is cut by `clip-path: polygon(...)` and the three faces (top /
+ * right / left rhombuses) are painted with a `conic-gradient` whose
+ * hard colour stops fall exactly on the seams from the centre to
+ * the upper-right (60°), bottom (180°) and upper-left (300°)
+ * vertices — that's the classic iso-cube illusion.
+ *
+ *   TOP face   — lightest  (300°-360° + 0°-60°)
+ *   RIGHT face — medium    (60°-180°)
+ *   LEFT face  — darkest   (180°-300°)
+ *
+ * The win / loss state only changes the NUMBER colour + the
+ * coloured `drop-shadow` underneath (drop-shadow follows the
+ * clip-path, so the glow is hexagonal too). */
 .dice-cube {
   position: absolute;
-  top: -38px;
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
+  /* Cube floats just above the slider with a small overlap. */
+  top: -36px;
+  width: 50px;
+  height: 56px;
+  /* Rounded-corner hexagonal silhouette. clip-path: path() lets us
+   * use quadratic curves at each of the 6 vertices for a soft,
+   * pill-cube look instead of sharp polygon corners. 6-unit inset
+   * per edge — softer than the original 2-unit version but not
+   * over-the-top marshmallow. Coordinates in cube's local px
+   * space (50 × 56). */
+  clip-path: path('M 20 3 Q 25 0 30 3 L 45 11 Q 50 14 50 20 L 50 36 Q 50 42 45 45 L 30 53 Q 25 56 20 53 L 5 45 Q 0 42 0 36 L 0 20 Q 0 14 5 11 Z');
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    #ffffff 0deg 60deg,
+    #d8dde6 60deg 180deg,
+    #b6bcc9 180deg 300deg,
+    #ffffff 300deg 360deg
+  );
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Number sits at the GEOMETRIC CENTRE of the cube — where all
+   * three face seams meet. No padding-top offset. */
+  font-size: 16px;
   font-weight: 900;
-  font-size: 14px;
   font-variant-numeric: tabular-nums;
   color: #0f172a;
   transform: translate(-50%, 0);
   z-index: 2;
   pointer-events: none;
-  animation: dice-cube-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
-    0 6px 16px rgba(0, 0, 0, 0.45);
+  /* Slide via `left` is the main animation. Opacity drives the
+   * fade-out after the hold. Bounce on arrival is a class-driven
+   * keyframe (.is-bouncing) so it can restart on every roll. */
+  transition:
+    left 380ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 500ms ease;
 }
 
-.dice-cube.is-win  {
+/* Neutral state — number is GRAY while the cube is in flight from
+ * the previous result to the new one, before the new value lands. */
+.dice-cube.is-neutral {
+  color: #94a3b8;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+}
+
+/* Bounce scale — added on arrival, removed shortly after. */
+.dice-cube.is-bouncing {
+  animation: dice-cube-land 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Fade-out after the hold period. */
+.dice-cube.is-fading {
+  opacity: 0;
+}
+
+@keyframes dice-cube-land {
+  0%   { transform: translate(-50%, 0)    scale(1); }
+  40%  { transform: translate(-50%, -4px) scale(1.18); }
+  100% { transform: translate(-50%, 0)    scale(1); }
+}
+
+.dice-cube.is-win {
+  /* Matches the win stripe's darker tone. */
   color: #15803d;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
-    0 6px 16px rgba(34, 197, 94, 0.45);
+  filter: drop-shadow(0 6px 10px rgba(34, 197, 94, 0.5));
 }
 .dice-cube.is-loss {
-  color: #b91c1c;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
-    0 6px 16px rgba(239, 68, 68, 0.42);
+  /* Matches the loss stripe's darker tone. */
+  color: #991b1b;
+  filter: drop-shadow(0 6px 10px rgba(239, 68, 68, 0.5));
 }
 
-@keyframes dice-cube-pop {
-  0%   { transform: translate(-50%, -16px) scale(0.6); opacity: 0; }
-  50%  { transform: translate(-50%, 4px)   scale(1.12); opacity: 1; }
-  100% { transform: translate(-50%, 0)     scale(1);    opacity: 1; }
-}
+/* (dice-cube-pop keyframe removed — replaced by the multi-stage
+ * reveal flow driven from JS state + the .is-bouncing class.) */
 
 /* ─────────────────────────────────────────────────────────────
- * HUD — Multiplier / Target+Mode / Win chance
+ * HUD — lives at the bottom of .dice-stage. Two rows:
+ *   Top:    [ Multiplier   |  Win chance ]   (50/50 grid)
+ *   Bottom: [ Roll above N            Below ] (full-width)
  * ───────────────────────────────────────────────────────────── */
 .dice-hud {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: auto;
+  /* `margin-top: auto` pushes the HUD to the BOTTOM of the
+   * flex-column stage above it; the rest of the slider sits
+   * vertically centred in the remaining space. */
+  padding-top: 16px;
+}
+
+.dice-hud-top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .dice-hud-box {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
   min-height: 56px;
   justify-content: center;
 }
 
-.dice-hud-box--center {
+/* Bottom-row HUD box — "Roll above N" on the left, "Below"
+ * toggle button on the right. */
+.dice-hud-box--toggle {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
@@ -458,6 +563,36 @@
 .dice-roll-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.06); }
 .dice-roll-btn:active:not(:disabled) { transform: translateY(1px); }
 .dice-roll-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.dice-roll-btn.is-auto {
+  /* Pink-magenta gradient when auto-spin is on — same vibe as the
+   * other slots' running-state button. */
+  background: linear-gradient(180deg, #ec4899, #be185d);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 6px 14px rgba(236, 72, 153, 0.45);
+}
+
+/* Small "AUTO / СТОП" pill button under the main roll button. */
+.dice-auto-btn {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+.dice-auto-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.10); }
+.dice-auto-btn.is-on {
+  background: rgba(236, 72, 153, 0.18);
+  border-color: rgba(236, 72, 153, 0.6);
+  color: #fff;
+}
+.dice-auto-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .dice-stake-block {
   display: flex;
