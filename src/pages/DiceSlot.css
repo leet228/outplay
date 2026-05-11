@@ -128,13 +128,13 @@
 .dice-history-pill.is-win {
   /* Same darker green gradient as .dice-bar-green — keeps the
    * win indicator visually consistent across the slider strip,
-   * the cube number, and the history pills. */
+   * the cube number, and the history pills. Flat — no outer
+   * green glow, just a hair of inner top highlight so the pill
+   * has a bit of depth. */
   background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
   color: #052e16;
   border-color: rgba(34, 197, 94, 0.55);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 4px 10px rgba(34, 197, 94, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 /* ─────────────────────────────────────────────────────────────
