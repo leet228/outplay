@@ -24,6 +24,10 @@ const SLOT_ICONS = {
   'rocket':         iconRocket,
   'plinko':         iconPlinko,
   'pixel-mine':     iconPixelMine,
+  // Dice has no dedicated icon yet — fall back to Rocket's for the
+  // time being so the row still renders something. Replace the
+  // import with `dice.png` once the asset is ready.
+  'dice':           iconRocket,
 }
 
 /**
