@@ -10,6 +10,7 @@ import iconBlockBlast from '../assets/games/block_blast.png'
 import iconRocket     from '../assets/games/rocket.png'
 import iconPlinko     from '../assets/games/plinko.png'
 import iconPixelMine  from '../assets/games/pixel_mine.png'
+import iconDice       from '../assets/games/dice.png'
 
 import './LiveFeed.css'
 
@@ -24,10 +25,7 @@ const SLOT_ICONS = {
   'rocket':         iconRocket,
   'plinko':         iconPlinko,
   'pixel-mine':     iconPixelMine,
-  // Dice has no dedicated icon yet — fall back to Rocket's for the
-  // time being so the row still renders something. Replace the
-  // import with `dice.png` once the asset is ready.
-  'dice':           iconRocket,
+  'dice':           iconDice,
 }
 
 /**
