@@ -1255,52 +1255,103 @@
 }
 
 /* ── Clouds ──
- * Three big pill-shaped clouds at staggered heights / sizes with
- * little fluffy bumps drawn via box-shadow. They drift across the
- * sky in BOTH the thumbnail and the preview at different speeds
- * (always on, no need for the --animated gate) so the card never
- * reads as static. z-index sits at 0 so the clouds float behind
- * the reels / grid / chests. */
+ * Five clouds scattered around the sky. Each has a realistic
+ * silhouette built from a pill + several fluffy bumps (top and
+ * sides) drawn via box-shadow — they read as actual clouds, not
+ * plain ovals. Sit at z-index 0 so they tuck behind the reels /
+ * grid / chests. */
 .pixel-mine-card-cloud {
   position: absolute;
   aspect-ratio: 3 / 1;
   background: #fff;
   border-radius: 999px;
-  opacity: 0.92;
+  opacity: 0.95;
   z-index: 0;
 }
+
+/* Each variant has its own STATIC position + bump cluster so the
+ * thumbnail reads as a sky with several clouds at fixed spots. */
 .pixel-mine-card-cloud--a {
-  top: 16%;
-  left: -32%;
-  width: 26%;
+  /* Small cloud, upper-left corner. Two bumps on top. */
+  top: 5%;
+  left: 6%;
+  width: 18%;
   box-shadow:
-    20% -45% 0 -12% #fff,
-    50% -55% 0 -16% #fff;
-  animation: pixel-mine-card-cloud-drift 22s linear infinite;
+    -20% -55% 0 -10% #fff,
+    18% -65% 0 -12% #fff,
+    50% -50% 0 -10% #fff,
+    -42% -25% 0 -16% #fff;
 }
 .pixel-mine-card-cloud--b {
-  top: 30%;
-  left: -42%;
-  width: 32%;
-  opacity: 0.85;
+  /* Medium cloud, upper-middle behind the reels. Wide silhouette
+   * with three bumps. */
+  top: 14%;
+  left: 38%;
+  width: 24%;
+  opacity: 0.9;
   box-shadow:
-    15% -40% 0 -12% #fff,
-    45% -55% 0 -16% #fff,
-    72% -38% 0 -14% #fff;
-  animation: pixel-mine-card-cloud-drift 30s linear infinite -6s;
+    -12% -50% 0 -10% #fff,
+    20% -65% 0 -10% #fff,
+    52% -50% 0 -12% #fff,
+    -32% -20% 0 -18% #fff,
+    78% -25% 0 -16% #fff;
 }
 .pixel-mine-card-cloud--c {
-  top: 8%;
-  left: -22%;
-  width: 18%;
-  opacity: 0.82;
+  /* Small cloud high in the sky, top-right. */
+  top: 4%;
+  left: 76%;
+  width: 16%;
+  opacity: 0.85;
   box-shadow:
-    25% -45% 0 -8% #fff;
+    20% -55% 0 -8% #fff,
+    -22% -45% 0 -14% #fff;
+}
+.pixel-mine-card-cloud--d {
+  /* Big lower-left cloud — extends past the left edge a little,
+   * partial silhouette like it's drifting in. */
+  top: 26%;
+  left: -8%;
+  width: 24%;
+  opacity: 0.9;
+  box-shadow:
+    25% -50% 0 -10% #fff,
+    55% -60% 0 -12% #fff,
+    80% -45% 0 -14% #fff;
+}
+.pixel-mine-card-cloud--e {
+  /* Medium cloud middle-right, low in the sky. */
+  top: 34%;
+  left: 72%;
+  width: 22%;
+  opacity: 0.88;
+  box-shadow:
+    -18% -45% 0 -10% #fff,
+    20% -60% 0 -12% #fff,
+    48% -45% 0 -14% #fff;
+}
+
+/* In the animated preview, the same clouds drift across the sky
+ * at different speeds (the keyframe overrides each cloud's static
+ * `left`). Thumbnail stays static — no animation declared without
+ * the --animated class on the parent. */
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud--a {
+  animation: pixel-mine-card-cloud-drift 22s linear infinite;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud--b {
+  animation: pixel-mine-card-cloud-drift 30s linear infinite -6s;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud--c {
   animation: pixel-mine-card-cloud-drift 18s linear infinite -12s;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud--d {
+  animation: pixel-mine-card-cloud-drift 26s linear infinite -3s;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud--e {
+  animation: pixel-mine-card-cloud-drift 24s linear infinite -16s;
 }
 
 @keyframes pixel-mine-card-cloud-drift {
-  from { left: -42%; }
+  from { left: -32%; }
   to   { left: 130%; }
 }
 

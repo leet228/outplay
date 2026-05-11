@@ -1885,12 +1885,16 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
       {/* Pixel-art sun in the top-right corner. */}
       <span className="pixel-mine-card-sun" />
 
-      {/* A few clouds at staggered heights / sizes. In the animated
-       * variant they each drift across at slightly different speeds
-       * so the sky never reads as static. */}
+      {/* Scattered clouds at fixed positions across the card so the
+       * sky never reads as empty. In the static thumbnail they
+       * just sit where they're placed; in the animated preview
+       * the drift keyframes override their `left` so they float
+       * across the sky at different speeds. */}
       <span className="pixel-mine-card-cloud pixel-mine-card-cloud--a" />
       <span className="pixel-mine-card-cloud pixel-mine-card-cloud--b" />
       <span className="pixel-mine-card-cloud pixel-mine-card-cloud--c" />
+      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--d" />
+      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--e" />
 
       {/* Ground strip at the very bottom — grass + dirt, sits behind
        * the chests row so the chests read as standing on real soil. */}
