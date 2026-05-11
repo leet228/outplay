@@ -1992,13 +1992,46 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
   )
 }
 
-function DiceSlotArtwork({ large = false }) {
+function DiceSlotArtwork({ large = false, animated = false }) {
   return (
-    <div className={`dice-slot-card-art ${large ? 'dice-slot-card-art--large' : ''}`} aria-hidden="true">
-      <span className="dice-card-bar" />
-      <span className="dice-card-cube">62</span>
-      {/* Parent slot-card already renders the title overlay; no label
-       * inside the art so we don't get "DICE / DICE" stacked. */}
+    <div className={`dice-slot-card-art ${large ? 'dice-slot-card-art--large' : ''} ${animated ? 'dice-slot-card-art--animated' : ''}`} aria-hidden="true">
+      {/* Scale 0..100 above the bar — small muted numbers like the
+       * real slot has. */}
+      <div className="dice-card-scale">
+        <span>0</span>
+        <span>25</span>
+        <span>50</span>
+        <span>75</span>
+        <span>100</span>
+      </div>
+
+      {/* Slider bar — dark pill with gray border, thin red/green
+       * stripe through the middle, white square handle floating
+       * over it. Animated variant rolls the handle back and forth. */}
+      <div className="dice-card-bar">
+        <span className="dice-card-bar-red" />
+        <span className="dice-card-bar-green" />
+        <span className="dice-card-handle">
+          <span className="dice-card-handle-grip">
+            <span /><span /><span />
+          </span>
+        </span>
+      </div>
+
+      {/* Hex 3D cube above the bar. In the animated variant four
+       * stacked numbers crossfade so the cube reads as a single
+       * cube changing its face every couple of seconds while
+       * sliding along the bar. */}
+      <div className="dice-card-cube">
+        <span className="dice-card-cube-num dice-card-cube-num--1 is-win">62</span>
+        {animated && (
+          <>
+            <span className="dice-card-cube-num dice-card-cube-num--2 is-loss">15</span>
+            <span className="dice-card-cube-num dice-card-cube-num--3 is-win">88</span>
+            <span className="dice-card-cube-num dice-card-cube-num--4 is-loss">9</span>
+          </>
+        )}
+      </div>
     </div>
   )
 }

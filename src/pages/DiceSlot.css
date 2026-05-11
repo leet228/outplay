@@ -715,18 +715,22 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
- * Card art for the home grid (and the preview modal). Minimal —
- * just the abstract red/green slider with a single white cube and
- * a "DICE" label, so it reads even at thumbnail size.
+ * Card art for the home grid + preview modal.
+ *
+ * Mirrors the in-game look at thumbnail size: dark navy bg, the
+ * scale labels above a fat dark-pill bar with a thin red/green
+ * stripe + white square handle, and the hex 3D cube floating
+ * above the slider showing the rolled number. In the animated
+ * variant the cube slides back and forth along the bar and four
+ * stacked numbers crossfade so the cube reads as one die
+ * changing faces every couple of seconds.
  * ───────────────────────────────────────────────────────────── */
 .dice-slot-card-art {
   position: absolute;
   inset: 0;
   border-radius: inherit;
   overflow: hidden;
-  background:
-    radial-gradient(60% 40% at 50% 12%, rgba(96, 165, 250, 0.18) 0%, transparent 65%),
-    linear-gradient(180deg, #0d121f 0%, #0a0d18 100%);
+  background: #0b1220;
 }
 
 .dice-slot-card-art--large {
@@ -737,68 +741,222 @@
   border-radius: 26px;
 }
 
-.dice-slot-card-art .dice-card-bar {
+/* ── Scale labels: "0  25  50  75  100" ── */
+.dice-slot-card-art .dice-card-scale {
   position: absolute;
   left: 14%;
   right: 14%;
-  top: 50%;
-  height: 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  top: 56%;
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+.dice-slot-card-art--large .dice-card-scale {
+  font-size: 11px;
+}
+
+/* ── Slider bar: dark pill, gray border, thin red/green stripe ── */
+.dice-slot-card-art .dice-card-bar {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 70%;
   transform: translateY(-50%);
+  height: 18px;
+  border-radius: 999px;
+  background: #161e2d;
+  border: 2px solid #475569;
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.4);
 }
-.dice-slot-card-art .dice-card-bar::before {
-  content: '';
+.dice-slot-card-art--large .dice-card-bar {
+  height: 28px;
+  border-width: 3px;
+}
+
+/* Red stripe: from inner-left to ~35 %. Green stripe: 35 % to
+ * inner-right. The handle floats over the split. */
+.dice-slot-card-art .dice-card-bar-red,
+.dice-slot-card-art .dice-card-bar-green {
   position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: 2px;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
+}
+.dice-slot-card-art--large .dice-card-bar-red,
+.dice-slot-card-art--large .dice-card-bar-green {
+  height: 7px;
+  margin-top: -3.5px;
+}
+
+.dice-slot-card-art .dice-card-bar-red {
+  left: 0;
   width: 35%;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%);
 }
-.dice-slot-card-art .dice-card-bar::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: 35%;
-  right: 2px;
-  border-radius: 999px;
+.dice-slot-card-art .dice-card-bar-green {
+  right: 0;
+  width: 65%;
   background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
 }
+
+/* White square handle with three vertical grip lines.  */
+.dice-slot-card-art .dice-card-handle {
+  position: absolute;
+  top: 50%;
+  left: 35%;
+  width: 14px;
+  height: 18px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
+  border: 1px solid rgba(15, 23, 42, 0.4);
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 2px 4px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+.dice-slot-card-art--large .dice-card-handle {
+  width: 24px;
+  height: 28px;
+  border-radius: 5px;
+}
+
+.dice-slot-card-art .dice-card-handle-grip {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+}
+.dice-slot-card-art--large .dice-card-handle-grip { gap: 2px; }
+.dice-slot-card-art .dice-card-handle-grip span {
+  display: block;
+  width: 1px;
+  height: 8px;
+  border-radius: 1px;
+  background: rgba(71, 85, 105, 0.7);
+}
+.dice-slot-card-art--large .dice-card-handle-grip span {
+  width: 2px;
+  height: 12px;
+}
+
+/* ── 3D hex cube above the bar ── */
 .dice-slot-card-art .dice-card-cube {
   position: absolute;
+  /* Anchor the cube near the top of the card, above the bar.
+   * In the animated variant it slides horizontally — see the
+   * keyframe below; in the static variant it sits at 60 %. */
+  top: 22%;
   left: 60%;
-  top: 50%;
-  width: 24px;
-  height: 24px;
-  margin-left: -12px;
-  margin-top: -28px;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #fff, #e2e8f0);
+  width: 22px;
+  height: 26px;
+  clip-path: path('M 9 1 Q 11 0 13 1 L 20 5 Q 22 6 22 9 L 22 17 Q 22 20 20 21 L 13 25 Q 11 26 9 25 L 2 21 Q 0 20 0 17 L 0 9 Q 0 6 2 5 Z');
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    #ffffff 0deg 60deg,
+    #d8dde6 60deg 180deg,
+    #b6bcc9 180deg 300deg,
+    #ffffff 300deg 360deg
+  );
+  transform: translateX(-50%);
+}
+.dice-slot-card-art--large .dice-card-cube {
+  width: 42px;
+  height: 48px;
+  clip-path: path('M 17 2 Q 21 0 25 2 L 39 10 Q 42 12 42 17 L 42 31 Q 42 36 39 38 L 25 46 Q 21 48 17 46 L 3 38 Q 0 36 0 31 L 0 17 Q 0 12 3 10 Z');
+}
+
+/* Numbers stacked at the centre of the cube, crossfaded by the
+ * keyframes below in the animated variant. The static variant
+ * just shows num--1. */
+.dice-slot-card-art .dice-card-cube-num {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 9px;
-  font-weight: 950;
-  color: #15803d;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
-    0 3px 8px rgba(0, 0, 0, 0.45);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
 }
-.dice-slot-card-art .dice-card-label {
-  position: absolute;
-  bottom: 16px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 950;
-  letter-spacing: 0.06em;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+.dice-slot-card-art--large .dice-card-cube-num { font-size: 17px; }
+.dice-slot-card-art .dice-card-cube-num.is-win  { color: #15803d; }
+.dice-slot-card-art .dice-card-cube-num.is-loss { color: #991b1b; }
+
+/* ── Animated variant ── */
+/* Cube slides through four pin-stops; the four numbers crossfade
+ * so the cube reads as a single die showing a different face at
+ * each pin-stop. Total loop: 8 s. */
+.dice-slot-card-art--animated .dice-card-cube {
+  animation: dice-card-cube-roll 8s ease-in-out infinite;
 }
-.dice-slot-card-art--large .dice-card-label { font-size: 26px; bottom: 24px; }
+@keyframes dice-card-cube-roll {
+  0%, 18%   { left: 70%; }   /* stop 1 (with num 1: 62, win) */
+  25%, 43%  { left: 22%; }   /* stop 2 (with num 2: 15, loss) */
+  50%, 68%  { left: 88%; }   /* stop 3 (with num 3: 88, win) */
+  75%, 93%  { left: 18%; }   /* stop 4 (with num 4: 9,  loss) */
+  100%      { left: 70%; }
+}
+
+.dice-slot-card-art--animated .dice-card-cube-num--1 {
+  animation: dice-card-num-cycle 8s linear infinite;
+}
+.dice-slot-card-art--animated .dice-card-cube-num--2 {
+  animation: dice-card-num-cycle 8s linear infinite -2s;
+}
+.dice-slot-card-art--animated .dice-card-cube-num--3 {
+  animation: dice-card-num-cycle 8s linear infinite -4s;
+}
+.dice-slot-card-art--animated .dice-card-cube-num--4 {
+  animation: dice-card-num-cycle 8s linear infinite -6s;
+}
+@keyframes dice-card-num-cycle {
+  0%, 20%  { opacity: 1; }   /* visible at this cube stop */
+  23%, 97% { opacity: 0; }
+  100%     { opacity: 1; }   /* loop seam */
+}
+
+/* The handle also slides along with the cube so the visual link
+ * between "cube at this number" and "slider threshold here" stays
+ * intact through the animation. */
+.dice-slot-card-art--animated .dice-card-handle {
+  animation: dice-card-handle-roll 8s ease-in-out infinite;
+}
+@keyframes dice-card-handle-roll {
+  0%, 18%   { left: 70%; }
+  25%, 43%  { left: 22%; }
+  50%, 68%  { left: 88%; }
+  75%, 93%  { left: 18%; }
+  100%      { left: 70%; }
+}
+
+/* Red / green stripe widths flip with the handle so the win / loss
+ * zones stay on the right side of where the handle is parked. */
+.dice-slot-card-art--animated .dice-card-bar-red {
+  animation: dice-card-red-roll 8s ease-in-out infinite;
+}
+.dice-slot-card-art--animated .dice-card-bar-green {
+  animation: dice-card-green-roll 8s ease-in-out infinite;
+}
+@keyframes dice-card-red-roll {
+  0%, 18%   { width: 70%; }
+  25%, 43%  { width: 22%; }
+  50%, 68%  { width: 88%; }
+  75%, 93%  { width: 18%; }
+  100%      { width: 70%; }
+}
+@keyframes dice-card-green-roll {
+  0%, 18%   { width: 30%; }
+  25%, 43%  { width: 78%; }
+  50%, 68%  { width: 12%; }
+  75%, 93%  { width: 82%; }
+  100%      { width: 30%; }
+}
