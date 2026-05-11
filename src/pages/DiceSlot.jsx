@@ -693,6 +693,26 @@ function DiceBar({ target, mode, cube, disabled, onChangeTarget }) {
   // smooth glide). Defaults to a sentinel that never equals a real
   // value so the first drag move always emits one tick.
   const lastTickRef = useRef(NaN)
+  // Identifier of the touch that initiated the current drag. We
+  // only follow THIS finger — events from any second / third
+  // finger that touches the screen later are ignored, so the
+  // handle never jumps to where an unrelated touch happens to be.
+  const touchIdRef = useRef(null)
+
+  // Refs that mirror the latest props / callbacks. handleMove reads
+  // through them so the callback itself can stay STABLE (empty deps
+  // in useCallback). Stable handleMove means the window listener
+  // effect below only attaches its handlers once — without these
+  // refs, the parent re-rendered on every drag tick, recreated
+  // onChangeTarget, which forced the listener effect to detach +
+  // re-attach during the drag. Touchmove events that fell into that
+  // microsecond gap got dropped → on release the handle snapped to
+  // the LAST successfully-reported position instead of where the
+  // finger actually was. With a stable handler, no gap, no jump.
+  const modeRef             = useRef(mode)
+  const onChangeTargetRef   = useRef(onChangeTarget)
+  useEffect(() => { modeRef.current           = mode }, [mode])
+  useEffect(() => { onChangeTargetRef.current = onChangeTarget }, [onChangeTarget])
 
   const handleMove = useCallback((clientX) => {
     // Drag math: convert pointer X (relative to inner-wrapper) to
@@ -703,15 +723,15 @@ function DiceBar({ target, mode, cube, disabled, onChangeTarget }) {
     if (!el) return
     const rect = el.getBoundingClientRect()
     const visualPct = ((clientX - rect.left) / rect.width) * 100
-    const t = visualPctToTarget(visualPct, mode)
-    const { min, max } = boundsFor(mode)
+    const t = visualPctToTarget(visualPct, modeRef.current)
+    const { min, max } = boundsFor(modeRef.current)
     const integerT = clamp(Math.round(t), min, max)
     if (integerT !== lastTickRef.current) {
       lastTickRef.current = integerT
       haptic('light')
     }
-    onChangeTarget(integerT)
-  }, [onChangeTarget, mode])
+    onChangeTargetRef.current(integerT)
+  }, [])  // stable — refs do the work
 
   function onPointerDown(e) {
     if (disabled) return
@@ -719,18 +739,53 @@ function DiceBar({ target, mode, cube, disabled, onChangeTarget }) {
     // Reset the tick tracker so the initial jump on press also
     // emits a haptic if it lands on a different integer.
     lastTickRef.current = NaN
-    const x = e.touches ? e.touches[0].clientX : e.clientX
-    handleMove(x)
+    if (e.touches && e.touches[0]) {
+      // Lock in the identifier of the FIRST touch — every later
+      // touchmove will follow only this finger.
+      touchIdRef.current = e.touches[0].identifier
+      handleMove(e.touches[0].clientX)
+    } else {
+      touchIdRef.current = null
+      handleMove(e.clientX)
+    }
   }
 
   useEffect(() => {
     function onMove(e) {
       if (!draggingRef.current) return
-      const x = e.touches ? e.touches[0].clientX : e.clientX
-      handleMove(x)
+      if (e.touches) {
+        // Find OUR touch in the active touches list — ignore any
+        // other fingers that may have landed on the screen during
+        // the drag.
+        let touch = null
+        for (let i = 0; i < e.touches.length; i++) {
+          if (e.touches[i].identifier === touchIdRef.current) {
+            touch = e.touches[i]
+            break
+          }
+        }
+        if (!touch) return
+        handleMove(touch.clientX)
+      } else {
+        handleMove(e.clientX)
+      }
     }
-    function onUp() {
+    function onUp(e) {
+      // For touch end / cancel, only release the drag if OUR touch
+      // was the one that ended. A second finger lifting elsewhere
+      // mustn't drop the active drag.
+      if (e && e.changedTouches) {
+        let ours = false
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === touchIdRef.current) {
+            ours = true
+            break
+          }
+        }
+        if (!ours) return
+      }
       draggingRef.current = false
+      touchIdRef.current  = null
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('touchmove', onMove, { passive: true })
