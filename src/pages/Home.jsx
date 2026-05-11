@@ -1881,7 +1881,20 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
   return (
     <div className={`pixel-mine-slot-card-art ${large ? 'pixel-mine-slot-card-art--large' : ''} ${animated ? 'pixel-mine-slot-card-art--animated' : ''}`} aria-hidden="true">
       <span className="pixel-mine-card-sky" />
-      <span className="pixel-mine-card-cloud" />
+
+      {/* Pixel-art sun in the top-right corner. */}
+      <span className="pixel-mine-card-sun" />
+
+      {/* A few clouds at staggered heights / sizes. In the animated
+       * variant they each drift across at slightly different speeds
+       * so the sky never reads as static. */}
+      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--a" />
+      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--b" />
+      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--c" />
+
+      {/* Ground strip at the very bottom — grass + dirt, sits behind
+       * the chests row so the chests read as standing on real soil. */}
+      <span className="pixel-mine-card-ground" />
 
       {/* Inventory-slot reel strip — 3 square cells with the slot's
        * iconic symbols. The wood cell goes empty when the pickaxe

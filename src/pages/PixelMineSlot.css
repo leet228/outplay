@@ -1233,33 +1233,104 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(50% 35% at 50% 0%, rgba(255, 255, 255, 0.28), transparent 65%),
-    /* faint grass strip near the chest line */
-    linear-gradient(180deg, transparent 70%, rgba(80, 160, 60, 0.18) 70%, rgba(80, 160, 60, 0.30) 100%);
+    /* warm sunburst near the upper-right corner */
+    radial-gradient(40% 32% at 88% 12%, rgba(255, 245, 200, 0.35), transparent 65%),
+    /* soft top-centre haze */
+    radial-gradient(50% 35% at 50% 0%, rgba(255, 255, 255, 0.28), transparent 65%);
 }
 
-/* A single drifting cloud built from box-shadow chunks (kept inside
- * the card, never escapes the rounded corners). */
+/* ── Pixel-art sun in the upper-right corner ──
+ * Quantised circular gradient gives a chunky, bit-art look (no
+ * smooth blur) so it sits in the same aesthetic as the Minecraft
+ * blocks below. */
+.pixel-mine-card-sun {
+  position: absolute;
+  top: 7%;
+  right: 9%;
+  width: 14%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff7c2 0%, #ffe066 45%, #ffb700 75%, rgba(255, 183, 0, 0) 100%);
+  box-shadow: 0 0 16px rgba(255, 225, 100, 0.5);
+}
+
+/* ── Clouds ──
+ * Three pill-shaped clouds at staggered heights / sizes with
+ * little fluffy bumps drawn via box-shadow. In the animated
+ * variant each drifts across the sky at a different speed so the
+ * background is never static. */
 .pixel-mine-card-cloud {
   position: absolute;
-  top: 18%;
-  left: -30%;
-  width: 14%;
   aspect-ratio: 3 / 1;
   background: #fff;
   border-radius: 999px;
-  opacity: 0.85;
+  opacity: 0.92;
+}
+.pixel-mine-card-cloud--a {
+  top: 10%;
+  left: -22%;
+  width: 14%;
   box-shadow:
-    /* fluffy bumps on top */
     20% -45% 0 -10% #fff,
     50% -55% 0 -12% #fff;
 }
-.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud {
+.pixel-mine-card-cloud--b {
+  top: 19%;
+  left: -32%;
+  width: 18%;
+  opacity: 0.85;
+  box-shadow:
+    15% -40% 0 -8% #fff,
+    45% -55% 0 -12% #fff,
+    72% -38% 0 -10% #fff;
+}
+.pixel-mine-card-cloud--c {
+  top: 5%;
+  left: -16%;
+  width: 10%;
+  opacity: 0.78;
+  box-shadow:
+    25% -45% 0 -6% #fff;
+}
+
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud--a {
   animation: pixel-mine-card-cloud-drift 22s linear infinite;
 }
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud--b {
+  animation: pixel-mine-card-cloud-drift 30s linear infinite -6s;
+}
+.pixel-mine-slot-card-art--animated .pixel-mine-card-cloud--c {
+  animation: pixel-mine-card-cloud-drift 18s linear infinite -12s;
+}
 @keyframes pixel-mine-card-cloud-drift {
-  from { left: -30%; }
+  from { left: -32%; }
   to   { left: 130%; }
+}
+
+/* ── Ground strip ──
+ * Stepped pixel-art grass + dirt band at the bottom of the card.
+ * Sits behind the chests row so the chests read as standing on
+ * real soil. Hard colour stops give the blocky 8-bit look. */
+.pixel-mine-card-ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 13%;
+  background: linear-gradient(
+    180deg,
+    /* thin highlight strip at the top of the grass */
+    #9ed16b 0%,    #9ed16b 12%,
+    /* main grass band */
+    #6fa83c 12%,   #6fa83c 30%,
+    /* darker grass shadow under the lip */
+    #4f8327 30%,   #4f8327 36%,
+    /* dirt — three slightly different brown bands for depth */
+    #8b5a2b 36%,   #8b5a2b 60%,
+    #6f4520 60%,   #6f4520 82%,
+    #543419 82%,   #543419 100%
+  );
+  image-rendering: pixelated;
 }
 
 /* ── Reel strip (3 square cells) ── */
