@@ -698,6 +698,14 @@ function DiceBar({ target, mode, cube, disabled, onChangeTarget }) {
   // finger that touches the screen later are ignored, so the
   // handle never jumps to where an unrelated touch happens to be.
   const touchIdRef = useRef(null)
+  // Wall-clock timestamp of the most recent touchend / touchcancel.
+  // Used to suppress the browser's simulated mouse events
+  // (mousedown / mouseup) that follow a tap-like touch — on iOS
+  // Safari those simulated events fire at the touchSTART position,
+  // not the lift position, so without this guard a quick small
+  // drag would snap the handle back to where the finger first
+  // landed the moment the simulated mousedown was processed.
+  const lastTouchEndAtRef = useRef(0)
 
   // Refs that mirror the latest props / callbacks. handleMove reads
   // through them so the callback itself can stay STABLE (empty deps
@@ -735,6 +743,15 @@ function DiceBar({ target, mode, cube, disabled, onChangeTarget }) {
 
   function onPointerDown(e) {
     if (disabled) return
+    // If this is a MOUSE event arriving shortly after a touch
+    // ended, it's almost certainly the browser's simulated mouse
+    // event (iOS Safari + some Android browsers fire it for
+    // tap-like touches at the touchSTART position). Ignoring it
+    // prevents the handle from snapping back to where the finger
+    // first landed after a quick small drag.
+    if (!e.touches && Date.now() - lastTouchEndAtRef.current < 500) {
+      return
+    }
     draggingRef.current = true
     // Reset the tick tracker so the initial jump on press also
     // emits a haptic if it lands on a different integer.
@@ -775,14 +792,24 @@ function DiceBar({ target, mode, cube, disabled, onChangeTarget }) {
       // was the one that ended. A second finger lifting elsewhere
       // mustn't drop the active drag.
       if (e && e.changedTouches) {
-        let ours = false
+        let ours = null
         for (let i = 0; i < e.changedTouches.length; i++) {
           if (e.changedTouches[i].identifier === touchIdRef.current) {
-            ours = true
+            ours = e.changedTouches[i]
             break
           }
         }
         if (!ours) return
+        // Push one final position update from the lift X — the
+        // browser sometimes skips emitting a touchmove for the
+        // last few pixels before touchend, so without this the
+        // committed target would lag the actual release point.
+        if (draggingRef.current) {
+          handleMove(ours.clientX)
+        }
+        // Record the wall-clock so we can suppress simulated
+        // mouse events that the browser fires right after.
+        lastTouchEndAtRef.current = Date.now()
       }
       draggingRef.current = false
       touchIdRef.current  = null
