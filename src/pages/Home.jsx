@@ -1750,6 +1750,33 @@ const PM_MUL_HOLD_AT   = 5440   // settled position
 const PM_MUL_FADE_AT   = 7040   // start fading out
 const PM_MUL_GONE_AT   = 7600   // fully gone
 
+// Hand-drawn fluffy cloud silhouettes. Each `shape` is a multi-
+// bump SVG path designed to read as an actual cloud — multiple
+// rounded humps along the top, flat-ish base, soft side curves.
+// viewBox 120 × 50 → the parent CSS sets the cloud's % size /
+// position on the card and SVG scales the path to fit.
+const PM_CLOUD_SHAPES = {
+  // Three bumps, medium silhouette.
+  medium: 'M 14 44 C 2 44 2 28 14 26 C 14 8 32 6 38 22 C 46 6 64 6 70 22 C 80 14 100 18 100 30 C 112 30 114 44 102 44 Z',
+  // Four bumps, longer/wider silhouette.
+  wide:   'M 10 44 C 0 44 0 28 10 26 C 8 12 26 8 32 22 C 38 4 56 4 62 22 C 68 6 86 8 90 24 C 100 18 116 24 116 36 C 116 44 108 44 100 44 Z',
+  // Two bumps, smaller / chunkier cloud.
+  small:  'M 18 42 C 4 42 4 24 18 22 C 22 6 44 6 50 22 C 60 14 78 18 82 30 C 96 28 96 42 84 42 Z',
+}
+
+function CardCloud({ variant, shape }) {
+  return (
+    <svg
+      className={`pixel-mine-card-cloud pixel-mine-card-cloud--${variant}`}
+      viewBox="0 0 120 50"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path d={PM_CLOUD_SHAPES[shape]} fill="#fff" />
+    </svg>
+  )
+}
+
 function PixelMineSlotArtwork({ large = false, animated = false }) {
   // Single ms-based phase counter (0..PM_LOOP). Updated via rAF when
   // animated; stays at 0 otherwise. Re-renders update inline style
@@ -1885,16 +1912,16 @@ function PixelMineSlotArtwork({ large = false, animated = false }) {
       {/* Pixel-art sun in the top-right corner. */}
       <span className="pixel-mine-card-sun" />
 
-      {/* Scattered clouds at fixed positions across the card so the
-       * sky never reads as empty. In the static thumbnail they
-       * just sit where they're placed; in the animated preview
-       * the drift keyframes override their `left` so they float
-       * across the sky at different speeds. */}
-      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--a" />
-      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--b" />
-      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--c" />
-      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--d" />
-      <span className="pixel-mine-card-cloud pixel-mine-card-cloud--e" />
+      {/* Five hand-drawn fluffy clouds scattered across the sky.
+       * Each is an inline SVG path with multiple bumps so the
+       * silhouette reads as a real cloud (not a pill with dots
+       * stapled on top). Static on the thumbnail; the drift
+       * keyframes only fire under `--animated`. */}
+      <CardCloud variant="a" shape="medium" />
+      <CardCloud variant="b" shape="wide" />
+      <CardCloud variant="c" shape="small" />
+      <CardCloud variant="d" shape="wide" />
+      <CardCloud variant="e" shape="medium" />
 
       {/* Ground strip at the very bottom — grass + dirt, sits behind
        * the chests row so the chests read as standing on real soil. */}
