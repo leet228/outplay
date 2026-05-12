@@ -2112,10 +2112,12 @@ function DiceSlotArtwork({ large = false, animated = false }) {
   )
 }
 
-// Magnetic Slot card art — mirrors the real in-game layout:
-//   - magnets row on top (with mult labels + real magnet.png)
-//   - tier ladder behind (4 dashed cells at 100/75/50/25%)
-//   - 5×3 reel grid at the bottom with real pixel-art textures
+// Magnetic Slot card art — compact 3-column variant for the home
+// card + preview overlay (the real in-game grid is 5×3, but the
+// card distills it down so it reads at thumbnail size):
+//   - 3 magnets row on top (with mult labels + real magnet.png)
+//   - tier ladder behind (2 dashed cells per column: 100 / 50 %)
+//   - 3×2 reel grid at the bottom with real pixel-art textures
 //
 // In the animated variant each column lifts toward its magnet on
 // a loop — the symbols visually rise THROUGH the tier ladder and
@@ -2123,18 +2125,15 @@ function DiceSlotArtwork({ large = false, animated = false }) {
 // (how high they climb) is hand-picked so the loop reads as a
 // mix of weak/medium/strong pulls.
 function MagneticSlotArtwork({ large = false, animated = false }) {
-  const magnets = [5, 10, 100, 25, 2]
-  // Each column: 3 symbols top→bottom (matching the real game's
-  // 5×3 grid) + how far the column should rise during the pull
-  // loop (% of the pull-track height).
+  const magnets = [25, 100, 50]
+  // Each column: 2 symbols top→bottom + how far the column should
+  // rise during the pull loop (% of the pull-track height).
   const cols = [
-    { reels: [mgTexBolt,    mgTexCoin,    null],         reach: 50 },
-    { reels: [mgTexCompass, mgTexCoin,    mgTexOrb],     reach: 92 },
-    { reels: [mgTexGem,     mgTexBolt,    mgTexCoin],    reach: 55 },
-    { reels: [mgTexOrb,     mgTexCompass, null],         reach: 85 },
-    { reels: [mgTexCoin,    mgTexBolt,    null],         reach: 38 },
+    { reels: [mgTexBolt,    mgTexCoin],     reach: 55 },
+    { reels: [mgTexOrb,     mgTexCompass],  reach: 92 },
+    { reels: [mgTexGem,     mgTexBolt],     reach: 48 },
   ]
-  const tiers = [100, 75, 50, 25]
+  const tiers = [100, 50]
 
   return (
     <div
