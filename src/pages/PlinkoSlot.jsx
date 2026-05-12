@@ -409,9 +409,12 @@ export default function PlinkoSlot() {
     if (mul >= 1) maybeHaptic('success')
     else          maybeHaptic('light')
 
-    // Briefly hold the ball at the slot, then queue removal (batched
-    // per rAF — 100 simultaneous landings → ~16 setBalls calls).
-    await sleep(180)
+    // Drop the ball IMMEDIATELY on impact — the slot's pop / glow
+    // animation (queued by flashSlot above) still plays on the
+    // bucket after, so the player sees the multiplier reaction
+    // without the ball lingering on top of it. removeBalls is
+    // rAF-batched so 100 simultaneous landings still coalesce
+    // into ~16 setBalls calls.
     removeBalls([id])
 
     // Track landings — when the last ball of the launch settles, clear
