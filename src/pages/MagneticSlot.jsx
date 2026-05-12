@@ -76,42 +76,27 @@ function pickSymbol() {
 
 // Tier ladder + the strength → tier mapping.
 //
-// Reach snaps to one of FOUR levels (0 / 10 / 50 / 100 %) so the
-// pulled symbol stack always lands cleanly inside one of the three
-// visible tier cells (10 / 50 / 100). Thresholds tuned for the
-// symbol weights below:
-//   <8     → 0     (no win — empty / a single bolt)
-//   8‒25   → 10    (mild — a coin or a few bolts)
-//   26‒65  → 50    (mid — gem or trophy combos)
-//   66+    → 100   (top — volt-led)
+// Reach snaps to one of FIVE levels (0 / 25 / 50 / 75 / 100 %) so
+// the pulled symbol stack always lands cleanly inside one of the
+// four visible tier cells. Thresholds tuned for the symbol
+// weights below:
+//   <8     → 0     (no win — blanks or a single bolt)
+//   8‒21   → 25    (mild — a coin or a few bolts)
+//   22‒49  → 50    (mid — trophy / coin combos)
+//   50‒79  → 75    (high — gem or near-volt)
+//   80+    → 100   (top — volt + extras / gem combos)
 function strengthToTier(s) {
   if (s < 8)  return 0
-  if (s < 26) return 0.10
-  if (s < 66) return 0.50
+  if (s < 22) return 0.25
+  if (s < 50) return 0.50
+  if (s < 80) return 0.75
   return 1.0
 }
 
-// Three tier cells per column: 100 % up by the magnet, 50 % in
-// the middle, 10 % right above the reels. Order top → bottom in
-// the JSX so the DOM read order matches what the eye sees.
-const TIER_PERCENTS = [100, 50, 10]
-
-// Placement modifier — drives where the cell + the matching
-// pulled-stack are pinned inside the pull-col container.
-//   'start'  → top edge at the pull-col top (100 %)
-//   'center' → centred vertically (50 %)
-//   'end'    → bottom edge at the pull-col bottom (10 %)
-function tierPlacement(pct) {
-  if (pct === 100) return 'start'
-  if (pct === 50)  return 'center'
-  return 'end'
-}
-function reachPlacement(reach) {
-  if (reach >= 1.0)  return 'start'
-  if (reach >= 0.5)  return 'center'
-  if (reach >= 0.10) return 'end'
-  return null
-}
+// Four tier cells per column: 100 / 75 / 50 / 25 %, evenly
+// stepped down the pull column. Order top → bottom in the JSX
+// so DOM read order matches what the eye sees.
+const TIER_PERCENTS = [100, 75, 50, 25]
 
 // Strip layouts: the LAST item is the final value, everything
 // above is random filler that scrolls past the viewport during
@@ -497,28 +482,34 @@ export default function MagneticSlot() {
               const payout    = payoutByCol[ci]
               const rows      = pulledRows[ci]
               const allPulled = rows >= ROWS
-              const stackPlace = reachPlacement(reach)
+              const reachPct = Math.round(reach * 100)
               return (
                 <div
                   key={ci}
                   className={'magnetic-pull-col' + (rows > 0 ? ' is-pulling' : '')}
                 >
-                  {/* Tier cells — 3 square transparent boxes per
-                    * column, same size as the spin cells below.
-                    * Position by class:
-                    *   100 % at top, 50 % centred, 10 % at bottom. */}
+                  {/* Tier ladder — 4 SQUARE transparent cells per
+                    * column at 100 / 75 / 50 / 25 % reach heights.
+                    * Each one is `--cell-h` square (same size as
+                    * a reel spin cell) so it reads as a landing
+                    * box of the same family the symbols launched
+                    * from. */}
                   <div className="magnetic-tier-ladder" aria-hidden="true">
                     {TIER_PERCENTS.map(pct => (
                       <span
                         key={pct}
-                        className={`magnetic-tier magnetic-tier--${tierPlacement(pct)}`}
+                        className="magnetic-tier"
+                        style={{ '--tier-pct': `${pct}%` }}
                       >
                         {pct}%
                       </span>
                     ))}
                   </div>
-                  {rows > 0 && stackPlace && (
-                    <div className={`magnetic-pulled-stack magnetic-pulled-stack--${stackPlace}`}>
+                  {rows > 0 && reach > 0 && (
+                    <div
+                      className="magnetic-pulled-stack"
+                      style={{ '--reach-pct': `${reachPct}%` }}
+                    >
                       {Array.from({ length: rows }).map((_, idx) => {
                         const sym = finalGrid[ci]?.[idx]
                         if (!sym || !sym.emoji) return null

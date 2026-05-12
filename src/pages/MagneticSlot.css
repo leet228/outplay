@@ -172,11 +172,12 @@
   position: relative;
 }
 
-/* Tier ladder — 3 SQUARE transparent landing cells per column:
- * 100 % at top, 50 % centred vertically, 10 % at the bottom.
- * Each cell is the same size as a reel spin cell (`--cell-h`
- * square) so it reads as a destination box of the same family
- * the symbols launched from. */
+/* Tier ladder — 4 SQUARE transparent landing cells per column at
+ * 100 / 75 / 50 / 25 % reach heights. Each cell is `--cell-h`
+ * square — the exact same dimensions as the reel spin cells the
+ * symbols launched from. Cell TOP edge sits at
+ * `calc(100% - tier-pct)` so 100 % lands at the very top of the
+ * pull column (just under the magnet) and 25 % at 3/4 down. */
 .magnetic-tier-ladder {
   position: absolute;
   inset: 0;
@@ -187,6 +188,8 @@
 .magnetic-tier {
   position: absolute;
   left: 50%;
+  top: calc(100% - var(--tier-pct, 0%));
+  transform: translateX(-50%);
   width: var(--cell-h);
   height: var(--cell-h);
   display: flex;
@@ -205,13 +208,6 @@
   box-sizing: border-box;
 }
 
-/* Placement modifiers — top / centred / bottom inside the pull
- * column. The matching pulled-stack uses the same modifier so
- * the first arriving symbol drops INSIDE the cell it matches. */
-.magnetic-tier--start  { top: 0;    transform: translate(-50%, 0); }
-.magnetic-tier--center { top: 50%;  transform: translate(-50%, -50%); }
-.magnetic-tier--end    { top: 100%; transform: translate(-50%, -100%); }
-
 /* Pulled-stack anchor.
  *
  * The stack's TOP edge sits at `(100% - reach)` of the pull-zone
@@ -226,6 +222,12 @@
 .magnetic-pulled-stack {
   position: absolute;
   left: 50%;
+  /* TOP edge sits at the same reach line the matching tier cell
+   * uses (calc(100% - reach-pct)). Since both stack and tier
+   * cell have their top edge at that same y, the first arriving
+   * symbol lands centred inside the tier cell. */
+  top: calc(100% - var(--reach-pct, 0%));
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -233,17 +235,6 @@
   pointer-events: none;
   z-index: 2;   /* above the tier ladder (z-index: 0) */
 }
-
-/* Stack placement — matches the tier-cell placement classes so
- * the stack's top-edge area lines up dead-centre with the tier
- * cell at the same anchor. The transformY values offset the stack
- * so its FIRST child symbol sits exactly inside the tier cell:
- *   start  : stack top edge at pull-col top edge
- *   center : stack top edge at (50% - cell-h / 2) from pull-col top
- *   end    : stack top edge at (100% - cell-h) from pull-col top */
-.magnetic-pulled-stack--start  { top: 0;    transform: translate(-50%, 0); }
-.magnetic-pulled-stack--center { top: 50%;  transform: translate(-50%, calc(-1 * var(--cell-h) / 2)); }
-.magnetic-pulled-stack--end    { top: 100%; transform: translate(-50%, calc(-1 * var(--cell-h))); }
 
 /* Each pulled symbol flies in from BELOW (where its cell sits)
  * on mount, fading in as it rises. Subsequent symbols mount one
