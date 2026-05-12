@@ -168,6 +168,12 @@
   grid-template-columns: repeat(17, 1fr);
   gap: 0;
   align-items: stretch;
+  /* `contain: layout style` isolates the slot row from the rest of
+   * the board — when a slot's `.is-hit` class toggles or its pulse
+   * mounts/unmounts, the browser doesn't have to re-evaluate layout
+   * up the tree. Paint isn't contained because the pulse overlay
+   * (inset: -2px) intentionally overflows the slot bounds. */
+  contain: layout style;
 }
 
 .plinko-slot {
@@ -212,9 +218,20 @@
   position: absolute;
   inset: -2px;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(147, 197, 253, 0.55));
+  /* Solid colour instead of a gradient — gradients have to be
+   * re-rasterised every frame the pulse scales (the gradient
+   * texture is sampled at the new size), whereas a flat fill is
+   * a single buffered tile the GPU just composites at any scale.
+   * Cuts paint cost roughly in half for the bucket flashes during
+   * a 100-ball burst. */
+  background: rgba(255, 255, 255, 0.85);
   pointer-events: none;
   z-index: 3;
+  /* will-change pre-allocates a GPU layer so the scale + translate
+   * keyframes don't trigger main-thread paint passes. The pulse is
+   * mounted only when active, so the layer is freed as soon as the
+   * 280 ms hit window ends. */
+  will-change: transform, opacity;
   animation: plinko-slot-pulse 0.30s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   transform-origin: 50% 50%;
 }
@@ -258,10 +275,18 @@
 }
 
 /* When the slot has a fresh hit, lift it above neighbours so the
- * pulse overlay isn't clipped by adjacent slots (z-index only — no
- * animation here, the visible pop lives entirely on the keyed
- * .plinko-slot-pulse child below). */
-.plinko-slot.is-hit { z-index: 6; }
+ * pulse overlay isn't clipped by adjacent slots, AND hint to the
+ * compositor that this slot is about to transform — pre-allocating
+ * the GPU layer eliminates the first-frame stutter of the
+ * block-jerk + pulse animations.
+ *
+ * will-change is applied only via .is-hit so we don't permanently
+ * hold 17 GPU layers; the class is auto-cleared 280 ms after each
+ * flash, releasing the layer back to the pool. */
+.plinko-slot.is-hit {
+  z-index: 6;
+  will-change: transform;
+}
 
 /* Pulse keyframes — bright overlay scales up briefly with a small
  * downward dip, fades out. Compositor only (opacity + transform);

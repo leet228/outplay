@@ -198,15 +198,23 @@ export default function PlinkoSlot() {
 
   // ── rAF coalescing ──
   // 100-ball launches land in a tight cluster — without batching that's
-  // 100 setBalance + 100 setLaunchWin + 100 setHitSlots within ~1.5 s,
-  // each triggering a global Zustand re-render and a slot-row diff.
-  // We collect updates per-frame and flush at most once per rAF, which
-  // caps the React update rate at 60 Hz regardless of landing density.
-  const winFlushRef       = useRef({ pending: 0, scheduled: false })
-  const hitFlushRef       = useRef({ pending: [], scheduled: false })
-  const removeFlushRef    = useRef({ pending: [], scheduled: false })
-  const lastHapticAtRef   = useRef(0)
-  const bounceTimerRef    = useRef(null)
+  // 100 setBalance + 100 setLaunchWin + 100 setHitSlots + 100 setBalls
+  // within ~1.5 s, each triggering a global Zustand re-render and a
+  // slot-row diff.
+  //
+  // SINGLE shared rAF flush: all three pending operations (balance
+  // win, hit-slot flash, ball removal) drain in one callback per
+  // frame, so during a burst React commits AT MOST one batched render
+  // per frame instead of three separate ones. Cuts reconciliation
+  // pressure roughly 3× at peak landing density.
+  const flushRef = useRef({
+    win: 0,
+    hits: [],
+    removes: [],
+    scheduled: false,
+  })
+  const lastHapticAtRef = useRef(0)
+  const bounceTimerRef  = useRef(null)
 
   // Server-round bookkeeping. currentRoundRef holds the server's
   // round descriptor for the active launch; ballsLandedRef counts
@@ -319,55 +327,45 @@ export default function PlinkoSlot() {
     setBallsPerLaunch(n)
   }
 
-  // Ping the slot's hit animation. Multiple back-to-back hits are
-  // de-duped by timestamp — only the most recent flash holds the
-  // class, so a new ball landing in the same slot retriggers the pop.
-  // Coalesces multiple hits in the same frame into a single setHitSlots
-  // call; without this a 100-ball burst fires 100 separate slot-row
-  // re-renders within 1.5 s.
-  function flashSlot(idx) {
-    hitFlushRef.current.pending.push(idx)
-    if (hitFlushRef.current.scheduled) return
-    hitFlushRef.current.scheduled = true
+  // Single shared rAF flush. All three flavour-of-updates (slot flash,
+  // win credit, ball removal) accumulate into flushRef.current and
+  // drain in ONE callback per frame, so React batches everything into
+  // a single render even on a 100-ball landing storm.
+  function ensureFlushScheduled() {
+    if (flushRef.current.scheduled) return
+    flushRef.current.scheduled = true
     requestAnimationFrame(() => {
-      const indices = hitFlushRef.current.pending
-      hitFlushRef.current.pending = []
-      hitFlushRef.current.scheduled = false
-      if (cancelRef.current || indices.length === 0) return
-      const ts = Date.now() + Math.random()
-      setHitSlots(prev => {
-        const next = { ...prev }
-        for (const i of indices) next[i] = ts
-        return next
-      })
-      setTimeout(() => {
-        setHitSlots(prev => {
-          let changed = false
-          const next = { ...prev }
-          for (const i of indices) {
-            if (next[i] === ts) { delete next[i]; changed = true }
-          }
-          return changed ? next : prev
-        })
-      }, 280)
-    })
-  }
-
-  // rAF-batched balance + launchWin commit. Each ball calls commitWin()
-  // and we flush the accumulated win once per frame — turns a 100-ball
-  // landing burst from ~100 Zustand updates/sec into a steady 60 Hz.
-  function commitWin(win) {
-    if (win > 0) winFlushRef.current.pending += win
-    // launchWin always advances (so a 0× still triggers a re-paint of the
-    // win bar, otherwise it'd freeze on a stale value during all-loss
-    // launches). But the value only meaningfully changes when win > 0.
-    if (winFlushRef.current.scheduled) return
-    winFlushRef.current.scheduled = true
-    requestAnimationFrame(() => {
-      const won = winFlushRef.current.pending
-      winFlushRef.current.pending = 0
-      winFlushRef.current.scheduled = false
+      const f = flushRef.current
+      const hits    = f.hits
+      const removes = f.removes
+      const won     = f.win
+      f.hits    = []
+      f.removes = []
+      f.win     = 0
+      f.scheduled = false
       if (cancelRef.current) return
+
+      // ── Slot flash ──
+      if (hits.length > 0) {
+        const ts = Date.now() + Math.random()
+        setHitSlots(prev => {
+          const next = { ...prev }
+          for (const i of hits) next[i] = ts
+          return next
+        })
+        setTimeout(() => {
+          setHitSlots(prev => {
+            let changed = false
+            const next = { ...prev }
+            for (const i of hits) {
+              if (next[i] === ts) { delete next[i]; changed = true }
+            }
+            return changed ? next : prev
+          })
+        }, 280)
+      }
+
+      // ── Win credit ──
       if (won > 0) {
         const next = balanceRef.current + won
         balanceRef.current = next
@@ -377,7 +375,28 @@ export default function PlinkoSlot() {
         if (bounceTimerRef.current) clearTimeout(bounceTimerRef.current)
         bounceTimerRef.current = setTimeout(() => setBalanceBounce(false), 500)
       }
+
+      // ── Ball removal ──
+      if (removes.length > 0) {
+        const drop = new Set(removes)
+        setBalls(prev => prev.filter(b => !drop.has(b.id)))
+      }
     })
+  }
+
+  // Ping the slot's hit animation. Multiple back-to-back hits are
+  // de-duped by timestamp — only the most recent flash holds the
+  // class, so a new ball landing in the same slot retriggers the pop.
+  function flashSlot(idx) {
+    flushRef.current.hits.push(idx)
+    ensureFlushScheduled()
+  }
+
+  // Accumulate win into the next-frame flush — 100 wins in 1.5 s
+  // become a single setBalance + setLaunchWin commit at the next rAF.
+  function commitWin(win) {
+    if (win > 0) flushRef.current.win += win
+    ensureFlushScheduled()
   }
 
   // Cap haptic rate — 100 vibrations during a 1.5-s burst is jarring on
@@ -390,22 +409,10 @@ export default function PlinkoSlot() {
     haptic(kind)
   }
 
-  // rAF-batched ball removal. 100 balls landing in ~1.5 s previously
-  // fired 100 separate setBalls(filter) calls — each one O(N) on the
-  // shrinking array. Coalescing per frame turns it into ~16 calls,
-  // each removing the batch with one filter.
+  // Queue a ball-removal for the next frame's flush.
   function removeBalls(ids) {
-    for (const id of ids) removeFlushRef.current.pending.push(id)
-    if (removeFlushRef.current.scheduled) return
-    removeFlushRef.current.scheduled = true
-    requestAnimationFrame(() => {
-      const out = removeFlushRef.current.pending
-      removeFlushRef.current.pending = []
-      removeFlushRef.current.scheduled = false
-      if (cancelRef.current || out.length === 0) return
-      const drop = new Set(out)
-      setBalls(prev => prev.filter(b => !drop.has(b.id)))
-    })
+    for (const id of ids) flushRef.current.removes.push(id)
+    ensureFlushScheduled()
   }
 
   // Animate one ball through the peg field. The ball is already in
