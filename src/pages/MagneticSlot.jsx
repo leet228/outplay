@@ -10,23 +10,26 @@ import './MagneticSlot.css'
 // ─────────────────────────────────────────────────────────────
 // MAGNETIC — popular slot.
 //
-//   - 5 magnets on the top row, each with a RANDOM multiplier per
-//     spin (pulled from MAGNET_POOL with weighted probabilities).
-//   - 5 reels × 3 symbols below. Symbols have a "pull strength":
-//       🔩 bolt    3
-//       🪙 coin    8
-//       🏆 trophy  18
-//       💎 gem     35
-//       ⚡ lightning 60
-//       blank      0
-//   - After a spin each reel's TOTAL strength decides how high the
-//     reel's symbols float upward toward their magnet:
-//       reach = clamp(totalStrength / STRENGTH_FULL, 0, 1)
-//     reach=1 → full magnet multiplier paid; reach=0.5 → half; etc.
+//   5 magnets on top, 5 reels × 3 cells below. Every cell — and
+//   every magnet — is a vertical "strip" of N items that scrolls
+//   downward to settle on its final value, like a Minecraft-style
+//   slot wheel:
 //
-// Dev-only for now: balance is debited locally with no server
-// round. RTP isn't tuned yet — math will be balanced via Monte-
-// Carlo once the visuals lock in.
+//     1. Spin begins → magnets + reel cells animate strips top→
+//        bottom for 'plavno medlenno' visual.
+//     2. Magnets stop LEFT → RIGHT first (shorter durations).
+//     3. Then reel cells stop LEFT → RIGHT, with each column's
+//        rows staggered top → bottom inside the column.
+//     4. Once everything has settled, the magnetism pass plays
+//        SEQUENTIALLY per column: column 0's symbols rise toward
+//        its magnet while that magnet trembles, then column 1,
+//        etc. The longer the column's combined pull-strength,
+//        the higher the symbols climb — `reach=1` = right under
+//        the magnet (full multiplier), `reach=0` = stay put.
+//   Per-reel payout = (reach × magnet_mult × stake) / REELS.
+//
+//   Dev-only for now: balance is debited locally with no server
+//   round.
 // ─────────────────────────────────────────────────────────────
 
 const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
@@ -34,9 +37,12 @@ const SLOT_ID = 'magnetic'
 
 const REELS = 5
 const ROWS  = 3
+// Total items in each scrolling strip. 1 final symbol at the
+// bottom + (STRIP_LEN - 1) random symbols above it.
+const STRIP_LEN = 8
 
-const MAGNET_POOL    = [2,   5,   10,  25,  50, 100]
-const MAGNET_WEIGHTS = [38,  26,  16,  10,  6,  4]
+const MAGNET_POOL    = [2, 5, 10, 25, 50, 100]
+const MAGNET_WEIGHTS = [38, 26, 16, 10, 6, 4]
 const MAGNET_WEIGHT_SUM = MAGNET_WEIGHTS.reduce((s, w) => s + w, 0)
 
 function pickMagnet() {
@@ -49,7 +55,8 @@ function pickMagnet() {
 }
 
 const SYMBOLS = [
-  { id: 'blank', emoji: '·',  strength: 0,  weight: 30 },
+  // Blank cells render NOTHING — empty cells are truly empty.
+  { id: 'blank', emoji: '',   strength: 0,  weight: 30 },
   { id: 'bolt',  emoji: '🔩', strength: 3,  weight: 32 },
   { id: 'coin',  emoji: '🪙', strength: 8,  weight: 20 },
   { id: 'troph', emoji: '🏆', strength: 18, weight: 11 },
@@ -73,13 +80,33 @@ function strengthToReach(s) {
   return Math.min(1, s / STRENGTH_FULL)
 }
 
-function emptyGrid() {
-  return Array.from({ length: REELS }, () =>
-    Array.from({ length: ROWS }, () => SYMBOLS[0])
-  )
+// Strip layouts: the LAST item is the final value, everything
+// above is random filler that scrolls past the viewport during
+// the spin animation.
+function buildSymbolStrip(final) {
+  const strip = []
+  for (let i = 0; i < STRIP_LEN - 1; i++) strip.push(pickSymbol())
+  strip.push(final)
+  return strip
+}
+function buildMagnetStrip(final) {
+  const strip = []
+  for (let i = 0; i < STRIP_LEN - 1; i++) strip.push(pickMagnet())
+  strip.push(final)
+  return strip
+}
+
+function initialCellStrip() {
+  // At rest the cell shows ONE blank symbol — ty=0 displays the
+  // first (and only) entry of the strip.
+  return { symbols: [SYMBOLS[0]], ty: 0, td: 0 }
+}
+function initialMagnetStrip() {
+  return { mults: [2], ty: 0, td: 0 }
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+const rafTwo = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
 
 export default function MagneticSlot() {
   const navigate = useNavigate()
@@ -96,42 +123,52 @@ export default function MagneticSlot() {
   )
   const t = translations[lang] || translations.ru
 
-  // Pick a sensible starting stake based on balance (mirrors Dice).
   const initialStake = (() => {
     const defaults = [50, 25, 10]
     for (const v of defaults) if (balance >= v) return v
     return BETS[0]
   })()
 
-  const [stake, setStake]       = useState(initialStake)
-  const [magnets, setMagnets]   = useState(() =>
-    Array.from({ length: REELS }, pickMagnet)
-  )
-  const [grid, setGrid]         = useState(emptyGrid)
-  const [reaches, setReaches]   = useState(() => Array(REELS).fill(null))
-  const [reelPayouts, setReelPayouts] = useState(() => Array(REELS).fill(0))
-  const [lastWin, setLastWin]   = useState(0)
-  const [phase, setPhase]       = useState('idle')   // idle | spinning | pulling | settled
-  const [spinning, setSpinning] = useState(false)
-  const [autoSpin, setAutoSpin] = useState(false)
-  const [exitConfirm, setExitConfirm] = useState(false)
+  const [stake, setStake] = useState(initialStake)
 
+  // ── Strip state (drives the visual spin) ──
+  const [cellStrips, setCellStrips] = useState(() =>
+    Array.from({ length: REELS }, () =>
+      Array.from({ length: ROWS }, initialCellStrip)
+    )
+  )
+  const [magnetStrips, setMagnetStrips] = useState(() =>
+    Array.from({ length: REELS }, initialMagnetStrip)
+  )
+
+  // ── Round outcome state (drives the pull phase) ──
+  const [finalGrid, setFinalGrid] = useState(() =>
+    Array.from({ length: REELS }, () =>
+      Array.from({ length: ROWS }, () => SYMBOLS[0])
+    )
+  )
+  const [finalMagnets, setFinalMagnets] = useState(() => Array(REELS).fill(2))
+  const [reachByCol, setReachByCol]     = useState(() => Array(REELS).fill(0))
+  const [payoutByCol, setPayoutByCol]   = useState(() => Array(REELS).fill(0))
+  const [pulledCols, setPulledCols]     = useState(() => Array(REELS).fill(false))
+  const [shakingMagnet, setShakingMagnet] = useState(null)
+  const [lastWin, setLastWin]           = useState(0)
+  const [phase, setPhase]               = useState('idle') // idle | spinning | pulling | settled
+  const [spinning, setSpinning]         = useState(false)
+  const [autoSpin, setAutoSpin]         = useState(false)
+  const [exitConfirm, setExitConfirm]   = useState(false)
+
+  // ── Refs for stable async access ──
   const balanceRef    = useRef(balance)
   const stakeRef      = useRef(stake)
   const spinningRef   = useRef(false)
   const autoRef       = useRef(false)
   const cancelRef     = useRef(false)
-  const spinTickRef   = useRef(null)
-  const magnetTickRef = useRef(null)
 
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current   = stake },   [stake])
   useEffect(() => { autoRef.current    = autoSpin }, [autoSpin])
-  useEffect(() => () => {
-    cancelRef.current = true
-    if (spinTickRef.current) clearInterval(spinTickRef.current)
-    if (magnetTickRef.current) clearInterval(magnetTickRef.current)
-  }, [])
+  useEffect(() => () => { cancelRef.current = true }, [])
 
   // ── Telegram BackButton ──
   useEffect(() => {
@@ -179,65 +216,84 @@ export default function MagneticSlot() {
     setSpinning(true)
     haptic('light')
 
+    // Reset everything from the previous round.
     setPhase('spinning')
-    setReaches(Array(REELS).fill(null))
-    setReelPayouts(Array(REELS).fill(0))
+    setPulledCols(Array(REELS).fill(false))
+    setShakingMagnet(null)
+    setReachByCol(Array(REELS).fill(0))
+    setPayoutByCol(Array(REELS).fill(0))
     setLastWin(0)
 
     // Debit stake locally (dev-only).
-    const next = balanceRef.current - stakeRef.current
-    balanceRef.current = next
-    setBalance(next)
+    const balanceAfterDebit = balanceRef.current - stakeRef.current
+    balanceRef.current = balanceAfterDebit
+    setBalance(balanceAfterDebit)
 
-    const finalMagnets = Array.from({ length: REELS }, pickMagnet)
-    const finalGrid    = Array.from({ length: REELS }, () =>
+    // ── Pick final outcome ──
+    const finalGridArr = Array.from({ length: REELS }, () =>
       Array.from({ length: ROWS }, pickSymbol)
     )
+    const finalMagnetsArr = Array.from({ length: REELS }, pickMagnet)
+    setFinalGrid(finalGridArr)
+    setFinalMagnets(finalMagnetsArr)
 
-    // Magnets shuffle — flashes ~9 times then settles.
-    let shuffles = 0
-    magnetTickRef.current = setInterval(() => {
-      shuffles++
-      if (shuffles >= 9 || cancelRef.current) {
-        clearInterval(magnetTickRef.current)
-        magnetTickRef.current = null
-        setMagnets(finalMagnets)
-        return
-      }
-      setMagnets(Array.from({ length: REELS }, pickMagnet))
-    }, 90)
+    // ── Build strips, render them at ty=0 (top symbol showing) ──
+    // ty: integer number of CELL-heights the strip is translated.
+    // ty=0   → first symbol of the strip is in view (random filler).
+    // ty=-(STRIP_LEN-1) → last symbol (the FINAL one) is in view.
+    const newCellStrips = finalGridArr.map(col =>
+      col.map(final => ({
+        symbols: buildSymbolStrip(final),
+        ty: 0,
+        td: 0,
+      }))
+    )
+    const newMagnetStrips = finalMagnetsArr.map(final => ({
+      mults: buildMagnetStrip(final),
+      ty: 0,
+      td: 0,
+    }))
+    setCellStrips(newCellStrips)
+    setMagnetStrips(newMagnetStrips)
 
-    // Reel blur — random emoji every 70ms.
-    spinTickRef.current = setInterval(() => {
-      if (cancelRef.current) return
-      setGrid(Array.from({ length: REELS }, () =>
-        Array.from({ length: ROWS }, pickSymbol)
-      ))
-    }, 70)
+    // Force-commit the ty=0/td=0 starting state before triggering
+    // the transitions — without this React batches both updates
+    // and the browser never sees the FROM state, so no transition
+    // fires.
+    await rafTwo()
+    if (cancelRef.current) return
 
-    // Cascade stop left → right.
-    const settled = emptyGrid()
-    for (let r = 0; r < REELS; r++) {
-      await sleep(r === 0 ? 700 : 220)
-      if (cancelRef.current) {
-        if (spinTickRef.current) { clearInterval(spinTickRef.current); spinTickRef.current = null }
-        if (magnetTickRef.current) { clearInterval(magnetTickRef.current); magnetTickRef.current = null }
-        spinningRef.current = false
-        setSpinning(false)
-        setPhase('idle')
-        return
-      }
-      settled[r] = finalGrid[r]
-      setGrid(prev => prev.map((col, ci) => settled[ci] || col))
-    }
+    // ── Trigger the actual spin transitions ──
+    //
+    //   Magnets stop LEFT → RIGHT first (shorter durations).
+    //   Then reel cells stop LEFT → RIGHT, and within each column
+    //   the rows stop TOP → BOTTOM. So the overall sequence reads
+    //   as: magnets settle, then row-0 cells settle column by
+    //   column, then row-1 cells, then row-2 cells.
+    const MAGNET_BASE     = 600   // ms — first magnet's transition duration
+    const MAGNET_STAGGER  = 220   // each subsequent magnet finishes this much later
+    const REEL_GAP        = 200   // pause between last magnet stop and first reel stop
+    const REEL_BASE       = MAGNET_BASE + (REELS - 1) * MAGNET_STAGGER + REEL_GAP
+    const REEL_STAGGER    = 240   // each column finishes this much after the prev
+    const ROW_STAGGER     = 110   // within a column, each row finishes this much later
 
-    if (spinTickRef.current) {
-      clearInterval(spinTickRef.current)
-      spinTickRef.current = null
-    }
-    setGrid(finalGrid)
+    setMagnetStrips(prev => prev.map((s, i) => ({
+      ...s,
+      ty: -(STRIP_LEN - 1),
+      td: MAGNET_BASE + i * MAGNET_STAGGER,
+    })))
 
-    await sleep(220)
+    setCellStrips(prev => prev.map((col, ci) =>
+      col.map((cell, ri) => ({
+        ...cell,
+        ty: -(STRIP_LEN - 1),
+        td: REEL_BASE + ci * REEL_STAGGER + ri * ROW_STAGGER,
+      }))
+    ))
+
+    // Total time until the last cell has settled.
+    const totalSpinDuration = REEL_BASE + (REELS - 1) * REEL_STAGGER + (ROWS - 1) * ROW_STAGGER
+    await sleep(totalSpinDuration + 160)
     if (cancelRef.current) {
       spinningRef.current = false
       setSpinning(false)
@@ -245,23 +301,42 @@ export default function MagneticSlot() {
       return
     }
 
-    // Magnetism pass.
-    const newReaches = finalGrid.map(reel => {
-      const total = reel.reduce((s, sym) => s + sym.strength, 0)
+    // ── Compute reaches + payouts ──
+    const newReaches = finalGridArr.map(col => {
+      const total = col.reduce((s, sym) => s + sym.strength, 0)
       return strengthToReach(total)
     })
-    const payouts = newReaches.map((reach, ri) =>
-      Math.round((reach * finalMagnets[ri] * stakeRef.current) / REELS)
+    const payouts = newReaches.map((reach, ci) =>
+      Math.round((reach * finalMagnetsArr[ci] * stakeRef.current) / REELS)
     )
     const winTotal = payouts.reduce((s, p) => s + p, 0)
 
-    setReaches(newReaches)
-    setReelPayouts(payouts)
-    setLastWin(winTotal)
+    setReachByCol(newReaches)
+    setPayoutByCol(payouts)
     setPhase('pulling')
 
-    await sleep(900)
+    // ── Sequential per-column pull ──
+    //   For each column ci (left → right):
+    //     1. Start the matching magnet's shake animation.
+    //     2. Mount the pulled-stack for column ci — its rise
+    //        animation runs forwards via CSS keyframes.
+    //     3. Wait for the pull to complete before moving on.
+    const PULL_DURATION = 600   // matches the keyframe duration in CSS
+    for (let ci = 0; ci < REELS; ci++) {
+      if (cancelRef.current) break
+      setShakingMagnet(ci)
+      setPulledCols(prev => {
+        const next = [...prev]
+        next[ci] = true
+        return next
+      })
+      await sleep(PULL_DURATION)
+    }
+    setShakingMagnet(null)
+
     if (cancelRef.current) return
+
+    setLastWin(winTotal)
 
     if (winTotal > 0) {
       const nb = balanceRef.current + winTotal
@@ -288,24 +363,18 @@ export default function MagneticSlot() {
         break
       }
       await spin()
-      await sleep(420)
+      await sleep(500)
     }
   }
 
   function onSpinClick() {
-    if (autoSpin) {
-      setAutoSpin(false); autoRef.current = false
-      return
-    }
+    if (autoSpin) { setAutoSpin(false); autoRef.current = false; return }
     if (!canAfford || spinning) return
     spin()
   }
 
   function onAutoClick() {
-    if (autoSpin) {
-      setAutoSpin(false); autoRef.current = false
-      return
-    }
+    if (autoSpin) { setAutoSpin(false); autoRef.current = false; return }
     if (!canAfford || spinning) return
     setAutoSpin(true); autoRef.current = true
     autoLoop()
@@ -317,45 +386,75 @@ export default function MagneticSlot() {
         <main className="magnetic-stage" aria-label="Magnetic">
           {/* ── Magnets row ── */}
           <div className="magnetic-magnets">
-            {magnets.map((mult, i) => {
-              const isHot = mult >= 50
-              const captured = reaches[i] === 1
+            {magnetStrips.map((strip, mi) => {
+              const finalMult = finalMagnets[mi]
+              const isHot     = finalMult >= 50
+              const captured  = pulledCols[mi] && (reachByCol[mi] || 0) === 1
+              const shaking   = shakingMagnet === mi
               return (
                 <div
-                  key={i}
+                  key={mi}
                   className={
                     'magnetic-magnet' +
-                    (isHot ? ' magnetic-magnet--hot' : '') +
-                    (captured ? ' is-captured' : '')
+                    (isHot    ? ' magnetic-magnet--hot' : '') +
+                    (captured ? ' is-captured'          : '') +
+                    (shaking  ? ' is-shaking'           : '')
                   }
                 >
-                  <span className="magnetic-magnet-body">🧲</span>
-                  <span className="magnetic-magnet-mult">×{mult}</span>
+                  <div
+                    className="magnetic-magnet-strip"
+                    style={{
+                      transform: `translateY(calc(var(--magnet-h) * ${strip.ty}))`,
+                      transition: strip.td > 0
+                        ? `transform ${strip.td}ms cubic-bezier(0.18, 0.6, 0.32, 1)`
+                        : 'none',
+                    }}
+                  >
+                    {strip.mults.map((mult, si) => (
+                      <span key={si} className="magnetic-magnet-cell">
+                        <span className="magnetic-magnet-body">🧲</span>
+                        <span className="magnetic-magnet-mult">×{mult}</span>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )
             })}
           </div>
 
-          {/* ── Pull zone ── */}
-          <div className="magnetic-pull-zone">
-            {grid.map((reel, ri) => {
-              const reach = reaches[ri]
-              const isPulling = phase === 'pulling' || phase === 'settled'
-              const reachPct = reach == null ? 0 : Math.round(reach * 100)
-              const payout = reelPayouts[ri]
+          {/* ── Pull-zone (between magnets and reels) ──
+            * Each column carries a pulled-stack that mounts when
+            * that column is being pulled. The stack rises from
+            * bottom=0 (right above the reels) to bottom=var(--reach)
+            * via a CSS keyframe animation that fires on mount.
+            */}
+          <div className="magnetic-pull-zone" aria-hidden="true">
+            {Array.from({ length: REELS }).map((_, ci) => {
+              const reach     = reachByCol[ci] || 0
+              const reachPct  = Math.round(reach * 100)
+              const payout    = payoutByCol[ci]
+              const pulled    = pulledCols[ci]
               return (
                 <div
-                  key={ri}
-                  className={'magnetic-pull-col' + (isPulling ? ' is-pulling' : '')}
+                  key={ci}
+                  className={'magnetic-pull-col' + (pulled ? ' is-pulled' : '')}
                   style={{ '--reach': `${reachPct}%` }}
                 >
-                  {isPulling && reach != null && (
+                  {pulled && reach > 0 && (
                     <div className="magnetic-pulled-stack">
-                      {reel.map((sym, ci) => (
-                        <span key={ci} className="magnetic-pulled-symbol">
-                          {sym.emoji}
-                        </span>
-                      ))}
+                      {[0, 1, 2].map(ri => {
+                        const sym = finalGrid[ci]?.[ri]
+                        if (!sym || !sym.emoji) return null
+                        return (
+                          <span
+                            key={ri}
+                            className="magnetic-pulled-symbol"
+                            style={{ animationDelay: `${ri * 90}ms` }}
+                          >
+                            {sym.emoji}
+                          </span>
+                        )
+                      })}
                       {payout > 0 && (
                         <span className="magnetic-reel-payout">
                           +{formatCurrency(payout, currency, rates)}
@@ -368,25 +467,44 @@ export default function MagneticSlot() {
             })}
           </div>
 
-          {/* ── Reels (fade out when pulling) ── */}
-          <div className={'magnetic-reels' + (phase === 'pulling' || phase === 'settled' ? ' is-cleared' : '')}>
-            {grid.map((reel, ri) => (
-              <div key={ri} className="magnetic-reel">
-                {reel.map((sym, ci) => (
-                  <span key={ci} className="magnetic-cell">{sym.emoji}</span>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* ── Win bar ── */}
-          <div className={'magnetic-winbar ' + (lastWin > 0 ? 'is-win' : '')}>
-            <span className="magnetic-winbar-label">{t.slotPotential || 'Выигрыш'}</span>
-            <strong className="magnetic-winbar-value">
-              {winLabel ?? formatCurrency(0, currency, rates)}
-            </strong>
+          {/* ── Reels ── */}
+          <div className="magnetic-reels">
+            {cellStrips.map((col, ci) => {
+              const pulled = pulledCols[ci]
+              return (
+                <div key={ci} className={'magnetic-reel' + (pulled ? ' is-pulled' : '')}>
+                  {col.map((strip, ri) => (
+                    <span key={ri} className="magnetic-cell">
+                      <div
+                        className="magnetic-strip"
+                        style={{
+                          transform: `translateY(calc(var(--cell-h) * ${strip.ty}))`,
+                          transition: strip.td > 0
+                            ? `transform ${strip.td}ms cubic-bezier(0.18, 0.6, 0.32, 1)`
+                            : 'none',
+                        }}
+                      >
+                        {strip.symbols.map((sym, si) => (
+                          <span key={si} className="magnetic-strip-sym">
+                            {sym.emoji}
+                          </span>
+                        ))}
+                      </div>
+                    </span>
+                  ))}
+                </div>
+              )
+            })}
           </div>
         </main>
+
+        {/* Win bar — OUTSIDE the stage frame, like the user asked. */}
+        <div className={'magnetic-winbar' + (lastWin > 0 ? ' is-win' : '')}>
+          <span className="magnetic-winbar-label">{t.slotPotential || 'Выигрыш'}</span>
+          <strong className="magnetic-winbar-value">
+            {winLabel ?? formatCurrency(0, currency, rates)}
+          </strong>
+        </div>
 
         {/* ── Controls: balance / spin / stake ── */}
         <section className="magnetic-controls">
