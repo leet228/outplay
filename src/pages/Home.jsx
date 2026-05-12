@@ -1698,14 +1698,28 @@ function PlinkoSlotArtwork({ large = false, animated = false }) {
       {/* Frozen ball mid-bounce, slightly off-centre to suggest motion */}
       <span className="plinko-card-ball" />
       <div className="plinko-card-slots">
-        {slots.map((s, i) => (
-          <span
-            key={i}
-            className={`plinko-card-slot plinko-card-slot--${i === 0 || i === slots.length - 1 ? 'hot' : (Math.abs(i - 3) <= 1 ? 'cold' : 'warm')}`}
-          >
-            {s}
-          </span>
-        ))}
+        {slots.map((s, i) => {
+          // Tone class (hot/warm/cold) mirrors the in-game palette.
+          // Slot 6 (rightmost ×9) is also flagged as the bounce
+          // animation's landing target so its pop stays in sync
+          // with the ball's arrival.
+          const tone = i === 0 || i === slots.length - 1
+            ? 'hot'
+            : (Math.abs(i - 3) <= 1 ? 'cold' : 'warm')
+          const isTarget = i === slots.length - 1
+          return (
+            <span
+              key={i}
+              className={
+                'plinko-card-slot' +
+                ' plinko-card-slot--' + tone +
+                (isTarget ? ' plinko-card-slot--target' : '')
+              }
+            >
+              {s}
+            </span>
+          )
+        })}
       </div>
     </div>
   )

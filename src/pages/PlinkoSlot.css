@@ -273,6 +273,20 @@
   100% { opacity: 0;    transform: scale(1.00) translateY(0); }
 }
 
+/* The whole slot block dips DOWN on impact — not just the bright
+ * overlay. Same 0.30 s duration and easing as .plinko-slot-pulse
+ * so the block + overlay travel together. Triggered by .is-hit,
+ * which flashSlot() adds for 280 ms. */
+.plinko-slot.is-hit {
+  animation: plinko-slot-block-jerk 0.30s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes plinko-slot-block-jerk {
+  0%   { transform: translateY(0); }
+  35%  { transform: translateY(3px); }
+  70%  { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
+
 /* ── Balls-per-launch row ── */
 .plinko-launch-row {
   margin-top: 12px;
@@ -636,16 +650,100 @@
     0 0 3px rgba(255, 255, 255, 0.95);
   z-index: 2;
 }
+/* Card preview ball — mirrors the in-game ball's discrete step
+ * motion: from peg to peg with gravity-style ease-in on each
+ * descent. The in-game ball uses CSS transitions triggered by
+ * setBalls() row updates (cubic-bezier(0.55, 0, 1, 0.55) for top,
+ * 180 ms per step). We replicate the same feel by putting per-
+ * keyframe `animation-timing-function: cubic-bezier(...)` on each
+ * row-to-row segment of this loop.
+ *
+ * Ball drifts rightward through 6 visible peg rows, settles into
+ * the rightmost ×9 slot, holds while the slot pulse plays, fades
+ * out, and silently teleports back to the top for the next loop. */
 .plinko-slot-card-art--animated .plinko-card-ball {
-  animation: plinko-card-ball-bounce 2.6s ease-in-out infinite;
+  animation: plinko-card-ball-fall 3.6s linear infinite;
 }
-@keyframes plinko-card-ball-bounce {
-  0%   { left: 50%; top: 14%; }
-  20%  { left: 45%; top: 30%; }
-  40%  { left: 53%; top: 46%; }
-  60%  { left: 48%; top: 60%; }
-  80%  { left: 56%; top: 70%; }
-  100% { left: 50%; top: 14%; }
+@keyframes plinko-card-ball-fall {
+  /* Each segment uses cubic-bezier(0.55, 0, 1, 0.55) — same easing
+   * as the in-game ball's `top` transition — so the ball
+   * accelerates between pegs like real gravity, with a soft
+   * landing on the peg. */
+  0% {
+    left: 50%; top: 0%; opacity: 1;
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55);
+  }
+  8%  { left: 48%; top: 14%; animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55); }  /* row 0 */
+  17% { left: 54%; top: 22%; animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55); }  /* row 1 */
+  26% { left: 58%; top: 29%; animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55); }  /* row 2 */
+  35% { left: 66%; top: 37%; animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55); }  /* row 3 */
+  44% { left: 74%; top: 45%; animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55); }  /* row 4 */
+  53% { left: 84%; top: 53%; animation-timing-function: cubic-bezier(0.55, 0, 1, 0.55); }  /* row 5 */
+  62% { left: 88%; top: 66%; opacity: 1; }              /* settled in slot */
+  78% { left: 88%; top: 66%; opacity: 1; }              /* hold while slot pulses */
+  84% { left: 88%; top: 66%; opacity: 0; }              /* fade out */
+  99% { left: 50%; top: 0%;  opacity: 0; }              /* hidden teleport */
+  100% { left: 50%; top: 0%; opacity: 1; }
+}
+
+/* The slot the ball lands in fires a pulse identical to the
+ * in-game `.plinko-slot-pulse` overlay: bright white-to-blue
+ * gradient that scales up while jerking 3 px DOWN, then fades.
+ * Rendered as ::after on the target slot, synced to the ball's
+ * landing at 62 % of the 3.6 s loop.
+ *
+ * The translateY(3px) is what reads as "the × jerks down" —
+ * matches what flashSlot() produces in the real game. */
+.plinko-slot-card-art--animated .plinko-card-slot--target {
+  position: relative;
+  overflow: visible;
+}
+.plinko-slot-card-art--animated .plinko-card-slot--target::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(147, 197, 253, 0.55));
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.92) translateY(0);
+  transform-origin: 50% 50%;
+  animation: plinko-card-slot-pulse 3.6s linear infinite;
+}
+@keyframes plinko-card-slot-pulse {
+  /* Pulse is invisible for most of the cycle. Window 62 %–76 %
+   * (= 504 ms) replays the in-game pulse keyframes (originally
+   * 0–100 % of a 0.3 s animation) — scale 0.92 → 1.22 → 1.10 → 1,
+   * translateY 0 → 3px → 1px → 0, opacity 0 → 0.95 → 0.45 → 0. */
+  0%, 62% {
+    opacity: 0;
+    transform: scale(0.92) translateY(0);
+  }
+  67% {
+    opacity: 0.95;
+    transform: scale(1.22) translateY(3px);
+  }
+  72% {
+    opacity: 0.45;
+    transform: scale(1.10) translateY(1px);
+  }
+  76%, 100% {
+    opacity: 0;
+    transform: scale(1.00) translateY(0);
+  }
+}
+
+/* Subtle parent-slot reaction so the multiplier text itself also
+ * visibly dips down on impact, not just the bright overlay. The
+ * larger preview uses bigger dip values via the --large override
+ * below so the motion stays readable at 2× scale. */
+.plinko-slot-card-art--animated .plinko-card-slot--target {
+  animation: plinko-card-slot-jerk 3.6s linear infinite;
+}
+@keyframes plinko-card-slot-jerk {
+  0%, 62%, 80%, 100% { transform: translateY(0); filter: brightness(1); }
+  67%                { transform: translateY(2px); filter: brightness(1.4); }
+  74%                { transform: translateY(0);   filter: brightness(1.15); }
 }
 
 /* Slot row sits just under the peg field — not pinned to the bottom
@@ -703,7 +801,18 @@
 }
 .plinko-slot-card-art--large .plinko-card-peg { width: 7px; height: 7px; margin-left: -3.5px; margin-top: -3.5px; }
 .plinko-slot-card-art--large .plinko-card-ball { width: 16px; height: 16px; margin-left: -8px; margin-top: -8px; }
-.plinko-slot-card-art--large .plinko-card-slot { height: 20px; font-size: clamp(9px, 1.4vw, 12px); }
+/* Overlay preview slots: shorter height, each slot ~88 % of its
+ * grid cell (so visually narrower than a full-stretch cell) and
+ * centred within the cell so column centres stay put — the ball
+ * still lands in slot 6's centre at ~88 %. Tight 1 px gap keeps
+ * the row reading as a dense bucket strip. */
+.plinko-slot-card-art--large .plinko-card-slots { gap: 0; }
+.plinko-slot-card-art--large .plinko-card-slot {
+  height: 16px;
+  width: 78%;
+  justify-self: center;
+  font-size: clamp(7px, 1.15vw, 10px);
+}
 
 /* ─────────────────────────────────────────────────────────────
  * Exit-confirmation dialog. Mirrors the Tower Stack / Block Blast
