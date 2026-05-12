@@ -1495,8 +1495,8 @@ const SLOTS = [
     titleKey: 'slotMagneticTitle',
     subKey: 'slotMagneticSub',
     route: '/slots/magnetic',
-    accent: '#38bdf8',
-    shadow: '#0c4a6e',
+    accent: '#a78bfa',
+    shadow: '#4c1d95',
   },
 ]
 

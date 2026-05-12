@@ -376,10 +376,21 @@ export default function MagneticSlot() {
         }
       }
 
-      await sleep(COLUMN_GAP)
+      // Skip the trailing gap after the last column — we add a
+      // dedicated tail-wait below to let the last fly-in finish
+      // before we flip the phase to 'settled' and reveal payouts.
+      if (ci < REELS - 1) {
+        await sleep(COLUMN_GAP)
+      }
     }
     setShakingMagnet(null)
 
+    // Wait for the LAST column's last symbol to finish its fly-in
+    // animation. The CSS keyframe runs 900 ms; the last symbol
+    // mounted SYMBOL_PULL_INTERVAL ms ago, so ~440 ms still left.
+    // Buffer pushes that to 560 ms so payouts don't pop while the
+    // symbol is still settling.
+    await sleep(560)
     if (cancelRef.current) return
 
     setLastWin(winTotal)
@@ -481,8 +492,8 @@ export default function MagneticSlot() {
               const reach     = reachByCol[ci] || 0
               const payout    = payoutByCol[ci]
               const rows      = pulledRows[ci]
-              const allPulled = rows >= ROWS
-              const reachPct = Math.round(reach * 100)
+              const reachPct  = Math.round(reach * 100)
+              const showPayout = phase === 'settled' && payout > 0
               return (
                 <div
                   key={ci}
@@ -522,7 +533,7 @@ export default function MagneticSlot() {
                           </span>
                         )
                       })}
-                      {allPulled && payout > 0 && (
+                      {showPayout && (
                         <span className="magnetic-reel-payout">
                           +{formatCurrency(payout, currency, rates)}
                         </span>
