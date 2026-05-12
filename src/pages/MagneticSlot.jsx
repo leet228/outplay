@@ -7,6 +7,16 @@ import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
 import './MagneticSlot.css'
 
+// 16×16 textures. Vite resolves these to hashed asset URLs at
+// build time; we attach them inline as background-image so the
+// CSS stays purely stylistic and the textures stay data-driven.
+import texCoin    from '../assets/games/magnetic/coin.png'
+import texBolt    from '../assets/games/magnetic/bolt.png'
+import texCompass from '../assets/games/magnetic/compas.png'
+import texOrb     from '../assets/games/magnetic/plazm_orb.png'
+import texGem     from '../assets/games/magnetic/scatter.png'
+import texMagnet  from '../assets/games/magnetic/magnet.png'
+
 // ─────────────────────────────────────────────────────────────
 // MAGNETIC — popular slot.
 //
@@ -55,17 +65,18 @@ function pickMagnet() {
 }
 
 // Symbol strengths are FIXED tier ratios — each non-blank, non-
-// scatter symbol always lands in the same tier cell. ⚡ volt is
-// a SCATTER: it doesn't get pulled toward the magnet, just stays
-// put in its reel cell. (Bonus mechanic for N+ scatters is left
-// open for later; for now it just doesn't contribute to payout.)
+// scatter symbol always lands in the same tier cell. 💎 gem is
+// the SCATTER: it doesn't get pulled toward the magnet, just
+// stays put in its reel cell. (Bonus mechanic for N+ scatters is
+// left open for later; for now it just doesn't contribute to
+// payout.)
 const SYMBOLS = [
-  { id: 'blank', emoji: '',   strength: 0,    weight: 30 },
-  { id: 'bolt',  emoji: '🔩', strength: 0.25, weight: 32 },
-  { id: 'coin',  emoji: '🪙', strength: 0.50, weight: 20 },
-  { id: 'troph', emoji: '🏆', strength: 0.75, weight: 11 },
-  { id: 'gem',   emoji: '💎', strength: 1.00, weight: 5  },
-  { id: 'volt',  emoji: '⚡', strength: 0,    weight: 2, isScatter: true },
+  { id: 'blank',   texture: null,        strength: 0,    weight: 30 },
+  { id: 'coin',    texture: texCoin,     strength: 0.25, weight: 32 },
+  { id: 'bolt',    texture: texBolt,     strength: 0.50, weight: 20 },
+  { id: 'compass', texture: texCompass,  strength: 0.75, weight: 11 },
+  { id: 'orb',     texture: texOrb,      strength: 1.00, weight: 5  },
+  { id: 'gem',     texture: texGem,      strength: 0,    weight: 2, isScatter: true },
 ]
 const SYM_WEIGHT_SUM = SYMBOLS.reduce((s, x) => s + x.weight, 0)
 
@@ -367,7 +378,10 @@ export default function MagneticSlot() {
           return next
         })
         const sym = finalGridArr[ci][ri]
-        if (sym && sym.emoji) {
+        // Skip the inter-symbol wait when the row is blank — the
+        // cell was already empty so dwelling on it reads as a
+        // freeze.
+        if (sym && sym.texture) {
           await sleep(SYMBOL_PULL_INTERVAL)
         }
       }
@@ -469,7 +483,10 @@ export default function MagneticSlot() {
                   >
                     {strip.mults.map((mult, si) => (
                       <span key={si} className="magnetic-magnet-cell">
-                        <span className="magnetic-magnet-body">🧲</span>
+                        <span
+                          className="magnetic-magnet-body"
+                          style={{ backgroundImage: `url("${texMagnet}")` }}
+                        />
                         <span className="magnetic-magnet-mult">×{mult}</span>
                       </span>
                     ))}
@@ -503,7 +520,7 @@ export default function MagneticSlot() {
               const pulledItems = []
               for (let idx = 0; idx < rows; idx++) {
                 const sym = finalGrid[ci]?.[idx]
-                if (!sym || sym.isScatter || sym.strength === 0 || !sym.emoji) continue
+                if (!sym || sym.isScatter || sym.strength === 0 || !sym.texture) continue
                 const tier = Math.round(sym.strength * 100)
                 const stackIdx = tierCounters[tier] || 0
                 tierCounters[tier] = stackIdx + 1
@@ -539,10 +556,9 @@ export default function MagneticSlot() {
                       style={{
                         '--tier-pct': `${tier}%`,
                         '--stack-idx': stackIdx,
+                        backgroundImage: `url("${sym.texture}")`,
                       }}
-                    >
-                      {sym.emoji}
-                    </span>
+                    />
                   ))}
 
                   {/* Column payout pill — appears once everything
@@ -586,9 +602,11 @@ export default function MagneticSlot() {
                             }}
                           >
                             {strip.symbols.map((sym, si) => (
-                              <span key={si} className="magnetic-strip-sym">
-                                {sym.emoji}
-                              </span>
+                              <span
+                                key={si}
+                                className="magnetic-strip-sym"
+                                style={sym.texture ? { backgroundImage: `url("${sym.texture}")` } : undefined}
+                              />
                             ))}
                           </div>
                         )}

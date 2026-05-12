@@ -147,8 +147,13 @@
 }
 
 .magnetic-magnet-body {
-  font-size: 18px;
-  line-height: 1;
+  width: 24px;
+  height: 24px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
 }
 
@@ -244,13 +249,21 @@
     + var(--cell-h) / 2
     + var(--stack-idx, 0) * 10px
   );
-  font-size: 22px;
-  line-height: 1;
+  width: var(--cell-h);
+  height: var(--cell-h);
   pointer-events: none;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
-  text-shadow:
-    0 0 8px rgba(240, 171, 252, 0.85),
-    0 0 16px rgba(196, 181, 253, 0.45);
+  /* Pixelated 16→32 upscale of the symbol texture. */
+  background-size: 32px 32px;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  /* Neon glow + drop shadow as filters (since the element has no
+   * text any more — text-shadow would do nothing on a div). */
+  filter:
+    drop-shadow(0 0 6px rgba(240, 171, 252, 0.80))
+    drop-shadow(0 0 12px rgba(196, 181, 253, 0.40))
+    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
   opacity: 0;
   transform: translate(-50%, calc(-50% + 100px));
   animation: magnetic-fly-in 900ms cubic-bezier(0.18, 0.95, 0.3, 1) forwards;
@@ -341,13 +354,16 @@
 
 .magnetic-strip-sym {
   height: var(--cell-h);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  line-height: 1;
   flex-shrink: 0;
-  /* Empty strings just render as zero-content — no `·` dots. */
+  /* Texture rendering — pixelated upscale of the 16×16 PNG to
+   * 32×32 (exactly 2×, so each source pixel is a clean square,
+   * no anti-aliasing blur). 32 fits inside the 38 px cell with
+   * a comfortable 3 px gutter on each side. */
+  background-size: 32px 32px;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 /* ─────────────────────────────────────────────────────────────
