@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import useGameStore from '../store/useGameStore'
@@ -95,30 +95,132 @@ function ballNormX(r, k) {
   return compressX(local, r === ROWS ? SLOT_HFRAC : PEG_HFRAC)
 }
 
-// Memoised single-ball renderer. With 100 balls in flight, animateBall()
-// fires a setBalls() per row-step per ball — without React.memo each
-// step diffs all 100 nodes. Memoised on (id, row, col), so when one
-// ball updates, the other 99 skip reconciliation entirely. Big perf
-// win on phones once ballsPerLaunch hits 50+.
-const PlinkoBall = React.memo(function PlinkoBall({ row, col }) {
-  let topCss
-  if (row === 0) {
-    topCss = '0px'
-  } else if (row === ROWS) {
-    topCss = 'calc(100% - var(--plinko-slot-row-h, 4%) / 2)'
-  } else {
-    const frac = rowNormY(row - 0.5)
-    topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 4%)))`
-  }
+// Imperative single-ball renderer.
+//
+// Old model: ball.row / ball.col lived in React state and animateBall()
+// fired setBalls() once per row-step per ball. With 100 balls × 16 rows
+// that was 1600 setState calls per launch — each one triggering a React
+// reconciliation pass AND each ball's inline `style={{ left, top }}`
+// causing a full layout pass (left/top are paint+layout properties).
+//
+// New model:
+//   - Ball receives id / path / landing / startDelay as props
+//   - useEffect schedules N setTimeouts (one per row step), each one
+//     writing `transform: translate3d(...)` directly to the DOM node
+//     via ref — bypassing React entirely during the fall
+//   - `transform` is compositor-only; no layout pass, no paint
+//   - React state changes only on spawn (one setBalls append) and on
+//     land (rAF-batched removal). Mid-flight is React-quiet.
+//   - On landing, `onLandRef.current(id, landing)` fires the same
+//     win-credit + flashSlot + removeBalls logic the old animateBall did
+//
+// Custom React.memo comparator returns true unconditionally → once a
+// ball is mounted, React never re-renders it. The DOM updates happen
+// via imperative writes only.
+const PlinkoBall = React.memo(function PlinkoBall({ id, path, landing, startDelay, dimsRef, onLandRef, cancelRef }) {
+  const elRef = useRef(null)
+
+  // Callback ref: runs synchronously when the node mounts (before
+  // first paint). We use it to write the row-0 transform BEFORE the
+  // browser has a chance to paint the ball at (0, 0) — otherwise
+  // the CSS transition would animate from origin to row-0 position
+  // and produce a visible "ball flying from corner" glitch.
+  const setRef = useCallback((node) => {
+    elRef.current = node
+    if (!node || node.dataset.plinkoInited === '1') return
+    const d = dimsRef.current
+    if (!d || !d.w) return
+    node.dataset.plinkoInited = '1'
+    const xPx = ballNormX(0, 0) * d.w
+    // No transition for the initial placement — set transform, then
+    // force a synchronous style flush via offsetHeight before the
+    // browser paints. After that, the standard CSS transition applies
+    // to all subsequent writes.
+    node.style.transition = 'none'
+    node.style.transform  = `translate3d(${xPx}px, 0px, 0)`
+    // eslint-disable-next-line no-unused-expressions
+    node.offsetHeight
+    node.style.transition = ''
+  }, [dimsRef])
+
+  useEffect(() => {
+    const timers = []
+    if (cancelRef.current) return
+
+    const writePos = (r) => {
+      const node = elRef.current
+      if (!node || cancelRef.current) return
+      const d = dimsRef.current
+      if (!d || !d.w) return
+      const pegsH = d.h - d.slotH
+      let yPx, xN
+      if (r >= ROWS) {
+        xN  = ballNormX(ROWS, path[ROWS])
+        yPx = d.h - d.slotH / 2
+      } else {
+        // Mid-fall positions sit between row r-1 and row r so the
+        // ball reads as bouncing through the peg gaps, not landing on
+        // pegs themselves. Matches the old (row - 0.5) / (ROWS - 1)
+        // mapping that PlinkoBall used to compute topCss.
+        xN  = ballNormX(r, path[r])
+        yPx = ((r - 0.5) / (ROWS - 1)) * pegsH
+      }
+      const xPx = xN * d.w
+      node.style.transform = `translate3d(${xPx}px, ${yPx}px, 0)`
+    }
+
+    // Wait the per-ball stagger, then walk through the row steps.
+    timers.push(setTimeout(() => {
+      if (cancelRef.current) return
+      for (let r = 1; r <= ROWS; r++) {
+        timers.push(setTimeout(() => {
+          if (cancelRef.current) return
+          writePos(r)
+          if (r === ROWS) {
+            // Instant hide — the bucket pulse animation plays
+            // underneath; the ball lingering on top would obscure it.
+            const node = elRef.current
+            if (node) node.style.opacity = '0'
+            onLandRef.current?.(id, landing)
+          }
+        }, (r - 1) * 180))
+      }
+    }, startDelay))
+
+    return () => {
+      for (const t of timers) clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return <span ref={setRef} className="plinko-ball" aria-hidden="true" />
+}, () => true)
+
+// Single bucket on the multiplier row. Wrapped in React.memo so that
+// during a 100-ball landing burst — where setHitSlots flips one slot's
+// `ts` at a time — only the slot whose timestamp changed reconciles.
+// The other 16 cells return the same vdom and bail out early.
+//
+// `ts` is the timestamp of the most recent ball-landing on this slot
+// (cleared 280 ms later by flashSlot's setTimeout). When it changes:
+//   - `.is-hit` toggles on/off — drives the parent block's dip-down
+//     animation (plinko-slot-block-jerk)
+//   - The pulse child remounts under a fresh key, replaying its
+//     scale + downward translate keyframes from frame 0
+const SlotCell = React.memo(function SlotCell({ mul, ts }) {
   return (
     <span
-      className="plinko-ball"
-      style={{
-        left: `${ballNormX(row, col) * 100}%`,
-        top:  topCss,
-      }}
-      aria-hidden="true"
-    />
+      className={`plinko-slot plinko-slot--tier${tierFor(mul)} ${ts ? 'is-hit' : ''}`}
+    >
+      <span className="plinko-slot-mul">{formatMul(mul)}</span>
+      {ts != null && (
+        <span
+          key={`pulse-${ts}`}
+          className="plinko-slot-pulse"
+          aria-hidden="true"
+        />
+      )}
+    </span>
   )
 })
 
@@ -206,6 +308,18 @@ export default function PlinkoSlot() {
   // board and the landing counter would be poisoned.
   const inFlightRef         = useRef(false)
 
+  // Game-area dimensions, kept fresh by a ResizeObserver. Balls in
+  // flight compute their pixel positions from these via the imperative
+  // writePos path in PlinkoBall — no React state churn on resize.
+  const gameAreaRef = useRef(null)
+  const dimsRef     = useRef({ w: 0, h: 0, slotH: 0 })
+
+  // Stable onLand reference handed to every PlinkoBall (refs don't
+  // change identity, so it doesn't trip React.memo). The closure
+  // reads from refs internally so capturing first-render bindings is
+  // safe — none of the inner functions depend on stale prop closures.
+  const onLandRef = useRef(null)
+
   useEffect(() => { balanceRef.current        = balance },        [balance])
   useEffect(() => { stakeRef.current          = stake },          [stake])
   useEffect(() => { riskRef.current           = risk },           [risk])
@@ -214,6 +328,27 @@ export default function PlinkoSlot() {
   useEffect(() => () => {
     cancelRef.current = true
     if (bounceTimerRef.current) clearTimeout(bounceTimerRef.current)
+  }, [])
+
+  // Game-area size tracker. Balls compute their pixel positions from
+  // these dims on each row step. Updated on mount + every resize so a
+  // mid-flight Telegram WebApp resize (keyboard open / orientation
+  // change) keeps balls aligned with the peg field below.
+  useEffect(() => {
+    const el = gameAreaRef.current
+    if (!el) return
+    const measure = () => {
+      const rect = el.getBoundingClientRect()
+      // --plinko-slot-row-h is 4% of game-area height (CSS-defined).
+      // .plinko-pegs lives inside .plinko-game-area, so its inset
+      // bottom resolves against game-area's height.
+      const slotH = rect.height * 0.04
+      dimsRef.current = { w: rect.width, h: rect.height, slotH }
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [])
 
   const stakeIndex = BETS.indexOf(stake)
@@ -380,22 +515,16 @@ export default function PlinkoSlot() {
     })
   }
 
-  // Animate one ball through the peg field. The ball is already in
-  // state (added by dropLaunch's batched spawn) — this just walks it
-  // through the row updates, pays out, and queues its removal.
-  // Tracks against ballsLandedRef / ballsExpectedRef and triggers the
-  // launch finalize once the last ball settles.
-  async function animateBall(id, path, landing) {
+  // Per-ball landing handler. Called by PlinkoBall's final setTimeout
+  // when the ball reaches the last row (= a multiplier bucket). All
+  // the row-step animation that animateBall() used to do has moved
+  // into PlinkoBall's imperative useEffect — this function only
+  // handles the moment of impact: payout, slot flash, ball removal,
+  // and the per-launch finalize gate.
+  const onLand = useCallback((id, landing) => {
     if (cancelRef.current) return
     const currentRisk  = riskRef.current
     const currentStake = stakeRef.current
-
-    for (let r = 1; r <= ROWS; r++) {
-      if (cancelRef.current) return
-      setBalls(prev => prev.map(b => b.id === id ? { ...b, row: r, col: path[r] } : b))
-      await sleep(180)
-    }
-    if (cancelRef.current) return
 
     // Pay (optimistic local credit — server reconciles at finalize).
     // commitWin() rAF-batches setBalance + setLaunchWin so a 100-ball
@@ -409,12 +538,11 @@ export default function PlinkoSlot() {
     if (mul >= 1) maybeHaptic('success')
     else          maybeHaptic('light')
 
-    // Drop the ball IMMEDIATELY on impact — the slot's pop / glow
-    // animation (queued by flashSlot above) still plays on the
-    // bucket after, so the player sees the multiplier reaction
-    // without the ball lingering on top of it. removeBalls is
-    // rAF-batched so 100 simultaneous landings still coalesce
-    // into ~16 setBalls calls.
+    // The pop / glow animation on the bucket plays underneath; the
+    // ball is already opacity 0 from PlinkoBall's landing write, but
+    // we still queue the React unmount so it leaves the tree. Removal
+    // is rAF-batched so 100 simultaneous landings coalesce into ~16
+    // setBalls calls.
     removeBalls([id])
 
     // Track landings — when the last ball of the launch settles, clear
@@ -428,7 +556,12 @@ export default function PlinkoSlot() {
       inFlightRef.current = false
       finalizeLaunch()
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Keep the ref synced so PlinkoBall's useEffect (mounted once with
+  // an empty dep array) can always reach the freshest onLand without
+  // re-binding.
+  onLandRef.current = onLand
 
   // Finalize the active launch on the server (real users only).
   // Reconciles the client's optimistic balance with the server's
@@ -518,24 +651,18 @@ export default function PlinkoSlot() {
     setLaunchWin(0)
     haptic('light')
 
-    // Pre-roll every ball's path up front so we can spawn them all in a
-    // single setBalls() commit. Without this, a 100-ball launch would
-    // fire 100 separate "append ball" renders during the spawn window
-    // (one every 14 ms) — each diffing the growing balls array.
-    const launchSeed = Date.now()
-    const newBalls = []
-    const meta = []
-    for (let i = 0; i < N; i++) {
-      const id = `b${launchSeed}-${i}`
-      const { path, landing } = rollPath()
-      newBalls.push({ id, row: 0, col: 0 })
-      meta.push({ id, path, landing })
+    // Safety: ResizeObserver's first callback is rAF-scheduled, so on
+    // ultra-fast first drops the dims ref may still be zero. Force a
+    // synchronous measure here so PlinkoBall always has valid pixel
+    // dimensions to work with before its useEffect fires.
+    if (gameAreaRef.current && (!dimsRef.current.w || !dimsRef.current.h)) {
+      const rect = gameAreaRef.current.getBoundingClientRect()
+      dimsRef.current = {
+        w: rect.width,
+        h: rect.height,
+        slotH: rect.height * 0.04,
+      }
     }
-
-    // ONE commit — all N balls appear at row 0 simultaneously. Visually
-    // they're stacked at top centre; the cascade kicks in 140 ms later
-    // as each ball's row-step loop starts on its own staggered timer.
-    setBalls(prev => [...prev, ...newBalls])
 
     // ── Per-launch stagger ──
     // Tuned so each launch finishes draining inside the user-visible
@@ -555,10 +682,21 @@ export default function PlinkoSlot() {
                   : N <= 20 ? 60
                   : N <= 50 ? 35
                   : 42
+
+    // Pre-roll every ball's path + assign its individual start delay,
+    // then commit them all in a single setBalls() so React mounts the
+    // whole batch in one paint. Each ball's PlinkoBall useEffect then
+    // schedules its own row-step setTimeouts (writing transform
+    // directly to its DOM ref) — no further setBalls() calls happen
+    // until the ball lands and `removeBalls` rAF-batches the unmount.
+    const launchSeed = Date.now()
+    const newBalls = []
     for (let i = 0; i < N; i++) {
-      const m = meta[i]
-      setTimeout(() => animateBall(m.id, m.path, m.landing), 140 + i * stagger)
+      const id = `b${launchSeed}-${i}`
+      const { path, landing } = rollPath()
+      newBalls.push({ id, path, landing, startDelay: 140 + i * stagger })
     }
+    setBalls(prev => [...prev, ...newBalls])
   }
 
   // Auto-loop: chains launches as long as auto is on and balance allows.
@@ -645,38 +783,24 @@ export default function PlinkoSlot() {
     })
   ), [])
 
-  // ── Memoised slot row ──
-  // Re-renders only on risk change (mults table) or hit pulse — NOT on
-  // every ball-state update during a launch.
+  // ── Slot row ──
+  // Each cell is its own memoised component keyed on (mul, ts) — so
+  // when a single ball lands and setHitSlots flips ONE slot's ts,
+  // only that cell re-renders; the other 16 short-circuit through
+  // React.memo. Old model used a useMemo over the whole row keyed on
+  // [mults, hitSlots], which forced all 17 spans through reconciliation
+  // every single hit. With 100-ball bursts producing ~25 hits/sec, that
+  // was the main FPS drop the moment balls reached the buckets.
   //
   // Per-hit visible pulse: the slot itself is keyed by `slot-${k}` so
   // it keeps a stable identity, but the `.plinko-slot-pulse` overlay
   // child is keyed by `pulse-${ts}` — a fresh ts on every landing
   // batch. When ts changes React unmounts the old overlay and mounts a
   // new one, which forces the CSS animation to play from frame 0 even
-  // if a previous pulse on the same slot is still mid-cycle. That's
-  // the only way to guarantee EVERY ball landing produces a visible
-  // pop without resorting to forced reflows or WAAPI plumbing.
-  const slotsJsx = useMemo(() => (
-    mults.map((mul, k) => {
-      const ts = hitSlots[k]
-      return (
-        <span
-          key={`slot-${k}`}
-          className={`plinko-slot plinko-slot--tier${tierFor(mul)} ${ts ? 'is-hit' : ''}`}
-        >
-          <span className="plinko-slot-mul">{formatMul(mul)}</span>
-          {ts != null && (
-            <span
-              key={`pulse-${ts}`}
-              className="plinko-slot-pulse"
-              aria-hidden="true"
-            />
-          )}
-        </span>
-      )
-    })
-  ), [mults, hitSlots])
+  // if a previous pulse on the same slot is still mid-cycle.
+  const slotsJsx = mults.map((mul, k) => (
+    <SlotCell key={k} mul={mul} ts={hitSlots[k]} />
+  ))
 
   return (
     <div className={`plinko-slot-page plinko-slot-page--${balls.length ? 'dropping' : 'idle'}`}>
@@ -689,7 +813,7 @@ export default function PlinkoSlot() {
             * stage with empty space around it (matching the reference
             * spec photo). All inside coordinates use the game-area as
             * the 0..1 reference, no further compression needed. */}
-           <div className="plinko-game-area">
+           <div className="plinko-game-area" ref={gameAreaRef}>
             {/* Pegs — triangular grid. Row r has r+2 pegs, EXCEPT the
              * last row which gets r+3 (= ROWS+2 = 18) pegs spread across
              * the full game-area width at p / (ROWS + 1) positions. With
@@ -712,7 +836,16 @@ export default function PlinkoSlot() {
              * IN the slot row (calc(100% − slot-h / 2)) — a nice
              * "drop into slot" landing once the funnel has done its job. */}
             {balls.map(ball => (
-              <PlinkoBall key={ball.id} row={ball.row} col={ball.col} />
+              <PlinkoBall
+                key={ball.id}
+                id={ball.id}
+                path={ball.path}
+                landing={ball.landing}
+                startDelay={ball.startDelay}
+                dimsRef={dimsRef}
+                onLandRef={onLandRef}
+                cancelRef={cancelRef}
+              />
             ))}
 
             {/* Landing slots — one row of multiplier buckets. The

@@ -121,20 +121,29 @@
 }
 
 /* ── Ball ──
- * White ~10 px marble. Split CSS transitions: vertical accelerates
- * (gravity), lateral eases in-out (peg redirect). Per-step duration
- * matches animateBall()'s sleep so the move completes just before
- * the next waypoint dispatches. */
+ * White ~10 px marble. Driven imperatively by PlinkoBall:
+ *   - top / left pinned to 0; the ball's centre lives at (0, 0)
+ *     thanks to the -3.5 px margins, and PlinkoBall writes
+ *     `transform: translate3d(Xpx, Ypx, 0)` directly to the DOM ref
+ *     on each row step
+ *   - CSS `transition: transform` interpolates between waypoints
+ *     with gravity-style easing (cubic-bezier(0.55, 0, 1, 0.55))
+ *   - `transform` is compositor-only — no layout, no paint per
+ *     frame even with 100 balls in flight; the old `left / top`
+ *     keyframes forced a layout pass per ball per step
+ *
+ * No will-change / translateZ — promoting 100 separate GPU layers
+ * actually HURT perf on phones with limited GPU memory (each ball
+ * was getting its own compositor layer). Browsers handle a single
+ * shared paint pass faster when the elements are small. */
 .plinko-ball {
   position: absolute;
+  top:  0;
+  left: 0;
   width: 7px;
   height: 7px;
   margin-left: -3.5px;
   margin-top:  -3.5px;
-  /* No will-change / translateZ — promoting 100 separate GPU layers
-   * actually HURT perf on phones with limited GPU memory (each ball
-   * was getting its own compositor layer). Browsers handle a single
-   * shared paint pass faster when the elements are small. */
   border-radius: 50%;
   z-index: 5;
   background:
@@ -143,9 +152,8 @@
     0 0 8px rgba(255, 255, 255, 0.55),
     0 0 3px rgba(255, 255, 255, 0.85),
     inset 0 -2px 2px rgba(0, 0, 0, 0.18);
-  transition:
-    left 0.18s cubic-bezier(0.42, 0.0, 0.58, 1.0),
-    top  0.18s cubic-bezier(0.55, 0.0, 1.0, 0.55);
+  transform: translate3d(0, 0, 0);
+  transition: transform 0.18s cubic-bezier(0.55, 0, 1, 0.55);
   pointer-events: none;
 }
 
