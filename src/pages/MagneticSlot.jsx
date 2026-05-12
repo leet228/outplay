@@ -150,7 +150,11 @@ export default function MagneticSlot() {
   const [finalMagnets, setFinalMagnets] = useState(() => Array(REELS).fill(2))
   const [reachByCol, setReachByCol]     = useState(() => Array(REELS).fill(0))
   const [payoutByCol, setPayoutByCol]   = useState(() => Array(REELS).fill(0))
-  const [pulledCols, setPulledCols]     = useState(() => Array(REELS).fill(false))
+  // pulledRows[ci] = how many symbols have already left column ci's
+  // cells and risen into its pulled-stack (0..ROWS). Drives both:
+  //   - reel cell visibility (cell empties once its row is pulled)
+  //   - stack rendering (first N pulled symbols appear in stack)
+  const [pulledRows, setPulledRows]     = useState(() => Array(REELS).fill(0))
   const [shakingMagnet, setShakingMagnet] = useState(null)
   const [lastWin, setLastWin]           = useState(0)
   const [phase, setPhase]               = useState('idle') // idle | spinning | pulling | settled
@@ -218,7 +222,7 @@ export default function MagneticSlot() {
 
     // Reset everything from the previous round.
     setPhase('spinning')
-    setPulledCols(Array(REELS).fill(false))
+    setPulledRows(Array(REELS).fill(0))
     setShakingMagnet(null)
     setReachByCol(Array(REELS).fill(0))
     setPayoutByCol(Array(REELS).fill(0))
@@ -315,22 +319,38 @@ export default function MagneticSlot() {
     setPayoutByCol(payouts)
     setPhase('pulling')
 
-    // ── Sequential per-column pull ──
+    // ── Sequential per-symbol pull ──
     //   For each column ci (left → right):
     //     1. Start the matching magnet's shake animation.
-    //     2. Mount the pulled-stack for column ci — its rise
-    //        animation runs forwards via CSS keyframes.
-    //     3. Wait for the pull to complete before moving on.
-    const PULL_DURATION = 600   // matches the keyframe duration in CSS
+    //     2. For each row ri (top → bottom) WITHIN the column:
+    //        a. Increment pulledRows[ci] — that simultaneously
+    //           empties the cell at (ci, ri) AND mounts symbol ri
+    //           in the pulled-stack with its fly-in animation.
+    //        b. Wait SYMBOL_PULL_INTERVAL ms before pulling the
+    //           next symbol (so the eye can track each one).
+    //        c. Blank rows skip the wait — the cell was already
+    //           empty, so dwelling on it would look like a freeze.
+    //     3. Brief gap, then move on to the next column.
+    const SYMBOL_PULL_INTERVAL = 220   // ms between symbol mounts
+    const COLUMN_GAP           = 90    // ms between columns
     for (let ci = 0; ci < REELS; ci++) {
       if (cancelRef.current) break
       setShakingMagnet(ci)
-      setPulledCols(prev => {
-        const next = [...prev]
-        next[ci] = true
-        return next
-      })
-      await sleep(PULL_DURATION)
+
+      for (let ri = 0; ri < ROWS; ri++) {
+        if (cancelRef.current) break
+        setPulledRows(prev => {
+          const next = [...prev]
+          next[ci] = ri + 1
+          return next
+        })
+        const sym = finalGridArr[ci][ri]
+        if (sym && sym.emoji) {
+          await sleep(SYMBOL_PULL_INTERVAL)
+        }
+      }
+
+      await sleep(COLUMN_GAP)
     }
     setShakingMagnet(null)
 
@@ -389,7 +409,7 @@ export default function MagneticSlot() {
             {magnetStrips.map((strip, mi) => {
               const finalMult = finalMagnets[mi]
               const isHot     = finalMult >= 50
-              const captured  = pulledCols[mi] && (reachByCol[mi] || 0) === 1
+              const captured  = pulledRows[mi] === ROWS && (reachByCol[mi] || 0) === 1
               const shaking   = shakingMagnet === mi
               return (
                 <div
@@ -423,39 +443,41 @@ export default function MagneticSlot() {
           </div>
 
           {/* ── Pull-zone (between magnets and reels) ──
-            * Each column carries a pulled-stack that mounts when
-            * that column is being pulled. The stack rises from
-            * bottom=0 (right above the reels) to bottom=var(--reach)
-            * via a CSS keyframe animation that fires on mount.
+            * Each column anchors a pulled-stack at the top of the
+            * zone — its top edge sits at `100% - var(--reach)` from
+            * the pull-zone TOP, so reach=100% pins the stack right
+            * under its magnet. Pulled symbols are appended into the
+            * stack one row at a time via the pulledRows state, each
+            * one running its own fly-in animation on mount.
             */}
           <div className="magnetic-pull-zone" aria-hidden="true">
             {Array.from({ length: REELS }).map((_, ci) => {
               const reach     = reachByCol[ci] || 0
               const reachPct  = Math.round(reach * 100)
               const payout    = payoutByCol[ci]
-              const pulled    = pulledCols[ci]
+              const rows      = pulledRows[ci]
+              const allPulled = rows >= ROWS
               return (
                 <div
                   key={ci}
-                  className={'magnetic-pull-col' + (pulled ? ' is-pulled' : '')}
+                  className={'magnetic-pull-col' + (rows > 0 ? ' is-pulling' : '')}
                   style={{ '--reach': `${reachPct}%` }}
                 >
-                  {pulled && reach > 0 && (
+                  {rows > 0 && reach > 0 && (
                     <div className="magnetic-pulled-stack">
-                      {[0, 1, 2].map(ri => {
-                        const sym = finalGrid[ci]?.[ri]
+                      {Array.from({ length: rows }).map((_, idx) => {
+                        const sym = finalGrid[ci]?.[idx]
                         if (!sym || !sym.emoji) return null
                         return (
                           <span
-                            key={ri}
+                            key={idx}
                             className="magnetic-pulled-symbol"
-                            style={{ animationDelay: `${ri * 90}ms` }}
                           >
                             {sym.emoji}
                           </span>
                         )
                       })}
-                      {payout > 0 && (
+                      {allPulled && payout > 0 && (
                         <span className="magnetic-reel-payout">
                           +{formatCurrency(payout, currency, rates)}
                         </span>
@@ -467,31 +489,42 @@ export default function MagneticSlot() {
             })}
           </div>
 
-          {/* ── Reels ── */}
+          {/* ── Reels ──
+            * Each cell hides its strip the instant `pulledRows[ci]`
+            * passes its row index — i.e. the moment that cell's
+            * symbol has flown up into the stack, the cell goes
+            * empty. Matches the user's "ничего не остаётся в ячейке"
+            * requirement.
+            */}
           <div className="magnetic-reels">
             {cellStrips.map((col, ci) => {
-              const pulled = pulledCols[ci]
+              const rows = pulledRows[ci]
               return (
-                <div key={ci} className={'magnetic-reel' + (pulled ? ' is-pulled' : '')}>
-                  {col.map((strip, ri) => (
-                    <span key={ri} className="magnetic-cell">
-                      <div
-                        className="magnetic-strip"
-                        style={{
-                          transform: `translateY(calc(var(--cell-h) * ${strip.ty}))`,
-                          transition: strip.td > 0
-                            ? `transform ${strip.td}ms cubic-bezier(0.18, 0.6, 0.32, 1)`
-                            : 'none',
-                        }}
-                      >
-                        {strip.symbols.map((sym, si) => (
-                          <span key={si} className="magnetic-strip-sym">
-                            {sym.emoji}
-                          </span>
-                        ))}
-                      </div>
-                    </span>
-                  ))}
+                <div key={ci} className="magnetic-reel">
+                  {col.map((strip, ri) => {
+                    const released = rows > ri
+                    return (
+                      <span key={ri} className="magnetic-cell">
+                        {!released && (
+                          <div
+                            className="magnetic-strip"
+                            style={{
+                              transform: `translateY(calc(var(--cell-h) * ${strip.ty}))`,
+                              transition: strip.td > 0
+                                ? `transform ${strip.td}ms cubic-bezier(0.18, 0.6, 0.32, 1)`
+                                : 'none',
+                            }}
+                          >
+                            {strip.symbols.map((sym, si) => (
+                              <span key={si} className="magnetic-strip-sym">
+                                {sym.emoji}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </span>
+                    )
+                  })}
                 </div>
               )
             })}

@@ -167,27 +167,33 @@
   position: relative;
 }
 
-/* Stack of pulled symbols. Mounts when column starts its pull,
- * rises from bottom=0 to bottom=var(--reach) via the keyframe
- * animation that fires on mount. */
+/* Pulled-stack anchor.
+ *
+ * The stack's TOP edge sits at `(100% - reach)` of the pull-zone
+ * height — so reach=100% pins the top of the stack right under
+ * the magnet, and reach=0% drops it to the pull-zone bottom
+ * (which is right above the reels).
+ *
+ * flex-column with default order means the FIRST appended child
+ * (the top reel symbol, pulled first) sits at the top of the
+ * stack closest to the magnet; subsequent children stack below.
+ */
 .magnetic-pulled-stack {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 0;
+  top: calc(100% - var(--reach, 0%));
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
   pointer-events: none;
-  animation: magnetic-rise 600ms cubic-bezier(0.25, 1.4, 0.45, 1) forwards;
 }
 
-@keyframes magnetic-rise {
-  0%   { bottom: 0; }
-  100% { bottom: var(--reach, 0%); }
-}
-
+/* Each pulled symbol flies in from BELOW (where its cell sits)
+ * on mount, fading in as it rises. Subsequent symbols mount one
+ * by one — each runs the same animation fresh, producing the
+ * "top symbol first, then middle, then bottom" cascade. */
 .magnetic-pulled-symbol {
   font-size: 22px;
   line-height: 1;
@@ -195,14 +201,13 @@
   text-shadow:
     0 0 6px rgba(96, 165, 250, 0.6),
     0 0 12px rgba(96, 165, 250, 0.25);
-  /* Per-symbol fade-in stagger — TOP symbol arrives first, the
-   * middle next, then the bottom. */
   opacity: 0;
-  transform: translateY(4px);
-  animation: magnetic-pulled-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transform: translateY(46px);
+  animation: magnetic-fly-in 320ms cubic-bezier(0.25, 1.4, 0.45, 1) forwards;
 }
-@keyframes magnetic-pulled-pop {
-  0%   { opacity: 0; transform: translateY(4px); }
+@keyframes magnetic-fly-in {
+  0%   { opacity: 0; transform: translateY(46px); }
+  55%  { opacity: 1; }
   100% { opacity: 1; transform: translateY(0); }
 }
 
@@ -219,7 +224,7 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   opacity: 0;
-  animation: magnetic-pulled-pop 200ms 380ms ease forwards;
+  animation: magnetic-fly-in 220ms 80ms ease forwards;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -249,12 +254,9 @@
   transition: opacity 0.25s ease;
 }
 
-/* Once a column has been pulled, its reel symbols fade so the
- * pulled-stack above is the only thing the eye reads. */
-.magnetic-reel.is-pulled .magnetic-strip {
-  opacity: 0.18;
-  transition: opacity 0.3s ease;
-}
+/* No per-reel fade — cells empty themselves individually via the
+ * `pulledRows > row` check in JSX, so the entire reel column
+ * empties top → bottom in lock-step with the symbols flying up. */
 
 .magnetic-cell {
   position: relative;
