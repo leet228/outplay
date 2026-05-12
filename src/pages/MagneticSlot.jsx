@@ -836,26 +836,6 @@ export default function MagneticSlot() {
             })}
           </div>
 
-          {/* Buy-bonus FAB — sits in the bottom-left of the stage,
-            * like Pixel Mine's. Tapping opens the confirmation
-            * modal; only after the user confirms do we charge
-            * the 100× stake and fire a force-scatter spin. */}
-          <button
-            type="button"
-            className="magnetic-buy-bonus-fab"
-            onClick={onBuyBonusClick}
-            disabled={
-              spinning ||
-              autoSpin ||
-              bonusPhase !== 'idle' ||
-              balance < stake * BUY_BONUS_MULT
-            }
-            aria-label="Buy Bonus"
-          >
-            <span className="magnetic-buy-bonus-fab-icon">💎</span>
-            <span className="magnetic-buy-bonus-fab-text">BUY</span>
-          </button>
-
           {/* ── Reels ──
             * Each cell hides its strip the instant `pulledRows[ci]`
             * passes its row index — UNLESS the symbol at that row
@@ -911,13 +891,43 @@ export default function MagneticSlot() {
           </div>
         </main>
 
-        {/* Win bar — OUTSIDE the stage frame, like the user asked. */}
-        <div className={'magnetic-winbar' + (lastWin > 0 ? ' is-win' : '')}>
-          <span className="magnetic-winbar-label">{t.slotPotential || 'Выигрыш'}</span>
-          <strong className="magnetic-winbar-value">
-            {winLabel ?? formatCurrency(0, currency, rates)}
-          </strong>
-        </div>
+        {/* ── Winbar row ──
+          *   [ BUY BONUS ]  [ Winbar ]
+          * Winbar shows the CUMULATIVE bonusTotalWin during the
+          * FS run and end overlay; otherwise it shows the most
+          * recent spin's win as before. */}
+        {(() => {
+          const isBonusWin = bonusPhase === 'bonus-fs' || bonusPhase === 'overlay-end'
+          const displayWin = isBonusWin ? bonusTotalWin : lastWin
+          const displayLabel = displayWin > 0
+            ? `+${formatCurrency(displayWin, currency, rates)}`
+            : formatCurrency(0, currency, rates)
+          return (
+            <div className="magnetic-winbar-row">
+              <button
+                type="button"
+                className="magnetic-buy-bonus-btn"
+                onClick={onBuyBonusClick}
+                disabled={
+                  spinning ||
+                  autoSpin ||
+                  bonusPhase !== 'idle' ||
+                  balance < stake * BUY_BONUS_MULT
+                }
+                aria-label="Buy Bonus"
+              >
+                <span className="magnetic-buy-bonus-btn-icon">💎</span>
+                <span className="magnetic-buy-bonus-btn-text">BUY</span>
+              </button>
+              <div className={'magnetic-winbar' + (displayWin > 0 ? ' is-win' : '')}>
+                <span className="magnetic-winbar-label">
+                  {isBonusWin ? 'Бонус' : (t.slotPotential || 'Выигрыш')}
+                </span>
+                <strong className="magnetic-winbar-value">{displayLabel}</strong>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── Controls: balance / spin / stake ── */}
         <section className="magnetic-controls">

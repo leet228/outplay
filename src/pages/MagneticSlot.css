@@ -398,8 +398,19 @@
 /* ─────────────────────────────────────────────────────────────
  * Win bar — OUTSIDE the stage, between stage and controls.
  * ───────────────────────────────────────────────────────────── */
-.magnetic-winbar {
+/* Row that holds [Buy-bonus pill] + [Winbar card]. Buy stays a
+ * fixed-width pill on the left; the winbar grows to fill the
+ * remaining width. */
+.magnetic-winbar-row {
   margin-top: 10px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.magnetic-winbar {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -770,55 +781,50 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
- * BUY BONUS — FAB button + confirmation modal.
+ * BUY BONUS — pill button (sits in the winbar row, left side)
+ * + confirmation modal.
  * ───────────────────────────────────────────────────────────── */
 
-/* Pill FAB pinned to the bottom-left of the stage. Opens the
- * confirm modal on tap. Disabled state mutes the gradient and
- * stops interaction (used when the player can't afford it or
- * a bonus / spin is already running). */
-.magnetic-buy-bonus-fab {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  z-index: 20;
+/* Pill that lives in the winbar row, to the LEFT of the winbar
+ * card. Same height as the winbar so the row reads as a single
+ * band. Fuchsia→purple gradient with a neon halo. */
+.magnetic-buy-bonus-btn {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px 6px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.20);
+  gap: 6px;
+  padding: 0 14px 0 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(240, 171, 252, 0.55);
   background: linear-gradient(180deg, #e879f9 0%, #a855f7 100%);
   color: #fff;
   font-size: 11px;
   font-weight: 950;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
   cursor: pointer;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    0 4px 12px rgba(168, 85, 247, 0.55),
-    0 0 18px rgba(240, 171, 252, 0.40);
-  transition: transform 0.12s ease, filter 0.12s ease, opacity 0.2s ease;
+    0 4px 12px rgba(168, 85, 247, 0.50),
+    0 0 14px rgba(240, 171, 252, 0.40);
+  transition: transform 0.12s ease, filter 0.14s ease, opacity 0.2s ease;
 }
-.magnetic-buy-bonus-fab:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
-.magnetic-buy-bonus-fab:active:not(:disabled) { transform: translateY(1px); }
-.magnetic-buy-bonus-fab:disabled {
+.magnetic-buy-bonus-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.magnetic-buy-bonus-btn:active:not(:disabled) { transform: translateY(1px); }
+.magnetic-buy-bonus-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   filter: grayscale(0.4);
 }
 
-.magnetic-buy-bonus-fab-icon {
-  font-size: 16px;
+.magnetic-buy-bonus-btn-icon {
+  font-size: 15px;
   line-height: 1;
   filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.8));
 }
 
-.magnetic-buy-bonus-fab-text {
-  line-height: 1;
-}
+.magnetic-buy-bonus-btn-text { line-height: 1; }
 
 /* ── Buy-bonus modal ── */
 .magnetic-buy-modal-backdrop {
