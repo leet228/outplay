@@ -226,56 +226,53 @@
  * (the top reel symbol, pulled first) sits at the top of the
  * stack closest to the magnet; subsequent children stack below.
  */
-.magnetic-pulled-stack {
+/* Per-symbol pulled rendering. Each pulled symbol is its own
+ * absolutely positioned element inside the pull-col.
+ *   --tier-pct  → which tier the symbol flies INTO (matches the
+ *                 .magnetic-tier element at the same percent).
+ *   --stack-idx → 0 for the first arrival in a tier, 1 for the
+ *                 next, 2 for the third — each layered 10 px
+ *                 lower so multiple symbols sharing a tier read
+ *                 as a small overlapping stack instead of one
+ *                 sprite drawn on top of another. */
+.magnetic-pulled-symbol {
   position: absolute;
   left: 50%;
-  /* TOP edge sits at the same reach line the matching tier cell
-   * uses (calc(100% - reach-pct)). Since both stack and tier
-   * cell have their top edge at that same y, the first arriving
-   * symbol lands centred inside the tier cell. */
-  top: calc(100% - var(--reach-pct, 0%));
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  pointer-events: none;
-  z-index: 2;   /* above the tier ladder (z-index: 0) */
-}
-
-/* Each pulled symbol flies in from BELOW (where its cell sits)
- * on mount, fading in as it rises. Subsequent symbols mount one
- * by one — each runs the same animation fresh, producing the
- * "top symbol first, then middle, then bottom" cascade. */
-/* Slow, deliberate per-symbol fly-in.
- *
- * 900 ms duration with a strong ease-out (0.18, 0.95, 0.3, 1) so
- * the symbol decelerates noticeably as it approaches its tier
- * cell — feels like magnetic attraction settling its target into
- * place. Starts 120 px below the slot so the rise reads as a real
- * journey, not a flicker. */
-.magnetic-pulled-symbol {
+  top: calc(
+    100%
+    - var(--tier-pct, 0%)
+    + var(--cell-h) / 2
+    + var(--stack-idx, 0) * 10px
+  );
   font-size: 22px;
   line-height: 1;
+  pointer-events: none;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
   text-shadow:
     0 0 8px rgba(240, 171, 252, 0.85),
     0 0 16px rgba(196, 181, 253, 0.45);
   opacity: 0;
-  transform: translateY(120px);
+  transform: translate(-50%, calc(-50% + 100px));
   animation: magnetic-fly-in 900ms cubic-bezier(0.18, 0.95, 0.3, 1) forwards;
-  z-index: 1;
+  /* Later arrivals paint OVER earlier ones — matches the user's
+   * "поверх него но чуть ниже" overlap. */
+  z-index: calc(10 + var(--stack-idx, 0));
 }
 @keyframes magnetic-fly-in {
-  0%   { opacity: 0; transform: translateY(120px); }
+  0%   { opacity: 0; transform: translate(-50%, calc(-50% + 100px)); }
   35%  { opacity: 1; }
-  100% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 1; transform: translate(-50%, -50%); }
 }
 
+/* Payout pill — pinned at the bottom of the pull-col, centred
+ * horizontally. Only renders when phase === 'settled'. */
 .magnetic-reel-payout {
-  margin-top: 5px;
-  padding: 1px 7px;
-  border-radius: 8px;
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 9px;
   font-size: 11px;
   font-weight: 900;
   color: #052e16;
@@ -284,8 +281,13 @@
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  z-index: 5;
   opacity: 0;
-  animation: magnetic-fly-in 300ms 240ms ease-out forwards;
+  animation: magnetic-payout-pop 280ms 80ms ease-out forwards;
+}
+@keyframes magnetic-payout-pop {
+  0%   { opacity: 0; transform: translate(-50%, 6px); }
+  100% { opacity: 1; transform: translate(-50%, 0); }
 }
 
 /* ─────────────────────────────────────────────────────────────

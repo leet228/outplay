@@ -54,14 +54,18 @@ function pickMagnet() {
   return MAGNET_POOL[0]
 }
 
+// Symbol strengths are FIXED tier ratios — each non-blank, non-
+// scatter symbol always lands in the same tier cell. ⚡ volt is
+// a SCATTER: it doesn't get pulled toward the magnet, just stays
+// put in its reel cell. (Bonus mechanic for N+ scatters is left
+// open for later; for now it just doesn't contribute to payout.)
 const SYMBOLS = [
-  // Blank cells render NOTHING — empty cells are truly empty.
-  { id: 'blank', emoji: '',   strength: 0,  weight: 30 },
-  { id: 'bolt',  emoji: '🔩', strength: 3,  weight: 32 },
-  { id: 'coin',  emoji: '🪙', strength: 8,  weight: 20 },
-  { id: 'troph', emoji: '🏆', strength: 18, weight: 11 },
-  { id: 'gem',   emoji: '💎', strength: 35, weight: 5  },
-  { id: 'volt',  emoji: '⚡', strength: 60, weight: 2  },
+  { id: 'blank', emoji: '',   strength: 0,    weight: 30 },
+  { id: 'bolt',  emoji: '🔩', strength: 0.25, weight: 32 },
+  { id: 'coin',  emoji: '🪙', strength: 0.50, weight: 20 },
+  { id: 'troph', emoji: '🏆', strength: 0.75, weight: 11 },
+  { id: 'gem',   emoji: '💎', strength: 1.00, weight: 5  },
+  { id: 'volt',  emoji: '⚡', strength: 0,    weight: 2, isScatter: true },
 ]
 const SYM_WEIGHT_SUM = SYMBOLS.reduce((s, x) => s + x.weight, 0)
 
@@ -74,29 +78,19 @@ function pickSymbol() {
   return SYMBOLS[0]
 }
 
-// Tier ladder + the strength → tier mapping.
-//
-// Reach snaps to one of FIVE levels (0 / 25 / 50 / 75 / 100 %) so
-// the pulled symbol stack always lands cleanly inside one of the
-// four visible tier cells. Thresholds tuned for the symbol
-// weights below:
-//   <8     → 0     (no win — blanks or a single bolt)
-//   8‒21   → 25    (mild — a coin or a few bolts)
-//   22‒49  → 50    (mid — trophy / coin combos)
-//   50‒79  → 75    (high — gem or near-volt)
-//   80+    → 100   (top — volt + extras / gem combos)
-function strengthToTier(s) {
-  if (s < 8)  return 0
-  if (s < 22) return 0.25
-  if (s < 50) return 0.50
-  if (s < 80) return 0.75
-  return 1.0
-}
-
 // Four tier cells per column: 100 / 75 / 50 / 25 %, evenly
-// stepped down the pull column. Order top → bottom in the JSX
-// so DOM read order matches what the eye sees.
+// stepped down the pull column. Each symbol's own `strength`
+// (0.25 / 0.50 / 0.75 / 1.00) IS its tier — no aggregation
+// happens, every symbol lands in its own matching cell.
+// Order top → bottom in the JSX so DOM read order matches what
+// the eye sees.
 const TIER_PERCENTS = [100, 75, 50, 25]
+
+// Per-symbol payout divisor. Dev-only — RTP not tuned yet; we'll
+// run Monte-Carlo before launch. Smaller divisor = bigger
+// payouts (player-favoured during early testing so the loop
+// feels rewarding while we iterate on visuals).
+const PAYOUT_DIVISOR = 50
 
 // Strip layouts: the LAST item is the final value, everything
 // above is random filler that scrolls past the viewport during
@@ -166,7 +160,6 @@ export default function MagneticSlot() {
     )
   )
   const [finalMagnets, setFinalMagnets] = useState(() => Array(REELS).fill(2))
-  const [reachByCol, setReachByCol]     = useState(() => Array(REELS).fill(0))
   const [payoutByCol, setPayoutByCol]   = useState(() => Array(REELS).fill(0))
   // pulledRows[ci] = how many symbols have already left column ci's
   // cells and risen into its pulled-stack (0..ROWS). Drives both:
@@ -242,7 +235,6 @@ export default function MagneticSlot() {
     setPhase('spinning')
     setPulledRows(Array(REELS).fill(0))
     setShakingMagnet(null)
-    setReachByCol(Array(REELS).fill(0))
     setPayoutByCol(Array(REELS).fill(0))
     setLastWin(0)
 
@@ -323,19 +315,23 @@ export default function MagneticSlot() {
       return
     }
 
-    // ── Compute reaches + payouts ──
-    // Each column's strength snaps to a discrete tier so the
-    // pulled stack lands inside one of the visible tier cells.
-    const newReaches = finalGridArr.map(col => {
-      const total = col.reduce((s, sym) => s + sym.strength, 0)
-      return strengthToTier(total)
+    // ── Compute payouts ──
+    // Each non-blank, non-scatter symbol contributes its own
+    // strength × magnet × stake / PAYOUT_DIVISOR. Scatters (⚡)
+    // and blanks contribute 0. The column's total is the sum of
+    // its individual symbol contributions.
+    const payouts = finalGridArr.map((col, ci) => {
+      let sumStrength = 0
+      for (const sym of col) {
+        if (sym.isScatter) continue
+        sumStrength += sym.strength
+      }
+      return Math.round(
+        (sumStrength * finalMagnetsArr[ci] * stakeRef.current) / PAYOUT_DIVISOR
+      )
     })
-    const payouts = newReaches.map((reach, ci) =>
-      Math.round((reach * finalMagnetsArr[ci] * stakeRef.current) / REELS)
-    )
     const winTotal = payouts.reduce((s, p) => s + p, 0)
 
-    setReachByCol(newReaches)
     setPayoutByCol(payouts)
     setPhase('pulling')
 
@@ -446,7 +442,11 @@ export default function MagneticSlot() {
             {magnetStrips.map((strip, mi) => {
               const finalMult = finalMagnets[mi]
               const isHot     = finalMult >= 50
-              const captured  = pulledRows[mi] === ROWS && (reachByCol[mi] || 0) === 1
+              // "Captured" lights up the magnet once the column has
+              // finished pulling AND it contained at least one 100%
+              // tier symbol (💎).
+              const captured  = pulledRows[mi] === ROWS &&
+                                finalGrid[mi]?.some(s => s && s.strength === 1.0)
               const shaking   = shakingMagnet === mi
               return (
                 <div
@@ -480,25 +480,38 @@ export default function MagneticSlot() {
           </div>
 
           {/* ── Pull-zone (between magnets and reels) ──
-            * Each column anchors a pulled-stack at the top of the
-            * zone — its top edge sits at `100% - var(--reach)` from
-            * the pull-zone TOP, so reach=100% pins the stack right
-            * under its magnet. Pulled symbols are appended into the
-            * stack one row at a time via the pulledRows state, each
-            * one running its own fly-in animation on mount.
+            * Each non-scatter pulled symbol flies into its OWN
+            * tier cell based on its individual strength:
+            *   🔩 → 25 %, 🪙 → 50 %, 🏆 → 75 %, 💎 → 100 %
+            * Scatters (⚡) don't get pulled at all.
+            * Multiple symbols going into the same tier stack on
+            * each other — first arrival centred in the cell, the
+            * rest layered slightly below so the count is readable.
             */}
           <div className="magnetic-pull-zone" aria-hidden="true">
             {Array.from({ length: REELS }).map((_, ci) => {
-              const reach     = reachByCol[ci] || 0
               const payout    = payoutByCol[ci]
               const rows      = pulledRows[ci]
-              const reachPct  = Math.round(reach * 100)
               const showPayout = phase === 'settled' && payout > 0
+
+              // Build a flat list of (symbol, idx, tier %, stack-idx)
+              // for every symbol that has already been pulled.
+              // The stack-idx counts how many EARLIER symbols in the
+              // same column landed in the same tier — the first
+              // arrival in a tier is 0 (centred), the next is 1, etc.
+              const tierCounters = {}
+              const pulledItems = []
+              for (let idx = 0; idx < rows; idx++) {
+                const sym = finalGrid[ci]?.[idx]
+                if (!sym || sym.isScatter || sym.strength === 0 || !sym.emoji) continue
+                const tier = Math.round(sym.strength * 100)
+                const stackIdx = tierCounters[tier] || 0
+                tierCounters[tier] = stackIdx + 1
+                pulledItems.push({ sym, idx, tier, stackIdx })
+              }
+
               return (
-                <div
-                  key={ci}
-                  className={'magnetic-pull-col' + (rows > 0 ? ' is-pulling' : '')}
-                >
+                <div key={ci} className="magnetic-pull-col">
                   {/* Tier ladder — 4 SQUARE transparent cells per
                     * column at 100 / 75 / 50 / 25 % reach heights.
                     * Each one is `--cell-h` square (same size as
@@ -516,29 +529,28 @@ export default function MagneticSlot() {
                       </span>
                     ))}
                   </div>
-                  {rows > 0 && reach > 0 && (
-                    <div
-                      className="magnetic-pulled-stack"
-                      style={{ '--reach-pct': `${reachPct}%` }}
+
+                  {/* Per-symbol pulled — each lands in its own tier,
+                    * stacked downward when multiple share a tier. */}
+                  {pulledItems.map(({ sym, idx, tier, stackIdx }) => (
+                    <span
+                      key={idx}
+                      className="magnetic-pulled-symbol"
+                      style={{
+                        '--tier-pct': `${tier}%`,
+                        '--stack-idx': stackIdx,
+                      }}
                     >
-                      {Array.from({ length: rows }).map((_, idx) => {
-                        const sym = finalGrid[ci]?.[idx]
-                        if (!sym || !sym.emoji) return null
-                        return (
-                          <span
-                            key={idx}
-                            className="magnetic-pulled-symbol"
-                          >
-                            {sym.emoji}
-                          </span>
-                        )
-                      })}
-                      {showPayout && (
-                        <span className="magnetic-reel-payout">
-                          +{formatCurrency(payout, currency, rates)}
-                        </span>
-                      )}
-                    </div>
+                      {sym.emoji}
+                    </span>
+                  ))}
+
+                  {/* Column payout pill — appears once everything
+                    * across all five columns has settled. */}
+                  {showPayout && (
+                    <span className="magnetic-reel-payout">
+                      +{formatCurrency(payout, currency, rates)}
+                    </span>
                   )}
                 </div>
               )
@@ -547,10 +559,10 @@ export default function MagneticSlot() {
 
           {/* ── Reels ──
             * Each cell hides its strip the instant `pulledRows[ci]`
-            * passes its row index — i.e. the moment that cell's
-            * symbol has flown up into the stack, the cell goes
-            * empty. Matches the user's "ничего не остаётся в ячейке"
-            * requirement.
+            * passes its row index — UNLESS the symbol at that row
+            * is a scatter (⚡): scatters never get pulled, so their
+            * cell keeps showing the symbol through the entire
+            * pull phase.
             */}
           <div className="magnetic-reels">
             {cellStrips.map((col, ci) => {
@@ -558,7 +570,9 @@ export default function MagneticSlot() {
               return (
                 <div key={ci} className="magnetic-reel">
                   {col.map((strip, ri) => {
-                    const released = rows > ri
+                    const finalSym = finalGrid[ci]?.[ri]
+                    const isScatter = finalSym?.isScatter
+                    const released = rows > ri && !isScatter
                     return (
                       <span key={ri} className="magnetic-cell">
                         {!released && (
