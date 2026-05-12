@@ -438,12 +438,16 @@ export default function MagneticSlot() {
     //   the rows stop TOP → BOTTOM. So the overall sequence reads
     //   as: magnets settle, then row-0 cells settle column by
     //   column, then row-1 cells, then row-2 cells.
-    const MAGNET_BASE     = 600   // ms — first magnet's transition duration
-    const MAGNET_STAGGER  = 220   // each subsequent magnet finishes this much later
-    const REEL_GAP        = 200   // pause between last magnet stop and first reel stop
+    //
+    // Bonus FS use tighter timings — base spin keeps its deliberate
+    // "плавно медленно" feel, but during 10 FS in a row the player
+    // wants a snappier pace.
+    const MAGNET_BASE     = bonusMode ? 380 : 600   // ms — first magnet's transition duration
+    const MAGNET_STAGGER  = bonusMode ? 110 : 220   // each subsequent magnet finishes this much later
+    const REEL_GAP        = bonusMode ? 100 : 200   // pause between last magnet stop and first reel stop
     const REEL_BASE       = MAGNET_BASE + (REELS - 1) * MAGNET_STAGGER + REEL_GAP
-    const REEL_STAGGER    = 240   // each column finishes this much after the prev
-    const ROW_STAGGER     = 110   // within a column, each row finishes this much later
+    const REEL_STAGGER    = bonusMode ? 130 : 240   // each column finishes this much after the prev
+    const ROW_STAGGER     = bonusMode ?  60 : 110   // within a column, each row finishes this much later
 
     setMagnetStrips(prev => prev.map((s, i) => ({
       ...s,
@@ -461,7 +465,7 @@ export default function MagneticSlot() {
 
     // Total time until the last cell has settled.
     const totalSpinDuration = REEL_BASE + (REELS - 1) * REEL_STAGGER + (ROWS - 1) * ROW_STAGGER
-    await sleep(totalSpinDuration + 160)
+    await sleep(totalSpinDuration + (bonusMode ? 100 : 160))
     if (cancelRef.current) {
       spinningRef.current = false
       setSpinning(false)
@@ -515,8 +519,11 @@ export default function MagneticSlot() {
     // interval of 480 ms the previous symbol is more than half
     // done before the next begins, so the eye can track each
     // arrival individually instead of seeing a blurry triple-rise.
-    const SYMBOL_PULL_INTERVAL = 480   // ms between symbol mounts
-    const COLUMN_GAP           = 180   // ms between columns
+    //
+    // Bonus FS use a tighter pace — 10 spins in a row demands a
+    // snappier rhythm so the player isn't bored.
+    const SYMBOL_PULL_INTERVAL = bonusMode ? 220 : 480   // ms between symbol mounts
+    const COLUMN_GAP           = bonusMode ?  80 : 180   // ms between columns
     for (let ci = 0; ci < REELS; ci++) {
       if (cancelRef.current) break
       setShakingMagnet(ci)
@@ -554,8 +561,9 @@ export default function MagneticSlot() {
     // animation. The CSS keyframe runs 900 ms; the last symbol
     // mounted SYMBOL_PULL_INTERVAL ms ago, so ~440 ms still left.
     // Buffer pushes that to 560 ms so payouts don't pop while the
-    // symbol is still settling.
-    await sleep(560)
+    // symbol is still settling. Bonus FS use a tighter tail since
+    // the pull interval itself is shorter.
+    await sleep(bonusMode ? 240 : 560)
     if (cancelRef.current) return
 
     setLastWin(winTotal)
@@ -736,7 +744,10 @@ export default function MagneticSlot() {
       // see itself as already-running and bail.
       spinningRef.current = false
       await spin({ bonusMode: true })
-      await sleep(500)
+      // Short breath between FS — the spin animation itself is
+      // already snappier in bonus mode, so a shorter pause keeps
+      // the run feeling tight rather than draggy.
+      await sleep(200)
     }
     setBonusSpinsLeft(0)
     if (cancelRef.current) return
