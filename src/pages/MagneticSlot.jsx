@@ -76,33 +76,41 @@ function pickSymbol() {
 
 // Tier ladder + the strength → tier mapping.
 //
-// Reach is now DISCRETE — column strength snaps to one of five
-// tiers (0 / 25 / 50 / 75 / 100 %) so the pulled symbol stack
-// lands cleanly inside whichever tier cell matches its strength.
-// Thresholds are tuned for the symbol weights below:
-//   ≤9  → 0     (a few bolts; no win)
-//   10‒29 → 25   (a coin or two)
-//   30‒54 → 50   (a trophy + something)
-//   55‒89 → 75   (a gem or volt)
-//   90+   → 100  (volt + gem combo / triple high)
+// Reach snaps to one of FOUR levels (0 / 10 / 50 / 100 %) so the
+// pulled symbol stack always lands cleanly inside one of the three
+// visible tier cells (10 / 50 / 100). Thresholds tuned for the
+// symbol weights below:
+//   <8     → 0     (no win — empty / a single bolt)
+//   8‒25   → 10    (mild — a coin or a few bolts)
+//   26‒65  → 50    (mid — gem or trophy combos)
+//   66+    → 100   (top — volt-led)
 function strengthToTier(s) {
-  if (s < 10) return 0
-  if (s < 30) return 0.25
-  if (s < 55) return 0.5
-  if (s < 90) return 0.75
+  if (s < 8)  return 0
+  if (s < 26) return 0.10
+  if (s < 66) return 0.50
   return 1.0
 }
 
-// Tier cells shown in each pull column — they tell the player
-// "if your symbol stack lands in THIS cell, you keep this much
-// of the magnet's multiplier." Big mults (≥10) round to integers;
-// small mults keep a single decimal so the ×0.5 / ×1.5 fractions
-// stay legible.
-const TIER_PERCENTS = [100, 75, 50, 25]
-function fmtTierMult(m) {
-  if (m >= 10) return `${Math.round(m)}`
-  if (Number.isInteger(m)) return `${m}`
-  return m.toFixed(1).replace(/\.0$/, '')
+// Three tier cells per column: 100 % up by the magnet, 50 % in
+// the middle, 10 % right above the reels. Order top → bottom in
+// the JSX so the DOM read order matches what the eye sees.
+const TIER_PERCENTS = [100, 50, 10]
+
+// Placement modifier — drives where the cell + the matching
+// pulled-stack are pinned inside the pull-col container.
+//   'start'  → top edge at the pull-col top (100 %)
+//   'center' → centred vertically (50 %)
+//   'end'    → bottom edge at the pull-col bottom (10 %)
+function tierPlacement(pct) {
+  if (pct === 100) return 'start'
+  if (pct === 50)  return 'center'
+  return 'end'
+}
+function reachPlacement(reach) {
+  if (reach >= 1.0)  return 'start'
+  if (reach >= 0.5)  return 'center'
+  if (reach >= 0.10) return 'end'
+  return null
 }
 
 // Strip layouts: the LAST item is the final value, everything
@@ -486,39 +494,31 @@ export default function MagneticSlot() {
           <div className="magnetic-pull-zone" aria-hidden="true">
             {Array.from({ length: REELS }).map((_, ci) => {
               const reach     = reachByCol[ci] || 0
-              const reachPct  = Math.round(reach * 100)
               const payout    = payoutByCol[ci]
               const rows      = pulledRows[ci]
               const allPulled = rows >= ROWS
-              const magnetMult = finalMagnets[ci]
+              const stackPlace = reachPlacement(reach)
               return (
                 <div
                   key={ci}
                   className={'magnetic-pull-col' + (rows > 0 ? ' is-pulling' : '')}
-                  style={{ '--reach': `${reachPct}%` }}
                 >
-                  {/* Tier ladder — semi-transparent badges showing
-                    * the multiplier you'd earn at each reach level.
-                    * Their vertical positions are pinned to the
-                    * pull-col height (top: 100% - tier%) so a
-                    * symbol stack at, say, 50 % reach lines up
-                    * exactly with the 50 % tier badge. */}
+                  {/* Tier cells — 3 square transparent boxes per
+                    * column, same size as the spin cells below.
+                    * Position by class:
+                    *   100 % at top, 50 % centred, 10 % at bottom. */}
                   <div className="magnetic-tier-ladder" aria-hidden="true">
-                    {TIER_PERCENTS.map(pct => {
-                      const mult = (magnetMult * pct) / 100
-                      return (
-                        <span
-                          key={pct}
-                          className="magnetic-tier"
-                          style={{ '--tier-pct': `${pct}%` }}
-                        >
-                          ×{fmtTierMult(mult)}
-                        </span>
-                      )
-                    })}
+                    {TIER_PERCENTS.map(pct => (
+                      <span
+                        key={pct}
+                        className={`magnetic-tier magnetic-tier--${tierPlacement(pct)}`}
+                      >
+                        {pct}%
+                      </span>
+                    ))}
                   </div>
-                  {rows > 0 && reach > 0 && (
-                    <div className="magnetic-pulled-stack">
+                  {rows > 0 && stackPlace && (
+                    <div className={`magnetic-pulled-stack magnetic-pulled-stack--${stackPlace}`}>
                       {Array.from({ length: rows }).map((_, idx) => {
                         const sym = finalGrid[ci]?.[idx]
                         if (!sym || !sym.emoji) return null
