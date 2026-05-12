@@ -998,6 +998,15 @@
 /* ─────────────────────────────────────────────────────────────
  * Card art — Home grid + slot preview overlay.
  * ───────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────
+ * MAGNETIC — home card + preview overlay artwork.
+ *
+ * Mirrors the in-game stage: magnets row on top, tier ladder
+ * in the middle (dashed 100/75/50/25 % cells), 5×3 reel grid at
+ * the bottom. The animated variant lifts each column up THROUGH
+ * the tier ladder on a stagger loop so the metaphor reads at a
+ * glance: symbols climbing toward their magnets.
+ * ───────────────────────────────────────────────────────────── */
 .magnetic-slot-card-art {
   position: absolute;
   inset: 0;
@@ -1007,25 +1016,26 @@
     radial-gradient(120% 80% at 50% 0%, #5b2cd1 0%, #2a1062 60%, #1a0a3e 100%);
   display: grid;
   grid-template-rows: auto 1fr;
-  padding: 6% 6% 8%;
-  gap: 4%;
+  padding: 8% 6% 8%;
+  gap: 6%;
 }
 
 .magnetic-card-glow {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(60% 40% at 50% 8%, rgba(196, 181, 253, 0.35) 0%, transparent 70%);
+    radial-gradient(60% 40% at 50% 8%, rgba(196, 181, 253, 0.32) 0%, transparent 70%);
   pointer-events: none;
 }
 
+/* ── Magnets row ── */
 .magnetic-card-magnets {
   position: relative;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 2px;
+  gap: 3px;
   align-items: end;
-  z-index: 2;
+  z-index: 3;
 }
 
 .magnetic-card-magnet {
@@ -1035,66 +1045,153 @@
   gap: 1px;
   padding: 2px 0 3px;
   border-radius: 6px;
-  background: linear-gradient(180deg, rgba(196, 181, 253, 0.20), rgba(168, 85, 247, 0.10));
-  border: 1px solid rgba(196, 181, 253, 0.30);
+  background: linear-gradient(180deg, rgba(196, 181, 253, 0.32), rgba(168, 85, 247, 0.18));
+  border: 1px solid rgba(196, 181, 253, 0.50);
 }
 .magnetic-card-magnet--hot {
-  background: linear-gradient(180deg, rgba(240, 171, 252, 0.34), rgba(217, 70, 239, 0.15));
-  border-color: rgba(240, 171, 252, 0.60);
-  box-shadow: 0 0 6px rgba(240, 171, 252, 0.50);
+  background: linear-gradient(180deg, rgba(240, 171, 252, 0.42), rgba(217, 70, 239, 0.22));
+  border-color: rgba(240, 171, 252, 0.70);
+  box-shadow: 0 0 6px rgba(240, 171, 252, 0.55);
 }
-
-.magnetic-card-magnet-body {
-  font-size: 12px;
-  line-height: 1;
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
-}
-.magnetic-slot-card-art--large .magnetic-card-magnet-body { font-size: 22px; }
 
 .magnetic-card-magnet-mult {
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 900;
   color: #fff;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
+  line-height: 1;
 }
-.magnetic-slot-card-art--large .magnetic-card-magnet-mult { font-size: 14px; }
+.magnetic-card-magnet--hot .magnetic-card-magnet-mult { color: #fae8ff; }
+.magnetic-slot-card-art--large .magnetic-card-magnet-mult { font-size: 13px; }
 
-.magnetic-card-columns {
+.magnetic-card-magnet-body {
+  width: 16px;
+  height: 16px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+.magnetic-slot-card-art--large .magnetic-card-magnet-body {
+  width: 30px;
+  height: 30px;
+}
+
+/* ── Play board: tier ladder behind + animated reels in front ── */
+.magnetic-card-board {
   position: relative;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 2px;
+  gap: 4px;
   z-index: 2;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.magnetic-card-column {
+.magnetic-card-col {
   position: relative;
+  min-height: 0;
+}
+
+/* Tier ladder — 4 dashed landing cells positioned at 100/75/50/25 %
+ * from the bottom of the column (matching the real game's
+ * .magnetic-tier). Translate(-50%, -50%) centres each cell on the
+ * tier line so the bottom cell sits at 25 % up, etc. */
+.magnetic-card-tiers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.magnetic-card-tier {
+  position: absolute;
+  left: 50%;
+  top: calc(100% - var(--tier-pct, 0%) - 7px);
+  transform: translateX(-50%);
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 6px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(196, 181, 253, 0.10);
+  border: 1px dashed rgba(196, 181, 253, 0.42);
+  letter-spacing: -0.05em;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+.magnetic-slot-card-art--large .magnetic-card-tier {
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+  border-radius: 5px;
+  top: calc(100% - var(--tier-pct, 0%) - 12px);
+}
+
+/* Reel column — height = full column so translateY % is relative
+ * to the column height. Cells anchored to the BOTTOM via
+ * justify-content: flex-end. Animation lifts the whole reel up by
+ * --reach % of its own height (== column height), so the cells
+ * climb through the tier ladder. */
+.magnetic-card-reel {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  gap: 1px;
-  padding-bottom: 4px;
+  gap: 2px;
+  z-index: 1;
+  will-change: transform;
+}
+
+.magnetic-card-cell {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.magnetic-slot-card-art--large .magnetic-card-cell {
+  width: 26px;
+  height: 26px;
 }
 
 .magnetic-card-symbol {
-  font-size: 11px;
-  line-height: 1;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
-  text-shadow: 0 0 4px rgba(196, 181, 253, 0.4);
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
 }
-.magnetic-slot-card-art--large .magnetic-card-symbol { font-size: 22px; }
 
-.magnetic-slot-card-art--animated .magnetic-card-column {
-  animation: magnetic-card-pull 3s cubic-bezier(0.25, 1.3, 0.45, 1) infinite;
+/* Pull-and-release loop. Symbols rise to --reach %, hold under
+ * the magnets for a beat, then drop back. Each column gets its
+ * own start offset via --col-delay so they pulse left-to-right
+ * like the real spin's sequential pull. */
+.magnetic-slot-card-art--animated .magnetic-card-reel {
+  animation: magnetic-card-pull 3.6s cubic-bezier(0.3, 1.15, 0.4, 1) infinite;
   animation-delay: var(--col-delay, 0s);
 }
 @keyframes magnetic-card-pull {
   0%   { transform: translateY(0); }
-  35%  { transform: translateY(calc(var(--reach, 30%) * -1)); }
-  60%  { transform: translateY(calc(var(--reach, 30%) * -1)); }
+  28%  { transform: translateY(calc(var(--reach, 30%) * -1)); }
+  58%  { transform: translateY(calc(var(--reach, 30%) * -1)); }
+  86%  { transform: translateY(0); }
   100% { transform: translateY(0); }
 }
 

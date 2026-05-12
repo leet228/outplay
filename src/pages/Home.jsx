@@ -23,6 +23,15 @@ import pmTexGoldDmg3  from '../assets/games/pixel_mine/block_damage/gold_block (
 import pmTexGoldDmg4  from '../assets/games/pixel_mine/block_damage/gold_block (4).png'
 import pmTexChest     from '../assets/games/pixel_mine/chests/chest.png'
 import pmTexChestOpen from '../assets/games/pixel_mine/chests/opened_chest.png'
+// Magnetic card art — pull from the real game's pixel-art assets
+// so the home card and preview overlay match what the player sees
+// once they open the slot.
+import mgTexCoin    from '../assets/games/magnetic/coin.png'
+import mgTexBolt    from '../assets/games/magnetic/bolt.png'
+import mgTexCompass from '../assets/games/magnetic/compas.png'
+import mgTexOrb     from '../assets/games/magnetic/plazm_orb.png'
+import mgTexGem     from '../assets/games/magnetic/scatter.png'
+import mgTexMagnet  from '../assets/games/magnetic/magnet.png'
 import './Home.css'
 // Imported here so the home-page rocket card art styles ship with Home,
 // not just when the player opens the slot itself.
@@ -2103,43 +2112,97 @@ function DiceSlotArtwork({ large = false, animated = false }) {
   )
 }
 
-// Magnetic Slot card art — 5 magnets on top row (each with a mult
-// badge) + 5 short reels below, with emoji symbols floating up to
-// the magnets. In the animated variant the symbols slowly pull up
-// toward their magnet on a loop so the metaphor reads at a glance.
+// Magnetic Slot card art — mirrors the real in-game layout:
+//   - magnets row on top (with mult labels + real magnet.png)
+//   - tier ladder behind (4 dashed cells at 100/75/50/25%)
+//   - 5×3 reel grid at the bottom with real pixel-art textures
+//
+// In the animated variant each column lifts toward its magnet on
+// a loop — the symbols visually rise THROUGH the tier ladder and
+// settle back, mimicking the in-game pull mechanic. Column reach
+// (how high they climb) is hand-picked so the loop reads as a
+// mix of weak/medium/strong pulls.
 function MagneticSlotArtwork({ large = false, animated = false }) {
-  const magnets = ['×2', '×10', '×100', '×10', '×2']
-  // Pre-baked symbol layout for the still + animated card. Each
-  // column shows 3 symbols; the animated cycle pulls them upward
-  // toward the magnet by a column-specific reach.
+  const magnets = [5, 10, 100, 25, 2]
+  // Each column: 3 symbols top→bottom (matching the real game's
+  // 5×3 grid) + how far the column should rise during the pull
+  // loop (% of the pull-track height).
   const cols = [
-    { reels: ['🔩', '🪙', '🔩'], reach: 35 },
-    { reels: ['🪙', '🏆', '🔩'], reach: 55 },
-    { reels: ['🏆', '💎', '⚡'], reach: 90 },
-    { reels: ['🪙', '🏆', '🔩'], reach: 50 },
-    { reels: ['🔩', '🪙', '🔩'], reach: 30 },
+    { reels: [mgTexBolt,    mgTexCoin,    null],         reach: 50 },
+    { reels: [mgTexCompass, mgTexCoin,    mgTexOrb],     reach: 92 },
+    { reels: [mgTexGem,     mgTexBolt,    mgTexCoin],    reach: 55 },
+    { reels: [mgTexOrb,     mgTexCompass, null],         reach: 85 },
+    { reels: [mgTexCoin,    mgTexBolt,    null],         reach: 38 },
   ]
+  const tiers = [100, 75, 50, 25]
+
   return (
-    <div className={`magnetic-slot-card-art ${large ? 'magnetic-slot-card-art--large' : ''} ${animated ? 'magnetic-slot-card-art--animated' : ''}`} aria-hidden="true">
+    <div
+      className={
+        'magnetic-slot-card-art' +
+        (large    ? ' magnetic-slot-card-art--large'    : '') +
+        (animated ? ' magnetic-slot-card-art--animated' : '')
+      }
+      aria-hidden="true"
+    >
       <span className="magnetic-card-glow" />
+
+      {/* Magnet row — real magnet texture + mult labels. */}
       <div className="magnetic-card-magnets">
-        {magnets.map((m, i) => (
-          <div key={i} className={`magnetic-card-magnet ${i === 2 ? 'magnetic-card-magnet--hot' : ''}`}>
-            <span className="magnetic-card-magnet-body">🧲</span>
-            <span className="magnetic-card-magnet-mult">{m}</span>
+        {magnets.map((mult, i) => (
+          <div
+            key={i}
+            className={'magnetic-card-magnet' + (mult >= 50 ? ' magnetic-card-magnet--hot' : '')}
+          >
+            <span className="magnetic-card-magnet-mult">×{mult}</span>
+            <span
+              className="magnetic-card-magnet-body"
+              style={{ backgroundImage: `url("${mgTexMagnet}")` }}
+            />
           </div>
         ))}
       </div>
-      <div className="magnetic-card-columns">
-        {cols.map((col, i) => (
+
+      {/* Play board: tier ladder behind, animated reels in front. */}
+      <div className="magnetic-card-board">
+        {cols.map((col, ci) => (
           <div
-            key={i}
-            className="magnetic-card-column"
-            style={{ '--reach': `${col.reach}%`, '--col-delay': `${i * 0.18}s` }}
+            key={ci}
+            className="magnetic-card-col"
+            style={{
+              '--reach': `${col.reach}%`,
+              '--col-delay': `${ci * 0.22}s`,
+            }}
           >
-            {col.reels.map((emoji, ri) => (
-              <span key={ri} className="magnetic-card-symbol">{emoji}</span>
-            ))}
+            {/* Tier ladder — 4 dashed landing cells at the real
+              * game's 100 / 75 / 50 / 25 % heights. */}
+            <div className="magnetic-card-tiers" aria-hidden="true">
+              {tiers.map(pct => (
+                <span
+                  key={pct}
+                  className="magnetic-card-tier"
+                  style={{ '--tier-pct': `${pct}%` }}
+                >
+                  {pct}
+                </span>
+              ))}
+            </div>
+
+            {/* Reel — 3 cells stacked at the bottom of the column.
+              * Animated variant rises through the tier ladder and
+              * settles back, looping forever. */}
+            <div className="magnetic-card-reel">
+              {col.reels.map((tex, ri) => (
+                <span key={ri} className="magnetic-card-cell">
+                  {tex && (
+                    <span
+                      className="magnetic-card-symbol"
+                      style={{ backgroundImage: `url("${tex}")` }}
+                    />
+                  )}
+                </span>
+              ))}
+            </div>
           </div>
         ))}
       </div>
