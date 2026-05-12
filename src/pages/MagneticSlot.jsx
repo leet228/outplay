@@ -80,6 +80,18 @@ function strengthToReach(s) {
   return Math.min(1, s / STRENGTH_FULL)
 }
 
+// Tier markers shown in each pull column — they tell the player
+// "if your symbol stack reaches this height, you keep this much
+// of the magnet's multiplier." Big mults (≥10) round to integers;
+// small mults keep a single decimal so the ×0.5 / ×1.5 fractions
+// stay legible.
+const TIER_PERCENTS = [100, 75, 50, 25]
+function fmtTierMult(m) {
+  if (m >= 10) return `${Math.round(m)}`
+  if (Number.isInteger(m)) return `${m}`
+  return m.toFixed(1).replace(/\.0$/, '')
+}
+
 // Strip layouts: the LAST item is the final value, everything
 // above is random filler that scrolls past the viewport during
 // the spin animation.
@@ -331,8 +343,13 @@ export default function MagneticSlot() {
     //        c. Blank rows skip the wait — the cell was already
     //           empty, so dwelling on it would look like a freeze.
     //     3. Brief gap, then move on to the next column.
-    const SYMBOL_PULL_INTERVAL = 220   // ms between symbol mounts
-    const COLUMN_GAP           = 90    // ms between columns
+    // Pull tuned for "плавно медленно" feel — each symbol takes
+    // its time floating up. magnetic-fly-in (CSS) runs 580 ms, so
+    // 290 ms between mounts means subsequent symbols start near
+    // half-way through the previous symbol's flight — overlap
+    // looks natural, no jerky single-file march.
+    const SYMBOL_PULL_INTERVAL = 290   // ms between symbol mounts
+    const COLUMN_GAP           = 120   // ms between columns
     for (let ci = 0; ci < REELS; ci++) {
       if (cancelRef.current) break
       setShakingMagnet(ci)
@@ -457,12 +474,33 @@ export default function MagneticSlot() {
               const payout    = payoutByCol[ci]
               const rows      = pulledRows[ci]
               const allPulled = rows >= ROWS
+              const magnetMult = finalMagnets[ci]
               return (
                 <div
                   key={ci}
                   className={'magnetic-pull-col' + (rows > 0 ? ' is-pulling' : '')}
                   style={{ '--reach': `${reachPct}%` }}
                 >
+                  {/* Tier ladder — semi-transparent badges showing
+                    * the multiplier you'd earn at each reach level.
+                    * Their vertical positions are pinned to the
+                    * pull-col height (top: 100% - tier%) so a
+                    * symbol stack at, say, 50 % reach lines up
+                    * exactly with the 50 % tier badge. */}
+                  <div className="magnetic-tier-ladder" aria-hidden="true">
+                    {TIER_PERCENTS.map(pct => {
+                      const mult = (magnetMult * pct) / 100
+                      return (
+                        <span
+                          key={pct}
+                          className="magnetic-tier"
+                          style={{ '--tier-pct': `${pct}%` }}
+                        >
+                          ×{fmtTierMult(mult)}
+                        </span>
+                      )
+                    })}
+                  </div>
                   {rows > 0 && reach > 0 && (
                     <div className="magnetic-pulled-stack">
                       {Array.from({ length: rows }).map((_, idx) => {

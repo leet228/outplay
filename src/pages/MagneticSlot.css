@@ -167,6 +167,35 @@
   position: relative;
 }
 
+/* Tier ladder — 4 semi-transparent badges per column showing the
+ * multiplier you'd earn at 100% / 75% / 50% / 25% reach. Vertical
+ * position is keyed to `--tier-pct` so a stack at 75 % reach lines
+ * up dead-centre with the 75% badge. */
+.magnetic-tier-ladder {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.magnetic-tier {
+  position: absolute;
+  left: 50%;
+  top: calc(100% - var(--tier-pct, 0%));
+  transform: translate(-50%, -50%);
+  padding: 1px 7px;
+  border-radius: 7px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.40);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
 /* Pulled-stack anchor.
  *
  * The stack's TOP edge sits at `(100% - reach)` of the pull-zone
@@ -188,12 +217,19 @@
   align-items: center;
   gap: 2px;
   pointer-events: none;
+  z-index: 2;   /* above the tier ladder (z-index: 0) */
 }
 
 /* Each pulled symbol flies in from BELOW (where its cell sits)
  * on mount, fading in as it rises. Subsequent symbols mount one
  * by one — each runs the same animation fresh, producing the
  * "top symbol first, then middle, then bottom" cascade. */
+/* Slower, smoother per-symbol fly-in — "плавно красиво" feel.
+ *
+ * 580 ms duration with a strong ease-out (0.22, 1, 0.36, 1) so
+ * the symbol decelerates as it approaches the magnet, like real
+ * magnetic attraction settling its target into place. Starts
+ * 90 px below the natural slot for a longer, more visible arc. */
 .magnetic-pulled-symbol {
   font-size: 22px;
   line-height: 1;
@@ -202,17 +238,18 @@
     0 0 6px rgba(96, 165, 250, 0.6),
     0 0 12px rgba(96, 165, 250, 0.25);
   opacity: 0;
-  transform: translateY(46px);
-  animation: magnetic-fly-in 320ms cubic-bezier(0.25, 1.4, 0.45, 1) forwards;
+  transform: translateY(90px);
+  animation: magnetic-fly-in 580ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  z-index: 1;
 }
 @keyframes magnetic-fly-in {
-  0%   { opacity: 0; transform: translateY(46px); }
-  55%  { opacity: 1; }
+  0%   { opacity: 0; transform: translateY(90px); }
+  45%  { opacity: 1; }
   100% { opacity: 1; transform: translateY(0); }
 }
 
 .magnetic-reel-payout {
-  margin-top: 4px;
+  margin-top: 5px;
   padding: 1px 7px;
   border-radius: 8px;
   font-size: 11px;
@@ -224,7 +261,7 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   opacity: 0;
-  animation: magnetic-fly-in 220ms 80ms ease forwards;
+  animation: magnetic-fly-in 260ms 200ms ease-out forwards;
 }
 
 /* ─────────────────────────────────────────────────────────────
