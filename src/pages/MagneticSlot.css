@@ -1,0 +1,413 @@
+/* ─────────────────────────────────────────────────────────────
+ * Magnetic Slot — MVP styles.
+ * ───────────────────────────────────────────────────────────── */
+
+.magnetic-slot-page {
+  position: relative;
+  width: 100%;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  background:
+    radial-gradient(140% 80% at 50% 0%, #1a2540 0%, #08091a 60%, #04050b 100%);
+  color: #fff;
+  overflow: hidden;
+}
+
+.magnetic-game-window {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px 12px;
+}
+
+.magnetic-stage {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 5 / 6;
+  border-radius: 22px;
+  background:
+    radial-gradient(60% 50% at 50% 8%, rgba(96, 165, 250, 0.28) 0%, transparent 70%),
+    linear-gradient(180deg, #111c33 0%, #08101e 100%);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 40px rgba(0, 0, 0, 0.55);
+  padding: 16px 12px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 6px;
+}
+
+/* ── Magnets row ── */
+.magnetic-magnets {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  align-items: end;
+  padding: 6px 4px;
+}
+
+.magnetic-magnet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0 6px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.18), rgba(37, 99, 235, 0.10));
+  border: 1px solid rgba(96, 165, 250, 0.30);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.magnetic-magnet--hot {
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.30), rgba(245, 158, 11, 0.15));
+  border-color: rgba(250, 204, 21, 0.5);
+  box-shadow: 0 0 14px rgba(250, 204, 21, 0.35);
+}
+
+.magnetic-magnet.is-captured {
+  transform: translateY(-2px) scale(1.06);
+  box-shadow:
+    0 0 18px rgba(96, 165, 250, 0.65),
+    0 0 6px rgba(255, 255, 255, 0.85);
+}
+
+.magnetic-magnet-body {
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+.magnetic-magnet-mult {
+  font-size: 13px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+  letter-spacing: -0.02em;
+}
+
+.magnetic-magnet--hot .magnetic-magnet-mult {
+  color: #fef3c7;
+}
+
+/* ── Pull zone ──
+ * Vertical column between the magnets and the reels. Each column
+ * carries CSS variable `--reach` (0..100%) — the pulled symbol
+ * stack inside is offset by translateY(calc(... )) so reach=100
+ * sits right under the magnet, reach=0 stays at the reel floor.
+ */
+.magnetic-pull-zone {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 0 4px;
+  min-height: 0;
+}
+
+.magnetic-pull-col {
+  position: relative;
+  height: 100%;
+}
+
+/* The pulled stack lives at the bottom of the column by default
+ * and animates UPWARD by --reach % of column height when the
+ * pulling class is applied. */
+.magnetic-pulled-stack {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translate(-50%, 0);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: bottom 0.7s cubic-bezier(0.25, 1.3, 0.45, 1);
+  pointer-events: none;
+}
+
+.magnetic-pull-col.is-pulling .magnetic-pulled-stack {
+  /* `bottom: var(--reach)` of the column's height pushes the stack
+   * upward toward the magnet. 100% reach = stack right under
+   * the magnet at the top of the column. */
+  bottom: calc(var(--reach, 0%) - 4px);
+}
+
+.magnetic-pulled-symbol {
+  font-size: 24px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  /* Visual "magnetic field" trail behind each symbol */
+  text-shadow:
+    0 0 6px rgba(96, 165, 250, 0.6),
+    0 0 12px rgba(96, 165, 250, 0.25);
+}
+
+.magnetic-reel-payout {
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #064e3b;
+  background: linear-gradient(180deg, #bbf7d0, #4ade80);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Reels ── */
+.magnetic-reels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 6px 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  transition: opacity 0.25s ease;
+}
+
+.magnetic-reels.is-cleared {
+  /* Once the pull animation starts, fade the reels so the floating
+   * symbols above read as if they "left" the reel. */
+  opacity: 0.15;
+}
+
+.magnetic-reel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  padding: 4px 0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.18));
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.magnetic-cell {
+  font-size: 24px;
+  line-height: 1;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+/* ── Win banner ── */
+.magnetic-win-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border-radius: 14px;
+  font-size: 22px;
+  font-weight: 950;
+  color: #052e16;
+  background: linear-gradient(180deg, #fef3c7, #fbbf24);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  animation: magnetic-win-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes magnetic-win-pop {
+  0%   { transform: translateX(-50%) scale(0.6); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1);   opacity: 1; }
+}
+
+/* ── Controls ── */
+.magnetic-controls {
+  padding: 12px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(8, 12, 24, 0.6);
+}
+
+.magnetic-balance-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.magnetic-balance-label { color: rgba(255, 255, 255, 0.55); font-weight: 700; }
+.magnetic-balance-value { color: #fff; font-weight: 900; font-variant-numeric: tabular-nums; }
+
+.magnetic-stakes {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.magnetic-stake-btn {
+  height: 34px;
+  padding: 0 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (hover: hover) {
+  .magnetic-stake-btn:hover:not(:disabled):not(.is-active) {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+}
+.magnetic-stake-btn:active:not(:disabled) { transform: translateY(1px); }
+.magnetic-stake-btn.is-active {
+  background: linear-gradient(180deg, #38bdf8, #0284c7);
+  border-color: #7dd3fc;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.30);
+}
+.magnetic-stake-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.magnetic-spin-btn {
+  height: 54px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  background: linear-gradient(180deg, #fef3c7 0%, #fbbf24 35%, #f97316 100%);
+  color: #431407;
+  font-size: 19px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 6px 14px rgba(249, 115, 22, 0.4);
+}
+.magnetic-spin-btn:active:not(:disabled) { transform: translateY(1px); }
+.magnetic-spin-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ─────────────────────────────────────────────────────────────
+ * Card art (used on Home grid + the slot preview overlay).
+ * ───────────────────────────────────────────────────────────── */
+.magnetic-slot-card-art {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% 0%, #1a2540 0%, #07091c 60%, #04050b 100%);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 6% 6% 8%;
+  gap: 4%;
+}
+
+.magnetic-card-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 40% at 50% 8%, rgba(96, 165, 250, 0.35) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.magnetic-card-magnets {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  align-items: end;
+  z-index: 2;
+}
+
+.magnetic-card-magnet {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 2px 0 3px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.20), rgba(37, 99, 235, 0.10));
+  border: 1px solid rgba(96, 165, 250, 0.30);
+}
+.magnetic-card-magnet--hot {
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0.32), rgba(245, 158, 11, 0.15));
+  border-color: rgba(250, 204, 21, 0.55);
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.45);
+}
+
+.magnetic-card-magnet-body {
+  font-size: 12px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
+}
+.magnetic-slot-card-art--large .magnetic-card-magnet-body { font-size: 22px; }
+
+.magnetic-card-magnet-mult {
+  font-size: 8px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.magnetic-slot-card-art--large .magnetic-card-magnet-mult { font-size: 14px; }
+
+/* Columns under magnets — each holds 3 symbols, in the animated
+ * variant the stack floats upward by `--reach` of column height
+ * on a continuous loop so the card reads as "symbols pulling to
+ * the magnets". */
+.magnetic-card-columns {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  z-index: 2;
+}
+
+.magnetic-card-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1px;
+  padding-bottom: 4px;
+}
+
+.magnetic-card-symbol {
+  font-size: 11px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+  text-shadow:
+    0 0 4px rgba(96, 165, 250, 0.4);
+}
+.magnetic-slot-card-art--large .magnetic-card-symbol { font-size: 22px; }
+
+/* Animated variant: pull symbols upward (translate Y by reach) on
+ * a loop, then snap back, so the card art "breathes". */
+.magnetic-slot-card-art--animated .magnetic-card-column {
+  animation: magnetic-card-pull 3s cubic-bezier(0.25, 1.3, 0.45, 1) infinite;
+  animation-delay: var(--col-delay, 0s);
+}
+@keyframes magnetic-card-pull {
+  0%   { transform: translateY(0); }
+  35%  { transform: translateY(calc(var(--reach, 30%) * -1)); }
+  60%  { transform: translateY(calc(var(--reach, 30%) * -1)); }
+  100% { transform: translateY(0); }
+}
+
+.magnetic-slot-card-art--large {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+}

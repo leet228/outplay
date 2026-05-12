@@ -1489,6 +1489,15 @@ const SLOTS = [
     accent: '#22c55e',
     shadow: '#14532d',
   },
+  {
+    id: 'magnetic',
+    category: 'popular',
+    titleKey: 'slotMagneticTitle',
+    subKey: 'slotMagneticSub',
+    route: '/slots/magnetic',
+    accent: '#38bdf8',
+    shadow: '#0c4a6e',
+  },
 ]
 
 function TowerSlotArtwork({ large = false, animated = false }) {
@@ -2094,12 +2103,57 @@ function DiceSlotArtwork({ large = false, animated = false }) {
   )
 }
 
+// Magnetic Slot card art — 5 magnets on top row (each with a mult
+// badge) + 5 short reels below, with emoji symbols floating up to
+// the magnets. In the animated variant the symbols slowly pull up
+// toward their magnet on a loop so the metaphor reads at a glance.
+function MagneticSlotArtwork({ large = false, animated = false }) {
+  const magnets = ['×2', '×10', '×100', '×10', '×2']
+  // Pre-baked symbol layout for the still + animated card. Each
+  // column shows 3 symbols; the animated cycle pulls them upward
+  // toward the magnet by a column-specific reach.
+  const cols = [
+    { reels: ['🔩', '🪙', '🔩'], reach: 35 },
+    { reels: ['🪙', '🏆', '🔩'], reach: 55 },
+    { reels: ['🏆', '💎', '⚡'], reach: 90 },
+    { reels: ['🪙', '🏆', '🔩'], reach: 50 },
+    { reels: ['🔩', '🪙', '🔩'], reach: 30 },
+  ]
+  return (
+    <div className={`magnetic-slot-card-art ${large ? 'magnetic-slot-card-art--large' : ''} ${animated ? 'magnetic-slot-card-art--animated' : ''}`} aria-hidden="true">
+      <span className="magnetic-card-glow" />
+      <div className="magnetic-card-magnets">
+        {magnets.map((m, i) => (
+          <div key={i} className={`magnetic-card-magnet ${i === 2 ? 'magnetic-card-magnet--hot' : ''}`}>
+            <span className="magnetic-card-magnet-body">🧲</span>
+            <span className="magnetic-card-magnet-mult">{m}</span>
+          </div>
+        ))}
+      </div>
+      <div className="magnetic-card-columns">
+        {cols.map((col, i) => (
+          <div
+            key={i}
+            className="magnetic-card-column"
+            style={{ '--reach': `${col.reach}%`, '--col-delay': `${i * 0.18}s` }}
+          >
+            {col.reels.map((emoji, ri) => (
+              <span key={ri} className="magnetic-card-symbol">{emoji}</span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function renderSlotArtwork(slot, opts = {}) {
   if (slot.id === 'tetris-cascade') return <TetrisSlotArtwork {...opts} />
   if (slot.id === 'rocket')         return <RocketSlotArtwork {...opts} />
   if (slot.id === 'plinko')         return <PlinkoSlotArtwork {...opts} />
   if (slot.id === 'pixel-mine')     return <PixelMineSlotArtwork {...opts} />
   if (slot.id === 'dice')           return <DiceSlotArtwork {...opts} />
+  if (slot.id === 'magnetic')       return <MagneticSlotArtwork {...opts} />
   return <TowerSlotArtwork {...opts} />
 }
 
@@ -2109,6 +2163,7 @@ function slotKickerKey(id) {
   if (id === 'plinko')         return 'slotPlinkoKicker'
   if (id === 'pixel-mine')     return 'slotPixelMineKicker'
   if (id === 'dice')           return 'slotDiceKicker'
+  if (id === 'magnetic')       return 'slotMagneticKicker'
   return 'slotTowerKicker'
 }
 
@@ -2118,6 +2173,7 @@ function slotPreviewKey(id) {
   if (id === 'plinko')         return 'slotPlinkoPreview'
   if (id === 'pixel-mine')     return 'slotPixelMinePreview'
   if (id === 'dice')           return 'slotDicePreview'
+  if (id === 'magnetic')       return 'slotMagneticPreview'
   return 'slotTowerPreview'
 }
 
