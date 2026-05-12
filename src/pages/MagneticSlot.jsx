@@ -602,12 +602,12 @@ export default function MagneticSlot() {
         }
       }
       if (scatters.length >= SCATTERS_TO_TRIGGER) {
-        // runBonusSequence RETURNS the total bonus winnings so we
-        // don't have to trust a shared ref that something else
-        // could clobber. We store it in a LOCAL var captured in
-        // this closure — bulletproof against any future code
-        // touching bonusTotalWinRef.
-        bonusContribution = await runBonusSequence(scatters, finalMagnetsArr) || 0
+        // Pass the base spin's winTotal as the initial bonus pot.
+        // runBonusSequence SEEDS bonusTotalWin with it, the FS
+        // loop accumulates on top, and the returned grand total
+        // ALREADY INCLUDES the base spin's win. The Math.max in
+        // the finalize block guards against any cancel/edge case.
+        bonusContribution = await runBonusSequence(scatters, finalMagnetsArr, winTotal) || 0
       }
     }
 
@@ -621,10 +621,15 @@ export default function MagneticSlot() {
     if (!bonusMode && round) {
       finalizingRef.current = true
       setFinalizing(true)
-      // grandTotal = base spin win + bonus winnings (if any).
-      // bonusContribution comes from runBonusSequence's RETURN
-      // value, not a ref — bulletproof against accidental resets.
-      const grandTotal = winTotal + bonusContribution
+      // Server finalize total. bonusContribution from a completed
+      // bonus already includes baseWinTotal (the pot is SEEDED
+      // with it), so we Math.max with winTotal as a safety net:
+      //   - Bonus completed: bonusContribution = base + FS ≥ base,
+      //     Math.max picks bonusContribution.
+      //   - No bonus: bonusContribution = 0, Math.max picks winTotal.
+      //   - Bonus cancelled mid-flow: bonusContribution might be 0
+      //     or partial; Math.max guarantees at least base credits.
+      const grandTotal = Math.max(winTotal, bonusContribution)
       try {
         if (!isDev && round.round_id && !String(round.round_id).startsWith('dev-')) {
           const res = await finishMagneticRound(round.round_id, grandTotal)
@@ -650,12 +655,19 @@ export default function MagneticSlot() {
   // ── Bonus sequence orchestrator ──
   // Drives the 6-phase bonus flow the user spec'd:
   //   1. scatter-pulse  — darken the field, pulse the scatters
-  //   2. overlay-intro  — modal "FREE SPINS / 4"
+  //   2. overlay-intro  — modal "FREE SPINS / 10"
   //   3. merge-magnets  — 5 magnets fuse into ONE mega-magnet
-  //   4. bonus-fs       — 4 free spins, all under the mega-magnet
+  //   4. bonus-fs       — 10 free spins, all under the mega-magnet
   //   5. overlay-end    — modal "BONUS COMPLETE / +N₽"
   //   6. idle           — credit total, reset bonus state
-  async function runBonusSequence(scatters, triggerMagnets) {
+  //
+  // baseWinTotal: the trigger spin's own win. We SEED the bonus
+  // pot with it so the winbar shows base+FS combined throughout,
+  // and the returned total is base + FS_sum. The base credit was
+  // already applied optimistically by the outer spin() right
+  // after its settle — we only credit the FS delta here to avoid
+  // double-counting.
+  async function runBonusSequence(scatters, triggerMagnets, baseWinTotal = 0) {
     // 1) Scatter pulse — field darkens, scatters bounce. The
     //    just-settled pulled symbols stay visible; the scatters
     //    in their reel cells also stay (they're scatters, they
@@ -706,8 +718,13 @@ export default function MagneticSlot() {
     //    magnet held constant. Spin() handles bonusMode internally
     //    (no stake debit, payouts → bonusTotalWin, no shuffle of
     //    finalMagnets).
-    bonusTotalWinRef.current = 0
-    setBonusTotalWin(0)
+    //
+    // SEED the pot with the base spin's winTotal — the trigger
+    // spin's own win is part of the bonus pot, not a separate
+    // credit. So the winbar shows base+FS combined throughout
+    // the FS loop and the end overlay.
+    bonusTotalWinRef.current = baseWinTotal
+    setBonusTotalWin(baseWinTotal)
     setBonusPhase('bonus-fs')
     bonusPhaseRef.current = 'bonus-fs'
     for (let i = 0; i < BONUS_FREE_SPINS; i++) {
@@ -730,19 +747,19 @@ export default function MagneticSlot() {
     await sleep(3200)
     if (cancelRef.current) return
 
-    // Snapshot the accumulated bonus total. No cap — server is
-    // the source of truth for anti-cheat, and the user wants
-    // every legitimate win to pay out in full.
+    // Snapshot the accumulated total — base spin + all FS wins.
+    // No cap — server is the source of truth for anti-cheat,
+    // and we want every legitimate win to pay out in full.
     const total = bonusTotalWinRef.current
     setBonusTotalWin(total)
 
-    // Optimistic credit so the user sees their winnings the
-    // moment the overlay closes. The outer spin()'s server
-    // finalize confirms the same total a few ms later via
-    // finish_magnetic_round and re-syncs balance from the
-    // server response.
-    if (total > 0) {
-      const nb = balanceRef.current + total
+    // Optimistic credit ONLY the FS delta — the base spin's win
+    // was already optimistically credited by the outer spin()
+    // right after its settle. Crediting `total` here would
+    // double-count `baseWinTotal`.
+    const fsDelta = total - baseWinTotal
+    if (fsDelta > 0) {
+      const nb = balanceRef.current + fsDelta
       balanceRef.current = nb
       setBalance(nb)
       if (typeof setBalanceBounce === 'function') {
@@ -750,13 +767,12 @@ export default function MagneticSlot() {
         setTimeout(() => setBalanceBounce(false), 540)
       }
       haptic('success')
-      // Reflect the win in lastWin too — once we drop out of
-      // overlay-end the winbar switches back to displaying
-      // lastWin, and showing the just-credited bonus total there
-      // (instead of the last FS's individual win) is what the
-      // player actually expects to see.
-      setLastWin(total)
     }
+    // Reflect the combined win in lastWin too — once we drop
+    // out of overlay-end the winbar switches back to displaying
+    // lastWin, and showing the combined (base + FS) total there
+    // is what the player actually expects to see.
+    if (total > 0) setLastWin(total)
 
     // Reset visual bonus state.
     setMagnetsMerged(false)
