@@ -1179,20 +1179,27 @@
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
 }
 
-/* Flying-symbol overlay. Sits ABSOLUTELY at the BOTTOM of the
- * column at rest (lined up with the bottom reel cell), then
- * during its fly cycle climbs upward via animated `bottom` so
- * its CENTRE lands exactly on the tier badge at --target-pct
- * from the column bottom.
+/* Flying-symbol overlay. Sits absolutely at its source reel
+ * cell at rest (lined up with the cell the JSX picked); during
+ * its fly cycle it climbs upward via animated `bottom` so its
+ * CENTRE lands exactly on the tier badge at --target-pct from
+ * the column bottom.
  *
- * --sym-half = half the symbol's own height. Subtracting it
- * from the target % aligns the symbol's centre with the tier
- * badge's centre (which sits at --target-pct from bottom). */
+ *   --sym-half       = half the symbol's own height. Subtracting
+ *                      it from the target % aligns the symbol's
+ *                      centre with the tier badge centre.
+ *   --cell-offset    = cell height + reel gap. The vertical
+ *                      step between adjacent reel cells.
+ *   --row-from-bottom = 0 → bottom cell, 1 → top cell. Multiplied
+ *                       by --cell-offset to compute start bottom.
+ */
 .magnetic-card-flying {
   --sym-half: 8px;
+  --cell-offset: 18px;          /* 16 px cell + 2 px reel gap */
+  --row-from-bottom: 0;
   position: absolute;
   left: 50%;
-  bottom: 0;
+  bottom: calc(var(--row-from-bottom) * var(--cell-offset));
   width: 16px;
   height: 16px;
   transform: translateX(-50%);
@@ -1208,6 +1215,7 @@
 }
 .magnetic-slot-card-art--large .magnetic-card-flying {
   --sym-half: 14px;
+  --cell-offset: 30px;          /* 28 px cell + 2 px reel gap */
   width: 28px;
   height: 28px;
 }
@@ -1218,13 +1226,33 @@
 }
 
 @keyframes magnetic-card-fly {
-  0%   { bottom: 0; opacity: 0; }
-  6%   { bottom: 0; opacity: 1; }
-  28%  { bottom: calc(var(--target-pct, 0%) - var(--sym-half)); opacity: 1; }
-  60%  { bottom: calc(var(--target-pct, 0%) - var(--sym-half)); opacity: 1; }
-  84%  { bottom: 0; opacity: 1; }
-  92%  { bottom: 0; opacity: 0; }
-  100% { bottom: 0; opacity: 0; }
+  /* Ghost invisible at the moment the cell is still showing
+   * its own symbol. Just before 4 % the cell hides and the
+   * ghost appears IN ITS PLACE, then rises. */
+  0%   { bottom: calc(var(--row-from-bottom) * var(--cell-offset));                                   opacity: 0; }
+  4%   { bottom: calc(var(--row-from-bottom) * var(--cell-offset));                                   opacity: 1; }
+  28%  { bottom: calc(var(--target-pct, 0%) - var(--sym-half));                                       opacity: 1; }
+  60%  { bottom: calc(var(--target-pct, 0%) - var(--sym-half));                                       opacity: 1; }
+  84%  { bottom: calc(var(--row-from-bottom) * var(--cell-offset));                                   opacity: 1; }
+  88%  { bottom: calc(var(--row-from-bottom) * var(--cell-offset));                                   opacity: 0; }
+  100% { bottom: calc(var(--row-from-bottom) * var(--cell-offset));                                   opacity: 0; }
+}
+
+/* Source cell — fades to invisible while its ghost is in
+ * flight, then re-appears once the ghost has merged back. The
+ * timings mirror magnetic-card-fly exactly so the cell + ghost
+ * swap is invisible to the eye. */
+.magnetic-slot-card-art--animated .magnetic-card-symbol--releasing {
+  animation: magnetic-card-release 3.6s linear infinite;
+  animation-delay: var(--fly-delay, 0s);
+}
+
+@keyframes magnetic-card-release {
+  0%   { opacity: 1; }
+  4%   { opacity: 0; }
+  84%  { opacity: 0; }
+  88%  { opacity: 1; }
+  100% { opacity: 1; }
 }
 
 .magnetic-slot-card-art--large {

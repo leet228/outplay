@@ -2135,11 +2135,12 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
   // Two tier rows packed into the upper half of the column.
   const tiers = [75, 50]
   // Per-symbol flight script. Each entry: which column, which
-  // texture, which tier %, and when to start (s) within the loop.
+  // reel cell (ri: 0 = top, 1 = bottom), which texture, which
+  // tier %, and when to start (s) within the loop.
   const flies = [
-    { col: 0, tex: mgTexBolt, target: 75, delay: 0.0 },
-    { col: 0, tex: mgTexCoin, target: 50, delay: 0.5 },
-    { col: 1, tex: mgTexOrb,  target: 75, delay: 1.0 },
+    { col: 0, ri: 0, tex: mgTexBolt, target: 75, delay: 0.0 },
+    { col: 0, ri: 1, tex: mgTexCoin, target: 50, delay: 0.5 },
+    { col: 1, ri: 0, tex: mgTexOrb,  target: 75, delay: 1.0 },
   ]
 
   return (
@@ -2188,25 +2189,42 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
               ))}
             </div>
 
-            {/* Static reel — 2 cells stacked at the bottom. */}
+            {/* Reel — 2 cells stacked at the bottom. Cells whose
+              * symbol is currently in flight fade to opacity 0
+              * while the ghost is rising/held/returning, then
+              * fade back in once the ghost re-merges with them. */}
             <div className="magnetic-card-reel">
-              {col.reels.map((tex, ri) => (
-                <span key={ri} className="magnetic-card-cell">
-                  {tex && (
-                    <span
-                      className="magnetic-card-symbol"
-                      style={{ backgroundImage: `url("${tex}")` }}
-                    />
-                  )}
-                </span>
-              ))}
+              {col.reels.map((tex, ri) => {
+                const fly = animated
+                  ? flies.find(f => f.col === ci && f.ri === ri)
+                  : null
+                return (
+                  <span key={ri} className="magnetic-card-cell">
+                    {tex && (
+                      <span
+                        className={
+                          'magnetic-card-symbol' +
+                          (fly ? ' magnetic-card-symbol--releasing' : '')
+                        }
+                        style={{
+                          backgroundImage: `url("${tex}")`,
+                          ...(fly ? { '--fly-delay': `${fly.delay}s` } : {}),
+                        }}
+                      />
+                    )}
+                  </span>
+                )
+              })}
             </div>
 
             {/* Flying overlays — only mounted when animated, and
-              * only for cols listed in the `flies` script. Each
-              * one rises from the reel bottom to its target tier
-              * line (where the percent badge sits), holds, then
-              * drops back. */}
+              * only for cells listed in the `flies` script. Each
+              * one takes off from the EXACT cell position (so the
+              * source cell appears to lift off), rises to the
+              * target tier line, holds, returns and merges back
+              * into its cell. --row-from-bottom selects which
+              * reel cell (0 = bottom, 1 = top) the ghost takes
+              * off from. */}
             {animated && flies
               .filter(f => f.col === ci)
               .map((fly, fi) => (
@@ -2216,6 +2234,7 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
                   style={{
                     '--target-pct': `${fly.target}%`,
                     '--fly-delay': `${fly.delay}s`,
+                    '--row-from-bottom': fly.ri === 0 ? 1 : 0,
                     backgroundImage: `url("${fly.tex}")`,
                   }}
                 />
