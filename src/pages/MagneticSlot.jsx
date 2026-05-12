@@ -97,11 +97,14 @@ function pickSymbol() {
 // the eye sees.
 const TIER_PERCENTS = [100, 75, 50, 25]
 
-// Per-symbol payout divisor. Dev-only — RTP not tuned yet; we'll
-// run Monte-Carlo before launch. Smaller divisor = bigger
-// payouts (player-favoured during early testing so the loop
-// feels rewarding while we iterate on visuals).
-const PAYOUT_DIVISOR = 50
+// Per-symbol payout divisor. Tuned via Monte-Carlo:
+//   /50  → 130 % RTP (dev-only, way overshot)
+//   /68  → ~96.2 % RTP  ← final target
+//   /70  → ~93.5 % RTP
+// See scripts/magnetic-rtp-sim.js for the simulator. The 5.5 %
+// bonus contribution lives inside the total — base RTP alone
+// sits at ~90.7 %.
+const PAYOUT_DIVISOR = 68
 
 // ── Bonus tuning ──
 // 3+ 💎 scatters anywhere on the 15-cell grid trigger the bonus.
@@ -636,11 +639,16 @@ export default function MagneticSlot() {
   }
 
   // ── Buy-bonus controls ──
-  // FAB tap opens the confirmation modal. Confirm actually
-  // debits 100 × stake and fires a spin that's guaranteed to drop
-  // 3 scatters → trigger detection picks them up at the end of
-  // the spin and runs the standard bonus sequence.
-  const BUY_BONUS_MULT = 100
+  // Tap opens the confirmation modal. Confirm actually debits
+  // BUY_BONUS_MULT × stake and fires a spin that's guaranteed to
+  // drop 3 scatters → trigger detection picks them up at the end
+  // of the spin and runs the standard bonus sequence.
+  //
+  // Cost = 20 × stake → Buy EV ≈ 95.6 % (matches the base RTP),
+  // verified by scripts/magnetic-rtp-sim.js. Lower cost makes
+  // the buy feel free; higher cost (e.g. 100×) gives a brutal
+  // ~19 % EV and players never use it.
+  const BUY_BONUS_MULT = 20
   function onBuyBonusClick() {
     if (autoSpin || spinning) return
     if (bonusPhase !== 'idle') return
