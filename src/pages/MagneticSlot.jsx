@@ -532,6 +532,10 @@ export default function MagneticSlot() {
         // cell was already empty so dwelling on it reads as a
         // freeze.
         if (sym && sym.texture) {
+          // Per-pull haptic. Orbs (100 % tier) get a heavier
+          // impact than coin/bolt/compass — feels like a stronger
+          // magnetic catch.
+          haptic(sym.strength >= 1.0 ? 'medium' : 'light')
           await sleep(SYMBOL_PULL_INTERVAL)
         }
       }
@@ -682,6 +686,12 @@ export default function MagneticSlot() {
     setMagnetsMerged(true)
     setBonusPhase('merge-magnets')
     bonusPhaseRef.current = 'merge-magnets'
+    // Hard thump when the 5 magnets slam into one — sells the
+    // "MEGA" moment. 'heavy' is the strongest Telegram impact;
+    // the 'success' notification ~280 ms later layers on the
+    // celebratory tap so the reveal feels event-tier.
+    haptic('heavy')
+    setTimeout(() => { if (!cancelRef.current) haptic('success') }, 280)
     await sleep(1400)
     if (cancelRef.current) return
 
