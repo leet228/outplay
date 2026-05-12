@@ -139,43 +139,44 @@
 .magnetic-magnet-cell {
   height: var(--magnet-h);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   flex-shrink: 0;
 }
 
-/* Magnet body now hosts the multiplier label INSIDE it — the
- * texture is rendered as the body's background and the mult
- * sits centred on top of the horseshoe. */
+/* Multiplier label sits ON the magnet — rendered ABOVE the body,
+ * then nudged down (margin-bottom negative) so it overlaps the
+ * very top arc of the horseshoe. Reads as a label "standing on"
+ * the magnet rather than floating above or hidden inside the U. */
+.magnetic-magnet-mult {
+  font-size: 11px;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  letter-spacing: -0.04em;
+  text-shadow:
+    0 0 3px rgba(0, 0, 0, 0.95),
+    0 0 2px rgba(0, 0, 0, 0.85),
+    0 1px 0 rgba(0, 0, 0, 0.9);
+  position: relative;
+  z-index: 2;
+  margin-bottom: -2px;
+  line-height: 1;
+}
+
 .magnetic-magnet-body {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
-  /* Position context for the multiplier overlay. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.magnetic-magnet-mult {
-  font-size: 12px;
-  font-weight: 950;
-  font-variant-numeric: tabular-nums;
-  color: #fff;
-  letter-spacing: -0.04em;
-  /* Strong dark halo so the text reads on any magnet colour. */
-  text-shadow:
-    0 0 3px rgba(0, 0, 0, 0.95),
-    0 0 2px rgba(0, 0, 0, 0.85),
-    0 1px 0 rgba(0, 0, 0, 0.9);
-  /* Slight downward nudge so the text sits inside the U-shape
-   * of the horseshoe instead of cutting across the top arc. */
-  transform: translateY(2px);
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
 }
 .magnetic-magnet--hot .magnetic-magnet-mult { color: #fae8ff; }
 

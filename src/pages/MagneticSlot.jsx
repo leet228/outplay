@@ -483,12 +483,15 @@ export default function MagneticSlot() {
                   >
                     {strip.mults.map((mult, si) => (
                       <span key={si} className="magnetic-magnet-cell">
+                        {/* Mult label sits ON the magnet — rendered
+                          * above the body, slightly overlapping its
+                          * top arch so it reads as a label resting
+                          * on the horseshoe. */}
+                        <span className="magnetic-magnet-mult">×{mult}</span>
                         <span
                           className="magnetic-magnet-body"
                           style={{ backgroundImage: `url("${texMagnet}")` }}
-                        >
-                          <span className="magnetic-magnet-mult">×{mult}</span>
-                        </span>
+                        />
                       </span>
                     ))}
                   </div>
