@@ -46,6 +46,19 @@ function pickSymbol() {
   return SYMBOLS[0]
 }
 
+// Same as pickSymbol but never returns a scatter — used during
+// bonus FS so 💎 can't re-trigger the bonus mid-bonus.
+const SYMBOLS_NO_SCATTER    = SYMBOLS.filter(s => !s.isScatter)
+const SYM_NO_SCATTER_WEIGHT = SYMBOLS_NO_SCATTER.reduce((s, x) => s + x.weight, 0)
+function pickSymbolNoScatter() {
+  let r = Math.random() * SYM_NO_SCATTER_WEIGHT
+  for (const s of SYMBOLS_NO_SCATTER) {
+    if (r < s.weight) return s
+    r -= s.weight
+  }
+  return SYMBOLS_NO_SCATTER[0]
+}
+
 function pickMagnet() {
   let r = Math.random() * MAGNET_WEIGHT_SUM
   for (let i = 0; i < MAGNET_POOL.length; i++) {
@@ -64,10 +77,11 @@ function pickMagnet() {
 function spin(megaMult /* optional */, bonusMode = false) {
   let scatters = 0
   const grid = []
+  const picker = bonusMode ? pickSymbolNoScatter : pickSymbol
   for (let ci = 0; ci < REELS; ci++) {
     const col = []
     for (let ri = 0; ri < ROWS; ri++) {
-      const s = pickSymbol()
+      const s = picker()
       col.push(s)
       if (s.isScatter) scatters++
     }

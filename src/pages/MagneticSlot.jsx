@@ -89,6 +89,20 @@ function pickSymbol() {
   return SYMBOLS[0]
 }
 
+// During bonus FS we never want fresh scatters to drop — only the
+// 3 trigger scatters from the base spin matter, no re-triggers in
+// this version. Pick from the non-scatter sub-pool.
+const SYMBOLS_NO_SCATTER     = SYMBOLS.filter(s => !s.isScatter)
+const SYM_NO_SCATTER_WEIGHT  = SYMBOLS_NO_SCATTER.reduce((s, x) => s + x.weight, 0)
+function pickSymbolNoScatter() {
+  let r = Math.random() * SYM_NO_SCATTER_WEIGHT
+  for (const s of SYMBOLS_NO_SCATTER) {
+    if (r < s.weight) return s
+    r -= s.weight
+  }
+  return SYMBOLS_NO_SCATTER[0]
+}
+
 // Four tier cells per column: 100 / 75 / 50 / 25 %, evenly
 // stepped down the pull column. Each symbol's own `strength`
 // (0.25 / 0.50 / 0.75 / 1.00) IS its tier — no aggregation
@@ -123,9 +137,10 @@ const MAX_PAYOUT_CAP = 5000
 // Strip layouts: the LAST item is the final value, everything
 // above is random filler that scrolls past the viewport during
 // the spin animation.
-function buildSymbolStrip(final) {
+function buildSymbolStrip(final, allowScatter = true) {
+  const picker = allowScatter ? pickSymbol : pickSymbolNoScatter
   const strip = []
-  for (let i = 0; i < STRIP_LEN - 1; i++) strip.push(pickSymbol())
+  for (let i = 0; i < STRIP_LEN - 1; i++) strip.push(picker())
   strip.push(final)
   return strip
 }
@@ -304,8 +319,11 @@ export default function MagneticSlot() {
     }
 
     // ── Pick final outcome ──
+    // Bonus FS use the no-scatter pool so 💎 can't drop mid-bonus
+    // (no re-triggers in this version).
+    const picker = bonusMode ? pickSymbolNoScatter : pickSymbol
     const finalGridArr = Array.from({ length: REELS }, () =>
-      Array.from({ length: ROWS }, pickSymbol)
+      Array.from({ length: ROWS }, picker)
     )
     // Buy-bonus forces exactly 3 scatters into random positions so
     // the post-settle trigger detection always fires.
@@ -340,7 +358,7 @@ export default function MagneticSlot() {
     // ty=-(STRIP_LEN-1) → last symbol (the FINAL one) is in view.
     const newCellStrips = finalGridArr.map(col =>
       col.map(final => ({
-        symbols: buildSymbolStrip(final),
+        symbols: buildSymbolStrip(final, !bonusMode),
         ty: 0,
         td: 0,
       }))
@@ -588,7 +606,9 @@ export default function MagneticSlot() {
     bonusPhaseRef.current = 'bonus-fs'
     for (let i = 0; i < BONUS_FREE_SPINS; i++) {
       if (cancelRef.current) break
-      setBonusSpinsLeft(BONUS_FREE_SPINS - i)
+      // Counter shows spins REMAINING after the current one.
+      // First spin (i=0) → "9", last spin (i=9) → "0".
+      setBonusSpinsLeft(BONUS_FREE_SPINS - i - 1)
       // Release the spinning gate so the nested spin() doesn't
       // see itself as already-running and bail.
       spinningRef.current = false
