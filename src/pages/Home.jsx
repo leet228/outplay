@@ -2131,16 +2131,14 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
   // values are aligned with the two tier rows so the animated
   // columns visually LAND on a tier, not between them.
   const cols = [
-    { reels: [mgTexBolt,    mgTexCoin],     reach: 35 },
+    { reels: [mgTexBolt,    mgTexCoin],     reach: 50 },
     { reels: [mgTexOrb,     mgTexCompass],  reach: 75 },
-    { reels: [mgTexGem,     mgTexBolt],     reach: 35 },
+    { reels: [mgTexGem,     mgTexBolt],     reach: 50 },
   ]
-  // Two tier rows packed in the middle of the column — the
-  // earlier 100/50 split left a huge dead band between the badge
-  // at the very top (half-clipped under the magnets) and the
-  // 50 % badge sitting at dead-centre. 75/35 puts both badges
-  // fully visible AND centred.
-  const tiers = [75, 35]
+  // Two tier rows — both packed into the upper half of the column
+  // so neither floats over the reel symbols. Reach values land
+  // exactly on these lines.
+  const tiers = [75, 50]
 
   return (
     <div
