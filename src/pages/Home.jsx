@@ -2127,13 +2127,20 @@ function DiceSlotArtwork({ large = false, animated = false }) {
 function MagneticSlotArtwork({ large = false, animated = false }) {
   const magnets = [25, 100, 50]
   // Each column: 2 symbols top→bottom + how far the column should
-  // rise during the pull loop (% of the pull-track height).
+  // rise during the pull loop (% of the pull-track height). Reach
+  // values are aligned with the two tier rows so the animated
+  // columns visually LAND on a tier, not between them.
   const cols = [
-    { reels: [mgTexBolt,    mgTexCoin],     reach: 55 },
-    { reels: [mgTexOrb,     mgTexCompass],  reach: 92 },
-    { reels: [mgTexGem,     mgTexBolt],     reach: 48 },
+    { reels: [mgTexBolt,    mgTexCoin],     reach: 35 },
+    { reels: [mgTexOrb,     mgTexCompass],  reach: 75 },
+    { reels: [mgTexGem,     mgTexBolt],     reach: 35 },
   ]
-  const tiers = [100, 50]
+  // Two tier rows packed in the middle of the column — the
+  // earlier 100/50 split left a huge dead band between the badge
+  // at the very top (half-clipped under the magnets) and the
+  // 50 % badge sitting at dead-centre. 75/35 puts both badges
+  // fully visible AND centred.
+  const tiers = [75, 35]
 
   return (
     <div
