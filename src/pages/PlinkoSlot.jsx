@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import useGameStore from '../store/useGameStore'
@@ -95,225 +95,32 @@ function ballNormX(r, k) {
   return compressX(local, r === ROWS ? SLOT_HFRAC : PEG_HFRAC)
 }
 
-// Real-physics single-ball renderer.
-//
-// Each ball is a point mass under gravity that bounces off circular
-// pegs and the side walls of the peg field. The pre-computed `path`
-// from rollPath() still determines the LANDING column (so RTP /
-// fairness math is unchanged) — physics just decides the trajectory
-// to get there. We do that with a soft per-collision bias toward
-// `path[nextRow]`'s expected x position: each peg hit gives the ball
-// a small nudge in the right direction, but the dominant motion is
-// genuine reflect-and-fall.
-//
-// Per-frame work is tiny:
-//   - apply gravity to vy
-//   - integrate position (Euler)
-//   - distance-check against ~6 pegs in the current row neighbourhood
-//   - write transform:translate3d to the DOM ref
-//
-// `transform` is compositor-only so 100 simultaneous physics balls
-// still don't trigger layout / paint passes — the cost stays GPU-
-// composite and JS-math only.
-//
-// React.memo comparator returns true → ball never re-renders after
-// mount; all motion is imperative DOM writes.
-const PlinkoBall = React.memo(function PlinkoBall({ id, path, landing, startDelay, dimsRef, pegsArrRef, onLandRef, cancelRef }) {
-  const elRef = useRef(null)
-
-  // Callback ref: position the ball at the top-centre as soon as it
-  // mounts so the user doesn't see a one-frame flash at the (0, 0)
-  // corner before physics starts.
-  const setRef = useCallback((node) => {
-    elRef.current = node
-    if (!node || node.dataset.plinkoInited === '1') return
-    const d = dimsRef.current
-    if (!d || !d.w) return
-    node.dataset.plinkoInited = '1'
-    node.style.transform = `translate3d(${d.w / 2}px, 0px, 0)`
-  }, [dimsRef])
-
-  useEffect(() => {
-    if (cancelRef.current) return
-    let rafId    = null
-    let startTo  = null
-    let cancelled = false
-
-    startTo = setTimeout(() => {
-      if (cancelled || cancelRef.current) return
-      const d    = dimsRef.current
-      const pegs = pegsArrRef.current
-      if (!d || !d.w || !pegs || pegs.length === 0) return
-
-      // ── Geometry / tuning ──
-      const R_BALL = 3.5
-      const R_PEG  = 2
-      const HIT    = R_BALL + R_PEG          // collision distance
-      const HIT_SQ = HIT * HIT
-
-      const pegsH = d.h - d.slotH
-      // Gravity scaled to board height so the descent feels the same
-      // on any screen size. ~2.8× pegsH per s² ≈ 3-second fall through
-      // the full peg field after losses.
-      const G        = pegsH * 2.8
-      // Energy retained on each peg bounce. Lower → balls settle
-      // faster (more "thunk", less "ricochet"). Lateral kinetic
-      // energy decays exponentially with bounces.
-      const DAMP     = 0.55
-      // How aggressively each bounce nudges the ball toward its
-      // pre-determined target column. Strong enough that the ball
-      // lands in the right slot ~always; small enough that motion
-      // still reads as natural physics, not rails.
-      const BIAS     = 5.0
-      const MAX_VX   = pegsH * 0.5
-      const TARGET_X = ballNormX(ROWS, path[ROWS]) * d.w
-      const TARGET_Y = d.h - d.slotH / 2
-
-      // Initial state — top centre, mild random horizontal kick so
-      // identical drops don't trace identical paths.
-      let x  = d.w / 2
-      let y  = 0
-      let vx = (Math.random() - 0.5) * 30
-      let vy = 0
-      let inSlot = false           // true once past the final peg row
-      let lastT  = performance.now()
-      // Force-land after this many ms — guards against pathological
-      // physics where the ball settles in a peg gap and never falls.
-      const MAX_FLIGHT = 8000
-      const startedAt = lastT
-
-      const tick = (now) => {
-        if (cancelled || cancelRef.current) return
-
-        // Clamp dt — pause / tab-switch can yield huge gaps; we want
-        // the ball to resume from its last position, not teleport.
-        const dt = Math.min((now - lastT) / 1000, 0.033)
-        lastT = now
-
-        // Force-land if the ball has been falling too long.
-        if (now - startedAt > MAX_FLIGHT) {
-          const node = elRef.current
-          if (node) {
-            node.style.transform = `translate3d(${TARGET_X}px, ${TARGET_Y}px, 0)`
-            node.style.opacity = '0'
-          }
-          onLandRef.current?.(id, landing)
-          return
-        }
-
-        if (!inSlot) {
-          // ── Integrate ──
-          vy += G * dt
-          x  += vx * dt
-          y  += vy * dt
-
-          // ── Wall reflection ──
-          // Peg field has 4 % horizontal margin from game-area edges
-          // (matches PEG_HFRAC compression). Walls absorb energy.
-          const leftW  = d.w * 0.04
-          const rightW = d.w * 0.96
-          if (x < leftW + R_BALL) {
-            x = leftW + R_BALL
-            vx = Math.abs(vx) * DAMP
-          } else if (x > rightW - R_BALL) {
-            x = rightW - R_BALL
-            vx = -Math.abs(vx) * DAMP
-          }
-
-          // ── Peg collisions ──
-          // Only check pegs in the row neighbourhood of the ball's
-          // current y — saves us from a 153-peg sweep every frame.
-          if (y < pegsH) {
-            const curRowF = (y / pegsH) * (ROWS - 1)
-            const minR = Math.max(0, Math.floor(curRowF) - 1)
-            const maxR = Math.min(ROWS - 1, Math.ceil(curRowF) + 1)
-            collideLoop:
-            for (let r = minR; r <= maxR; r++) {
-              const rowPegs = pegs[r]
-              if (!rowPegs) continue
-              for (let pi = 0; pi < rowPegs.length; pi++) {
-                const peg = rowPegs[pi]
-                const dx = x - peg.x
-                const dy = y - peg.y
-                const d2 = dx * dx + dy * dy
-                if (d2 < HIT_SQ) {
-                  const dist = Math.sqrt(d2) || 0.0001
-                  const nx = dx / dist
-                  const ny = dy / dist
-                  // Push ball out of the peg along the contact normal.
-                  x = peg.x + nx * HIT
-                  y = peg.y + ny * HIT
-                  // Reflect velocity along the contact normal (only if
-                  // we're moving INTO the peg — protects against
-                  // sticky re-bounces when ball grazes the surface).
-                  const dot = vx * nx + vy * ny
-                  if (dot < 0) {
-                    vx = (vx - 2 * dot * nx) * DAMP
-                    vy = (vy - 2 * dot * ny) * DAMP
-                  }
-                  // Bias the bounce toward the path's expected x at
-                  // the next row. Subtle on first hits, accumulates
-                  // toward the bottom where landing precision matters
-                  // most.
-                  const nextRow = r + 1
-                  if (nextRow < ROWS && path[nextRow] != null) {
-                    const tgt = ballNormX(nextRow, path[nextRow]) * d.w
-                    vx += (tgt - x) * BIAS * dt
-                  }
-                  if (vx >  MAX_VX) vx =  MAX_VX
-                  if (vx < -MAX_VX) vx = -MAX_VX
-                  // Don't let the ball linger between pegs — guarantee
-                  // some downward speed after every hit so it keeps
-                  // making progress through the field.
-                  if (vy < pegsH * 0.2) vy = pegsH * 0.25
-                  break collideLoop
-                }
-              }
-            }
-          }
-
-          // ── Transition into the slot row ──
-          if (y >= pegsH) inSlot = true
-        } else {
-          // ── Slot glide ──
-          // Past the final peg row → smoothly home in on the target
-          // bucket's centre. Geometric interpolation gives a soft
-          // "drop into slot" feel and guarantees we always land
-          // exactly where rollPath() said we would.
-          const dxg = TARGET_X - x
-          const dyg = TARGET_Y - y
-          x += dxg * 0.35
-          y += dyg * 0.35
-          if (Math.abs(dxg) < 0.6 && Math.abs(dyg) < 0.6) {
-            const node = elRef.current
-            if (node) {
-              node.style.transform = `translate3d(${TARGET_X}px, ${TARGET_Y}px, 0)`
-              node.style.opacity = '0'
-            }
-            onLandRef.current?.(id, landing)
-            return
-          }
-        }
-
-        const node = elRef.current
-        if (node) node.style.transform = `translate3d(${x}px, ${y}px, 0)`
-        rafId = requestAnimationFrame(tick)
-      }
-
-      lastT = performance.now()
-      rafId = requestAnimationFrame(tick)
-    }, startDelay)
-
-    return () => {
-      cancelled = true
-      if (startTo) clearTimeout(startTo)
-      if (rafId)   cancelAnimationFrame(rafId)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  return <span ref={setRef} className="plinko-ball" aria-hidden="true" />
-}, () => true)
+// Memoised single-ball renderer. With 100 balls in flight, animateBall()
+// fires a setBalls() per row-step per ball — without React.memo each
+// step diffs all 100 nodes. Memoised on (id, row, col), so when one
+// ball updates, the other 99 skip reconciliation entirely. Big perf
+// win on phones once ballsPerLaunch hits 50+.
+const PlinkoBall = React.memo(function PlinkoBall({ row, col }) {
+  let topCss
+  if (row === 0) {
+    topCss = '0px'
+  } else if (row === ROWS) {
+    topCss = 'calc(100% - var(--plinko-slot-row-h, 4%) / 2)'
+  } else {
+    const frac = rowNormY(row - 0.5)
+    topCss = `calc(${frac} * (100% - var(--plinko-slot-row-h, 4%)))`
+  }
+  return (
+    <span
+      className="plinko-ball"
+      style={{
+        left: `${ballNormX(row, col) * 100}%`,
+        top:  topCss,
+      }}
+      aria-hidden="true"
+    />
+  )
+})
 
 // Single bucket on the multiplier row. Wrapped in React.memo so that
 // during a 100-ball landing burst — where setHitSlots flips one slot's
@@ -427,24 +234,6 @@ export default function PlinkoSlot() {
   // board and the landing counter would be poisoned.
   const inFlightRef         = useRef(false)
 
-  // Game-area dimensions, kept fresh by a ResizeObserver. Balls in
-  // flight compute their pixel positions from these via the per-frame
-  // physics loop in PlinkoBall — no React state churn on resize.
-  const gameAreaRef = useRef(null)
-  const dimsRef     = useRef({ w: 0, h: 0, slotH: 0 })
-
-  // Peg positions in PIXELS, indexed by row → array of {x, y}. Kept
-  // in sync with dimsRef by the ResizeObserver below. Each in-flight
-  // ball does a per-frame collision check against the pegs in its
-  // current row neighbourhood (~6 pegs to test, not all 153).
-  const pegsArrRef  = useRef([])
-
-  // Stable onLand reference handed to every PlinkoBall (refs don't
-  // change identity, so it doesn't trip React.memo). The closure
-  // reads from refs internally so capturing first-render bindings is
-  // safe — none of the inner functions depend on stale prop closures.
-  const onLandRef = useRef(null)
-
   useEffect(() => { balanceRef.current        = balance },        [balance])
   useEffect(() => { stakeRef.current          = stake },          [stake])
   useEffect(() => { riskRef.current           = risk },           [risk])
@@ -453,48 +242,6 @@ export default function PlinkoSlot() {
   useEffect(() => () => {
     cancelRef.current = true
     if (bounceTimerRef.current) clearTimeout(bounceTimerRef.current)
-  }, [])
-
-  // Game-area size tracker + peg-array rebuild.
-  //
-  // Balls compute their pixel positions from `dimsRef` every frame
-  // during physics. The peg positions are derived from the same dims
-  // — we precompute them ONCE here (and re-precompute on resize) so
-  // each ball's per-frame collision check just does a 6-peg distance
-  // test instead of recomputing peg coordinates from scratch.
-  useEffect(() => {
-    const el = gameAreaRef.current
-    if (!el) return
-    const measure = () => {
-      const rect = el.getBoundingClientRect()
-      // --plinko-slot-row-h is 4% of game-area height (CSS-defined).
-      // .plinko-pegs lives inside .plinko-game-area, so its inset
-      // bottom resolves against game-area's height.
-      const slotH = rect.height * 0.04
-      dimsRef.current = { w: rect.width, h: rect.height, slotH }
-      // Rebuild peg array in pixels, bucketed by row for cheap
-      // proximity queries. Row r has r+3 pegs (same geometry the
-      // JSX uses), evenly spread across PEG_HFRAC of the width.
-      const pegsH = rect.height - slotH
-      const arr = []
-      for (let r = 0; r < ROWS; r++) {
-        const pegsInRow = r + 3
-        const pegArg = pegsInRow - 1
-        const rowArr = []
-        for (let p = 0; p < pegsInRow; p++) {
-          rowArr.push({
-            x: pegNormX(pegArg, p) * rect.width,
-            y: rowNormY(r) * pegsH,
-          })
-        }
-        arr.push(rowArr)
-      }
-      pegsArrRef.current = arr
-    }
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
   }, [])
 
   const stakeIndex = BETS.indexOf(stake)
@@ -661,16 +408,22 @@ export default function PlinkoSlot() {
     })
   }
 
-  // Per-ball landing handler. Called by PlinkoBall's final setTimeout
-  // when the ball reaches the last row (= a multiplier bucket). All
-  // the row-step animation that animateBall() used to do has moved
-  // into PlinkoBall's imperative useEffect — this function only
-  // handles the moment of impact: payout, slot flash, ball removal,
-  // and the per-launch finalize gate.
-  const onLand = useCallback((id, landing) => {
+  // Animate one ball through the peg field. The ball is already in
+  // state (added by dropLaunch's batched spawn) — this just walks it
+  // through the row updates, pays out, and queues its removal.
+  // Tracks against ballsLandedRef / ballsExpectedRef and triggers the
+  // launch finalize once the last ball settles.
+  async function animateBall(id, path, landing) {
     if (cancelRef.current) return
     const currentRisk  = riskRef.current
     const currentStake = stakeRef.current
+
+    for (let r = 1; r <= ROWS; r++) {
+      if (cancelRef.current) return
+      setBalls(prev => prev.map(b => b.id === id ? { ...b, row: r, col: path[r] } : b))
+      await sleep(180)
+    }
+    if (cancelRef.current) return
 
     // Pay (optimistic local credit — server reconciles at finalize).
     // commitWin() rAF-batches setBalance + setLaunchWin so a 100-ball
@@ -684,11 +437,12 @@ export default function PlinkoSlot() {
     if (mul >= 1) maybeHaptic('success')
     else          maybeHaptic('light')
 
-    // The pop / glow animation on the bucket plays underneath; the
-    // ball is already opacity 0 from PlinkoBall's landing write, but
-    // we still queue the React unmount so it leaves the tree. Removal
-    // is rAF-batched so 100 simultaneous landings coalesce into ~16
-    // setBalls calls.
+    // Drop the ball IMMEDIATELY on impact — the slot's pop / glow
+    // animation (queued by flashSlot above) still plays on the
+    // bucket after, so the player sees the multiplier reaction
+    // without the ball lingering on top of it. removeBalls is
+    // rAF-batched so 100 simultaneous landings still coalesce
+    // into ~16 setBalls calls.
     removeBalls([id])
 
     // Track landings — when the last ball of the launch settles, clear
@@ -702,12 +456,7 @@ export default function PlinkoSlot() {
       inFlightRef.current = false
       finalizeLaunch()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  // Keep the ref synced so PlinkoBall's useEffect (mounted once with
-  // an empty dep array) can always reach the freshest onLand without
-  // re-binding.
-  onLandRef.current = onLand
+  }
 
   // Finalize the active launch on the server (real users only).
   // Reconciles the client's optimistic balance with the server's
@@ -797,30 +546,24 @@ export default function PlinkoSlot() {
     setLaunchWin(0)
     haptic('light')
 
-    // Safety: ResizeObserver's first callback is rAF-scheduled, so on
-    // ultra-fast first drops the dims ref may still be zero. Force a
-    // synchronous measure (and peg rebuild) here so PlinkoBall's
-    // physics loop always has valid dims to work with.
-    if (gameAreaRef.current && (!dimsRef.current.w || !dimsRef.current.h)) {
-      const rect = gameAreaRef.current.getBoundingClientRect()
-      const slotH = rect.height * 0.04
-      dimsRef.current = { w: rect.width, h: rect.height, slotH }
-      const pegsH = rect.height - slotH
-      const arr = []
-      for (let r = 0; r < ROWS; r++) {
-        const pegsInRow = r + 3
-        const pegArg = pegsInRow - 1
-        const rowArr = []
-        for (let p = 0; p < pegsInRow; p++) {
-          rowArr.push({
-            x: pegNormX(pegArg, p) * rect.width,
-            y: rowNormY(r) * pegsH,
-          })
-        }
-        arr.push(rowArr)
-      }
-      pegsArrRef.current = arr
+    // Pre-roll every ball's path up front so we can spawn them all in a
+    // single setBalls() commit. Without this, a 100-ball launch would
+    // fire 100 separate "append ball" renders during the spawn window
+    // (one every 14 ms) — each diffing the growing balls array.
+    const launchSeed = Date.now()
+    const newBalls = []
+    const meta = []
+    for (let i = 0; i < N; i++) {
+      const id = `b${launchSeed}-${i}`
+      const { path, landing } = rollPath()
+      newBalls.push({ id, row: 0, col: 0 })
+      meta.push({ id, path, landing })
     }
+
+    // ONE commit — all N balls appear at row 0 simultaneously. Visually
+    // they're stacked at top centre; the cascade kicks in 140 ms later
+    // as each ball's row-step loop starts on its own staggered timer.
+    setBalls(prev => [...prev, ...newBalls])
 
     // ── Per-launch stagger ──
     // Tuned so each launch finishes draining inside the user-visible
@@ -840,21 +583,10 @@ export default function PlinkoSlot() {
                   : N <= 20 ? 60
                   : N <= 50 ? 35
                   : 42
-
-    // Pre-roll every ball's path + assign its individual start delay,
-    // then commit them all in a single setBalls() so React mounts the
-    // whole batch in one paint. Each ball's PlinkoBall useEffect then
-    // schedules its own row-step setTimeouts (writing transform
-    // directly to its DOM ref) — no further setBalls() calls happen
-    // until the ball lands and `removeBalls` rAF-batches the unmount.
-    const launchSeed = Date.now()
-    const newBalls = []
     for (let i = 0; i < N; i++) {
-      const id = `b${launchSeed}-${i}`
-      const { path, landing } = rollPath()
-      newBalls.push({ id, path, landing, startDelay: 140 + i * stagger })
+      const m = meta[i]
+      setTimeout(() => animateBall(m.id, m.path, m.landing), 140 + i * stagger)
     }
-    setBalls(prev => [...prev, ...newBalls])
   }
 
   // Auto-loop: chains launches as long as auto is on and balance allows.
@@ -971,7 +703,7 @@ export default function PlinkoSlot() {
             * stage with empty space around it (matching the reference
             * spec photo). All inside coordinates use the game-area as
             * the 0..1 reference, no further compression needed. */}
-           <div className="plinko-game-area" ref={gameAreaRef}>
+           <div className="plinko-game-area">
             {/* Pegs — triangular grid. Row r has r+2 pegs, EXCEPT the
              * last row which gets r+3 (= ROWS+2 = 18) pegs spread across
              * the full game-area width at p / (ROWS + 1) positions. With
@@ -994,17 +726,7 @@ export default function PlinkoSlot() {
              * IN the slot row (calc(100% − slot-h / 2)) — a nice
              * "drop into slot" landing once the funnel has done its job. */}
             {balls.map(ball => (
-              <PlinkoBall
-                key={ball.id}
-                id={ball.id}
-                path={ball.path}
-                landing={ball.landing}
-                startDelay={ball.startDelay}
-                dimsRef={dimsRef}
-                pegsArrRef={pegsArrRef}
-                onLandRef={onLandRef}
-                cancelRef={cancelRef}
-              />
+              <PlinkoBall key={ball.id} row={ball.row} col={ball.col} />
             ))}
 
             {/* Landing slots — one row of multiplier buckets. The
