@@ -139,31 +139,43 @@
 .magnetic-magnet-cell {
   height: var(--magnet-h);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
   flex-shrink: 0;
 }
 
+/* Magnet body now hosts the multiplier label INSIDE it — the
+ * texture is rendered as the body's background and the mult
+ * sits centred on top of the horseshoe. */
 .magnetic-magnet-body {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+  /* Position context for the multiplier overlay. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .magnetic-magnet-mult {
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 950;
   font-variant-numeric: tabular-nums;
   color: #fff;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
+  /* Strong dark halo so the text reads on any magnet colour. */
+  text-shadow:
+    0 0 3px rgba(0, 0, 0, 0.95),
+    0 0 2px rgba(0, 0, 0, 0.85),
+    0 1px 0 rgba(0, 0, 0, 0.9);
+  /* Slight downward nudge so the text sits inside the U-shape
+   * of the horseshoe instead of cutting across the top arc. */
+  transform: translateY(2px);
 }
 .magnetic-magnet--hot .magnetic-magnet-mult { color: #fae8ff; }
 
@@ -218,6 +230,22 @@
   white-space: nowrap;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
   box-sizing: border-box;
+  /* Smooth darkening when the round settles and this tier ends
+   * up empty (no symbol of the matching strength landed). */
+  transition:
+    background 0.45s ease,
+    border-color 0.45s ease,
+    color 0.45s ease,
+    opacity 0.45s ease;
+}
+
+/* Empty tier after settle — visually muted so the eye reads the
+ * "winning" tiers at a glance. */
+.magnetic-tier.is-empty {
+  background: rgba(0, 0, 0, 0.45);
+  border-color: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.20);
+  opacity: 0.55;
 }
 
 /* Pulled-stack anchor.

@@ -486,8 +486,9 @@ export default function MagneticSlot() {
                         <span
                           className="magnetic-magnet-body"
                           style={{ backgroundImage: `url("${texMagnet}")` }}
-                        />
-                        <span className="magnetic-magnet-mult">×{mult}</span>
+                        >
+                          <span className="magnetic-magnet-mult">×{mult}</span>
+                        </span>
                       </span>
                     ))}
                   </div>
@@ -527,6 +528,14 @@ export default function MagneticSlot() {
                 pulledItems.push({ sym, idx, tier, stackIdx })
               }
 
+              // Which tier cells in this column ended up empty
+              // (no symbol landed). When the round is settled we
+              // darken those cells so the eye reads the "winning"
+              // tiers at a glance.
+              const filledTiers = phase === 'settled'
+                ? new Set(pulledItems.map(p => p.tier))
+                : null
+
               return (
                 <div key={ci} className="magnetic-pull-col">
                   {/* Tier ladder — 4 SQUARE transparent cells per
@@ -536,15 +545,18 @@ export default function MagneticSlot() {
                     * box of the same family the symbols launched
                     * from. */}
                   <div className="magnetic-tier-ladder" aria-hidden="true">
-                    {TIER_PERCENTS.map(pct => (
-                      <span
-                        key={pct}
-                        className="magnetic-tier"
-                        style={{ '--tier-pct': `${pct}%` }}
-                      >
-                        {pct}%
-                      </span>
-                    ))}
+                    {TIER_PERCENTS.map(pct => {
+                      const isEmpty = filledTiers != null && !filledTiers.has(pct)
+                      return (
+                        <span
+                          key={pct}
+                          className={'magnetic-tier' + (isEmpty ? ' is-empty' : '')}
+                          style={{ '--tier-pct': `${pct}%` }}
+                        >
+                          {pct}%
+                        </span>
+                      )
+                    })}
                   </div>
 
                   {/* Per-symbol pulled — each lands in its own tier,
