@@ -74,14 +74,27 @@ function pickSymbol() {
   return SYMBOLS[0]
 }
 
-const STRENGTH_FULL = 100
-function strengthToReach(s) {
-  if (s <= 0) return 0
-  return Math.min(1, s / STRENGTH_FULL)
+// Tier ladder + the strength → tier mapping.
+//
+// Reach is now DISCRETE — column strength snaps to one of five
+// tiers (0 / 25 / 50 / 75 / 100 %) so the pulled symbol stack
+// lands cleanly inside whichever tier cell matches its strength.
+// Thresholds are tuned for the symbol weights below:
+//   ≤9  → 0     (a few bolts; no win)
+//   10‒29 → 25   (a coin or two)
+//   30‒54 → 50   (a trophy + something)
+//   55‒89 → 75   (a gem or volt)
+//   90+   → 100  (volt + gem combo / triple high)
+function strengthToTier(s) {
+  if (s < 10) return 0
+  if (s < 30) return 0.25
+  if (s < 55) return 0.5
+  if (s < 90) return 0.75
+  return 1.0
 }
 
-// Tier markers shown in each pull column — they tell the player
-// "if your symbol stack reaches this height, you keep this much
+// Tier cells shown in each pull column — they tell the player
+// "if your symbol stack lands in THIS cell, you keep this much
 // of the magnet's multiplier." Big mults (≥10) round to integers;
 // small mults keep a single decimal so the ×0.5 / ×1.5 fractions
 // stay legible.
@@ -318,9 +331,11 @@ export default function MagneticSlot() {
     }
 
     // ── Compute reaches + payouts ──
+    // Each column's strength snaps to a discrete tier so the
+    // pulled stack lands inside one of the visible tier cells.
     const newReaches = finalGridArr.map(col => {
       const total = col.reduce((s, sym) => s + sym.strength, 0)
-      return strengthToReach(total)
+      return strengthToTier(total)
     })
     const payouts = newReaches.map((reach, ci) =>
       Math.round((reach * finalMagnetsArr[ci] * stakeRef.current) / REELS)
@@ -343,13 +358,14 @@ export default function MagneticSlot() {
     //        c. Blank rows skip the wait — the cell was already
     //           empty, so dwelling on it would look like a freeze.
     //     3. Brief gap, then move on to the next column.
-    // Pull tuned for "плавно медленно" feel — each symbol takes
-    // its time floating up. magnetic-fly-in (CSS) runs 580 ms, so
-    // 290 ms between mounts means subsequent symbols start near
-    // half-way through the previous symbol's flight — overlap
-    // looks natural, no jerky single-file march.
-    const SYMBOL_PULL_INTERVAL = 290   // ms between symbol mounts
-    const COLUMN_GAP           = 120   // ms between columns
+    // Pull tuned for a deliberate "плавно медленно" feel — each
+    // symbol has plenty of time to float up before the next one
+    // starts. magnetic-fly-in (CSS) now runs 850 ms; with an
+    // interval of 480 ms the previous symbol is more than half
+    // done before the next begins, so the eye can track each
+    // arrival individually instead of seeing a blurry triple-rise.
+    const SYMBOL_PULL_INTERVAL = 480   // ms between symbol mounts
+    const COLUMN_GAP           = 180   // ms between columns
     for (let ci = 0; ci < REELS; ci++) {
       if (cancelRef.current) break
       setShakingMagnet(ci)

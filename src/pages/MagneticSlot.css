@@ -32,6 +32,11 @@
    * animation. Override on smaller viewports below. */
   --cell-h: 38px;
   --magnet-h: 44px;
+  /* Tier landing cell — the box a symbol "flies into" when its
+   * column lands at that tier. The pulled-stack uses this value
+   * to align its top edge with the tier cell's top edge so the
+   * first arriving symbol is visually INSIDE the tier cell. */
+  --tier-cell-h: 26px;
 }
 
 .magnetic-game-window {
@@ -182,18 +187,28 @@
   position: absolute;
   left: 50%;
   top: calc(100% - var(--tier-pct, 0%));
-  transform: translate(-50%, -50%);
-  padding: 1px 7px;
-  border-radius: 7px;
-  font-size: 9px;
+  /* translate(-50% horiz, 0 vert) — TOP-anchored so the cell's
+   * top edge lines up exactly with the reach line; the pulled-
+   * stack lands at the same line with its top edge, dropping the
+   * first arriving symbol INSIDE this cell. */
+  transform: translate(-50%, 0);
+  width: calc(var(--tier-cell-h) + 14px);
+  height: var(--tier-cell-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 6px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: rgba(255, 255, 255, 0.40);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(96, 165, 250, 0.05);
+  border: 1px dashed rgba(96, 165, 250, 0.28);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+  box-sizing: border-box;
 }
 
 /* Pulled-stack anchor.
@@ -211,6 +226,10 @@
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
+  /* TOP edge of the stack sits on the same reach line the tier
+   * cell at that height also sits on. The first arriving symbol
+   * (idx 0, top of stack) drops into the tier cell — its centre
+   * lands at the tier cell's centre. */
   top: calc(100% - var(--reach, 0%));
   display: flex;
   flex-direction: column;
@@ -224,12 +243,13 @@
  * on mount, fading in as it rises. Subsequent symbols mount one
  * by one — each runs the same animation fresh, producing the
  * "top symbol first, then middle, then bottom" cascade. */
-/* Slower, smoother per-symbol fly-in — "плавно красиво" feel.
+/* Slow, deliberate per-symbol fly-in.
  *
- * 580 ms duration with a strong ease-out (0.22, 1, 0.36, 1) so
- * the symbol decelerates as it approaches the magnet, like real
- * magnetic attraction settling its target into place. Starts
- * 90 px below the natural slot for a longer, more visible arc. */
+ * 900 ms duration with a strong ease-out (0.18, 0.95, 0.3, 1) so
+ * the symbol decelerates noticeably as it approaches its tier
+ * cell — feels like magnetic attraction settling its target into
+ * place. Starts 120 px below the slot so the rise reads as a real
+ * journey, not a flicker. */
 .magnetic-pulled-symbol {
   font-size: 22px;
   line-height: 1;
@@ -238,13 +258,13 @@
     0 0 6px rgba(96, 165, 250, 0.6),
     0 0 12px rgba(96, 165, 250, 0.25);
   opacity: 0;
-  transform: translateY(90px);
-  animation: magnetic-fly-in 580ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform: translateY(120px);
+  animation: magnetic-fly-in 900ms cubic-bezier(0.18, 0.95, 0.3, 1) forwards;
   z-index: 1;
 }
 @keyframes magnetic-fly-in {
-  0%   { opacity: 0; transform: translateY(90px); }
-  45%  { opacity: 1; }
+  0%   { opacity: 0; transform: translateY(120px); }
+  35%  { opacity: 1; }
   100% { opacity: 1; transform: translateY(0); }
 }
 
@@ -261,7 +281,7 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   opacity: 0;
-  animation: magnetic-fly-in 260ms 200ms ease-out forwards;
+  animation: magnetic-fly-in 300ms 240ms ease-out forwards;
 }
 
 /* ─────────────────────────────────────────────────────────────
