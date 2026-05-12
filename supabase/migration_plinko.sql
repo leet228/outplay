@@ -11,10 +11,10 @@
 --                         Creates a 'pending' slot_rounds row.
 --
 --   finish_plinko_round — accepts the client's claimed total payout
---                         (sum across all balls in the launch). Caps
---                         it at the theoretical max (balls_count × base
---                         stake × 10000), applies the deficit breaker
---                         if pnl is past floor, credits balance.
+--                         (sum across all balls in the launch). No
+--                         payout cap — pays the full claim. Applies
+--                         the deficit breaker if pnl is past floor,
+--                         credits balance.
 --
 -- Plinko has no per-ball "fall floor", so we don't run the
 -- generate_tower_fall_level sampler. The client samples each ball's
@@ -145,7 +145,6 @@ DECLARE
   v_house_pnl      BIGINT;
   v_max_deficit    INTEGER;
   v_deficit_active BOOLEAN;
-  v_hard_cap       INTEGER;
 BEGIN
   IF p_payout_rub IS NULL OR p_payout_rub < 0 THEN p_payout_rub := 0; END IF;
 
@@ -165,12 +164,10 @@ BEGIN
   IF v_balls_count IS NULL OR v_balls_count < 1 THEN v_balls_count := 1; END IF;
   v_base_stake := v_total_stake / v_balls_count;
 
-  -- Hard cap: a player can win at most (balls_count × base_stake × 10000)
-  -- — every ball's max multiplier is 10000 on HIGH risk. Plus an
-  -- absolute 1 000 000 ₽ ceiling so a runaway client can't drain
-  -- the house in one launch.
-  v_hard_cap := LEAST(v_balls_count * v_base_stake * 10000, 1000000);
-  v_payout_to_pay := LEAST(p_payout_rub, v_hard_cap);
+  -- No payout cap — trust the client's claimed total. HIGH-risk
+  -- plinko advertises up to 10 000× per ball, and players who
+  -- hit those tails collect the full amount.
+  v_payout_to_pay := GREATEST(p_payout_rub, 0);
 
   -- Deficit circuit breaker: if the slot is past its loss floor, force
   -- the launch to a stake refund minus a small house tax (50 % of total

@@ -584,8 +584,9 @@ export default function TetrisCascadeSlot() {
   //      RNG fell. The trigger spin's own natural matches still pay; the
   //      bonus pays additional rounds on top.
   //   4. At end of paid spin (or end of bonus round), finish_tetris_round
-  //      claims the natural total. Server caps at stake×1000/200k absolute
-  //      and applies the deficit circuit breaker if pnl is past floor.
+  //      claims the natural total. Server pays out the full claim (no
+  //      cap) and applies the deficit circuit breaker if pnl is past
+  //      floor.
   //
   // No target_payout, no scaling — visuals match the math.
   async function runSpin(bonusOverride = null) {
@@ -884,12 +885,12 @@ export default function TetrisCascadeSlot() {
       setBonusSummary({ totalWin: total })
       haptic('success')
 
-      // Finalize the round on the server. Server caps payout at
-      // (stake × 1000 / 200 000 ₽) and applies the deficit breaker — the
-      // total credited may be LESS than what the client optimistically
-      // displayed during bonus spins. Reconcile balanceRef from the
-      // server's authoritative `balance` so the next spin works against
-      // the correct number.
+      // Finalize the round on the server. Server pays out the full
+      // claim (no cap) and applies the deficit breaker — the total
+      // credited may be LESS than what the client optimistically
+      // displayed only if the breaker fires. Reconcile balanceRef
+      // from the server's authoritative `balance` so the next spin
+      // works against the correct number.
       //
       // CRITICAL: spin / buy-bonus must be blocked while this RPC is
       // in flight. Otherwise a new start_tetris_round would ABORT the

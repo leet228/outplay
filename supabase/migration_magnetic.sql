@@ -13,11 +13,10 @@
 --                           Auto-aborts any prior pending round.
 --
 --   finish_magnetic_round — accepts the client's claimed payout
---                           (base + accumulated bonus FS). Caps
---                           it at the slot ceiling (stake × 5000
---                           or 1 000 000 ₽ absolute, whichever is
---                           lower), applies the deficit breaker,
---                           credits the balance, and updates stats.
+--                           (base + accumulated bonus FS). No
+--                           cap — we trust the math; applies the
+--                           deficit breaker, credits the balance,
+--                           updates stats.
 --
 -- Client wraps start → animate → (optional bonus FS) → finish in
 -- ONE round so the bonus winnings cannot get orphaned if the
@@ -135,9 +134,8 @@ $$;
 
 -- ── 3. finish_magnetic_round ─────────────────────────────────────
 -- Accepts the client's claimed payout (base spin + bonus FS sum).
--- Caps at stake × 5000 (matches the in-game MAX_PAYOUT_CAP) with
--- an absolute 1 000 000 ₽ ceiling so a compromised client cannot
--- drain the house. Applies the deficit breaker.
+-- No payout cap — trust the client's math, pay out the full claim.
+-- Applies the deficit circuit breaker as the only payout limiter.
 CREATE OR REPLACE FUNCTION finish_magnetic_round(
   p_round_id   UUID,
   p_payout_rub INTEGER
@@ -158,7 +156,6 @@ DECLARE
   v_house_pnl      BIGINT;
   v_max_deficit    INTEGER;
   v_deficit_active BOOLEAN;
-  v_hard_cap       INTEGER;
 BEGIN
   IF p_payout_rub IS NULL OR p_payout_rub < 0 THEN p_payout_rub := 0; END IF;
 
@@ -174,12 +171,12 @@ BEGIN
     RETURN jsonb_build_object('error', 'already_finished', 'balance', v_balance_new);
   END IF;
 
-  -- Hard cap on the payout. stake_rub is always the BASE stake
-  -- (not the debited amount — buy-bonus pre-paid stake × 100 is
-  -- stored in transactions, not stake_rub). Cap is 5000 × stake
-  -- with a 1 000 000 ₽ absolute ceiling.
-  v_hard_cap := LEAST(v_stake * 5000, 1000000);
-  v_payout_to_pay := LEAST(p_payout_rub, v_hard_cap);
+  -- No payout cap — we trust the client's claimed total. Any
+  -- legitimate win, however large, pays out in full. (The
+  -- Postgres INTEGER ceiling of ~2.1 billion is the only
+  -- structural limit, which the function signature enforces
+  -- on the cast.)
+  v_payout_to_pay := GREATEST(p_payout_rub, 0);
 
   -- Deficit circuit breaker — slot bled past its loss floor,
   -- force the round payout down to the stake for the next bunch

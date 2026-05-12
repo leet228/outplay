@@ -474,8 +474,8 @@ export default function DiceSlot() {
       // ── Server finalize ──
       // ALWAYS finalize a real-money round we successfully started,
       // even if gameplay above threw. Sends the totalWin we
-      // computed up to the throw point — server caps it at
-      // stake × 100 000 / 1 000 000 ₽ regardless.
+      // computed up to the throw point — server pays it out in
+      // full (no cap).
       if (round && !isDev && !startFailed && round.round_id && !round.round_id.startsWith('dev-')) {
         finalizingRef.current = true
         try {

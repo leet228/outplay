@@ -251,8 +251,8 @@ BEGIN
     v_forced := true;
   END IF;
 
-  -- Defensive cap: payout never exceeds 100x stake
-  v_payout_capped := LEAST(p_payout_rub, v_stake * 100);
+  -- No payout cap — trust the client's claimed payout in full.
+  v_payout_capped := GREATEST(p_payout_rub, 0);
 
   -- Credit + transaction (only for actual cash-outs)
   IF v_payout_capped > 0 THEN

@@ -143,9 +143,8 @@ const BLOCK_TEX = {
 //   6. 3+ Eyes of Ender → free spins (handled in Stage 4).
 //
 // Server contract is the same as Plinko — start_round debits
-// stake atomically, finish_round accepts the client's claimed
-// total payout and caps it at stake × 5000 (matches the source
-// game's 5000× max win).
+// stake atomically, finish_round pays out the full client-claimed
+// total (no cap).
 //
 // THIS FILE — STAGE 1
 // Implements: reels, pickaxes, blocks, payouts, basic spin loop.

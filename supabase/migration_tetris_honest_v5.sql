@@ -13,8 +13,8 @@
 --   finish_tetris_round — accepts the client's CLAIMED win (computed
 --                         client-side from natural matches per the
 --                         shared paytable) and:
---                           1. caps it to a sane maximum (stake × 1000,
---                              max 200 000 ₽) to defeat blunt cheating,
+--                           1. pays out the full claim — no cap,
+--                              trust the math,
 --                           2. applies the deficit circuit breaker:
 --                              if slot pnl ≤ −max_house_deficit_rub,
 --                              forces payout to 0 (regular) or to a
@@ -147,7 +147,6 @@ DECLARE
   v_house_pnl      BIGINT;
   v_max_deficit    INTEGER;
   v_deficit_active BOOLEAN;
-  v_hard_cap       INTEGER;
 BEGIN
   IF p_payout_rub IS NULL OR p_payout_rub < 0 THEN p_payout_rub := 0; END IF;
 
@@ -167,10 +166,10 @@ BEGIN
   -- bonuses the actual stake is base × 100.
   v_base_stake := CASE WHEN v_is_bought THEN v_stake / 100 ELSE v_stake END;
 
-  -- Hard cap = stake × 1000, capped at 200 000 ₽ absolute. Mirrors the
-  -- old v4 cap. Anti-blunt-cheat: client can't claim 999 999 999 ₽.
-  v_hard_cap := LEAST(v_base_stake * 1000, 200000);
-  v_payout_to_pay := LEAST(p_payout_rub, v_hard_cap);
+  -- No payout cap — trust the client's claimed natural total in
+  -- full. The deficit circuit breaker below is the only payout
+  -- limiter.
+  v_payout_to_pay := GREATEST(p_payout_rub, 0);
 
   -- Deficit circuit breaker. Read current pnl.
   SELECT current_pnl_rub, max_house_deficit_rub

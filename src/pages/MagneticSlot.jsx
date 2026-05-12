@@ -128,12 +128,11 @@ const SCATTERS_TO_TRIGGER = 3
 // Number of free spins awarded when triggered.
 const BONUS_FREE_SPINS    = 10
 
-// Hard cap on a single spin's combined payout (base + bonus).
-// 5000× stake — safety net for extreme tails. In practice
-// observed max in 1 M sims sits well below this (~660×), so the
-// cap rarely fires; keeping it future-proofs against weight
-// re-tunes that could create much higher tails.
-const MAX_PAYOUT_CAP = 5000
+// No client-side payout cap. Server is the source of truth for
+// anti-cheat; the client just sends whatever the honest math
+// produces and trusts the server to reject anything out of
+// bounds. In practice the 1 M-spin sim shows max ~660 × stake,
+// well below any real concern.
 
 // Strip layouts: the LAST item is the final value, everything
 // above is random filler that scrolls past the viewport during
@@ -486,12 +485,14 @@ export default function MagneticSlot() {
         (sumStrength * finalMagnetsArr[ci] * stakeRef.current) / divisor
       )
     })
-    let winTotal = payouts.reduce((s, p) => s + p, 0)
-    // Hard payout cap — applies to the single spin's win. The
-    // bonus session's cumulative cap is enforced separately when
-    // crediting the balance at end of runBonusSequence.
-    const spinCap = MAX_PAYOUT_CAP * stakeRef.current
-    if (winTotal > spinCap) winTotal = spinCap
+    const winTotal = payouts.reduce((s, p) => s + p, 0)
+    // No client-side cap — the server is the source of truth for
+    // anti-cheat and we now trust whatever the math produces.
+
+    // Captures the total bonus winnings returned from
+    // runBonusSequence (0 if no bonus triggers). Local var so it
+    // can't be clobbered by anything touching the ref.
+    let bonusContribution = 0
 
     setPayoutByCol(payouts)
     setPhase('pulling')
@@ -601,9 +602,12 @@ export default function MagneticSlot() {
         }
       }
       if (scatters.length >= SCATTERS_TO_TRIGGER) {
-        await runBonusSequence(scatters, finalMagnetsArr)
-        // bonusTotalWinRef.current now holds the bonus total —
-        // we'll fold it into the server finalize below.
+        // runBonusSequence RETURNS the total bonus winnings so we
+        // don't have to trust a shared ref that something else
+        // could clobber. We store it in a LOCAL var captured in
+        // this closure — bulletproof against any future code
+        // touching bonusTotalWinRef.
+        bonusContribution = await runBonusSequence(scatters, finalMagnetsArr) || 0
       }
     }
 
@@ -617,7 +621,10 @@ export default function MagneticSlot() {
     if (!bonusMode && round) {
       finalizingRef.current = true
       setFinalizing(true)
-      const grandTotal = winTotal + bonusTotalWinRef.current
+      // grandTotal = base spin win + bonus winnings (if any).
+      // bonusContribution comes from runBonusSequence's RETURN
+      // value, not a ref — bulletproof against accidental resets.
+      const grandTotal = winTotal + bonusContribution
       try {
         if (!isDev && round.round_id && !String(round.round_id).startsWith('dev-')) {
           const res = await finishMagneticRound(round.round_id, grandTotal)
@@ -723,11 +730,17 @@ export default function MagneticSlot() {
     await sleep(3200)
     if (cancelRef.current) return
 
-    // Credit the accumulated bonus winnings to the balance, with
-    // the hard cap applied (extreme tails capped at 5000 × stake).
-    let total = bonusTotalWinRef.current
-    const bonusCap = MAX_PAYOUT_CAP * stakeRef.current
-    if (total > bonusCap) total = bonusCap
+    // Snapshot the accumulated bonus total. No cap — server is
+    // the source of truth for anti-cheat, and the user wants
+    // every legitimate win to pay out in full.
+    const total = bonusTotalWinRef.current
+    setBonusTotalWin(total)
+
+    // Optimistic credit so the user sees their winnings the
+    // moment the overlay closes. The outer spin()'s server
+    // finalize confirms the same total a few ms later via
+    // finish_magnetic_round and re-syncs balance from the
+    // server response.
     if (total > 0) {
       const nb = balanceRef.current + total
       balanceRef.current = nb
@@ -737,16 +750,25 @@ export default function MagneticSlot() {
         setTimeout(() => setBalanceBounce(false), 540)
       }
       haptic('success')
+      // Reflect the win in lastWin too — once we drop out of
+      // overlay-end the winbar switches back to displaying
+      // lastWin, and showing the just-credited bonus total there
+      // (instead of the last FS's individual win) is what the
+      // player actually expects to see.
+      setLastWin(total)
     }
 
-    // Reset bonus state — back to a normal spin loop.
+    // Reset visual bonus state.
     setMagnetsMerged(false)
     setBonusMegaMult(0)
     bonusMegaMultRef.current = 0
-    setBonusTotalWin(0)
-    bonusTotalWinRef.current = 0
     setBonusPhase('idle')
     bonusPhaseRef.current = 'idle'
+
+    // Return the total to the caller — the outer spin() stores
+    // this in a LOCAL var (bonusContribution) so the value can
+    // never get lost no matter what else touches the ref.
+    return total
   }
 
   async function autoLoop() {

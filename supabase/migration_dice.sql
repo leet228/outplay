@@ -11,13 +11,12 @@
 --                       so a closed-mid-spin tab doesn't lock the
 --                       next roll out).
 --
---   finish_dice_round — accepts the client's claimed payout, caps
---                       it at the dice ceiling (stake × 100 000 or
---                       1 000 000 ₽ absolute, whichever is lower)
---                       and applies the deficit circuit breaker if
---                       the slot is past its loss floor. Credits
---                       the user's balance and updates per-user /
---                       per-slot stats.
+--   finish_dice_round — accepts the client's claimed payout. No
+--                       cap — pays the full claim, applies the
+--                       deficit circuit breaker if the slot is
+--                       past its loss floor. Credits the user's
+--                       balance and updates per-user / per-slot
+--                       stats.
 --
 -- The slot is honest-RNG on the client: it samples win/loss from
 -- the published chance curve, picks a display value consistent
@@ -119,10 +118,11 @@ $$;
 
 
 -- ── 3. finish_dice_round ─────────────────────────────────────────
--- Accepts the client's claimed payout. Caps at stake × 100 000 (the
--- top dice multiplier at the extreme thresholds) with an absolute
--- 1 000 000 ₽ ceiling so a runaway client can't drain the house in
--- one round. Applies the deficit circuit breaker.
+-- Accepts the client's claimed payout. No cap — trust the math,
+-- pay out the full claim. The dice chance curve advertises
+-- multipliers up to 100 000× at the extreme thresholds and we
+-- want players who hit those tails to actually collect. Applies
+-- the deficit circuit breaker as the only limiter.
 
 CREATE OR REPLACE FUNCTION finish_dice_round(
   p_round_id   UUID,
@@ -142,7 +142,6 @@ DECLARE
   v_house_pnl      BIGINT;
   v_max_deficit    INTEGER;
   v_deficit_active BOOLEAN;
-  v_hard_cap       INTEGER;
 BEGIN
   IF p_payout_rub IS NULL OR p_payout_rub < 0 THEN p_payout_rub := 0; END IF;
 
@@ -158,12 +157,11 @@ BEGIN
     RETURN jsonb_build_object('error', 'already_finished', 'balance', v_balance_new);
   END IF;
 
-  -- Hard cap: stake × 100 000 (max dice multiplier) capped by the
-  -- absolute 1 000 000 ₽ ceiling. At the minimum stake (10 ₽) the
-  -- two pin exactly at 1 000 000 ₽, so the ceiling is the binding
-  -- constraint for every higher stake.
-  v_hard_cap := LEAST(v_stake * 100000, 1000000);
-  v_payout_to_pay := LEAST(p_payout_rub, v_hard_cap);
+  -- No payout cap — trust the client's claimed payout in full.
+  -- The dice chance curve can advertise multipliers up to 100 000×
+  -- at the extreme thresholds, and players who hit those tails
+  -- collect the full amount.
+  v_payout_to_pay := GREATEST(p_payout_rub, 0);
 
   -- Deficit circuit breaker — if the slot has bled past its loss
   -- floor, force the round payout down to the user's stake (so

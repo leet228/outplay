@@ -20,12 +20,10 @@
 --                             payout (cluster wins from the
 --                             trigger spin + 4 free-spin
 --                             iterations + chest multipliers).
---                             Caps it at stake × 5000 (matches the
---                             Mine Slot reference 5000× max win)
---                             with a hard 1 000 000 ₽ absolute
---                             ceiling. Applies the deficit
---                             circuit breaker if the slot is past
---                             its loss floor.
+--                             No payout cap — trust the client's
+--                             claimed total in full. Applies the
+--                             deficit circuit breaker if the slot
+--                             is past its loss floor.
 --
 -- The slot is honest-RNG: the client samples symbols, drops
 -- pickaxes, explodes TNT, opens chests, and runs the bonus loop.
@@ -142,11 +140,9 @@ $$;
 
 -- ── 3. finish_pixel_mine_round ───────────────────────────────────
 -- Accepts the client's claimed total payout for the round (trigger
--- spin + any FS iterations + chest multipliers). Caps at base
--- stake × 5000 (matches the Mine Slot reference's 5000× max win)
--- with a 1 000 000 ₽ absolute ceiling. Buy-bonus rounds use the
--- SAME cap — players paid 100 × stake to enter, but the per-spin
--- max-win cap doesn't change.
+-- spin + any FS iterations + chest multipliers). No payout cap —
+-- trust the client's math, pay out the full claim. Applies the
+-- deficit circuit breaker as the only limiter.
 
 CREATE OR REPLACE FUNCTION finish_pixel_mine_round(
   p_round_id   UUID,
@@ -166,7 +162,6 @@ DECLARE
   v_house_pnl      BIGINT;
   v_max_deficit    INTEGER;
   v_deficit_active BOOLEAN;
-  v_hard_cap       INTEGER;
   v_is_bought      BOOLEAN;
   v_actual_cost    INTEGER;   -- what the user actually paid (1× or 100× stake)
 BEGIN
@@ -184,11 +179,9 @@ BEGIN
     RETURN jsonb_build_object('error', 'already_finished', 'balance', v_balance_new);
   END IF;
 
-  -- Hard cap: base stake × 5000 (Mine Slot reference's documented
-  -- 5000× max win). Plus a hard 1 000 000 ₽ absolute ceiling so a
-  -- runaway client can't drain the house in one round.
-  v_hard_cap := LEAST(v_stake * 5000, 1000000);
-  v_payout_to_pay := LEAST(p_payout_rub, v_hard_cap);
+  -- No payout cap — we trust the client's claimed total. Any
+  -- legitimate cluster win, however large, pays out in full.
+  v_payout_to_pay := GREATEST(p_payout_rub, 0);
 
   -- Deficit circuit breaker — if the slot has bled past its loss
   -- floor, force the round payout down to the user's stake (so

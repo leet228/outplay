@@ -1050,9 +1050,9 @@ export async function finishSlotRound(roundId, outcome, payoutRub, floors, multi
 //                         pending round. Returns { ok, round_id, balance,
 //                         deficit_active, is_bought }. NO outcome decision.
 //   finish_tetris_round — accepts the client's claimed natural payout,
-//                         caps it at stake × 1000 / 200 000 ₽ absolute,
-//                         applies the deficit circuit breaker, credits
-//                         balance, updates aggregate stats.
+//                         pays out the full claim (no cap), applies the
+//                         deficit circuit breaker, credits balance,
+//                         updates aggregate stats.
 //
 //   isBought = true → buy-bonus path. Server deducts stake × 100; the
 //   client plays a bonus round (no preceding regular spin).
@@ -1066,9 +1066,9 @@ export async function startTetrisRound(userId, stakeRub, isBought = false) {
   return data
 }
 
-// Closes a tetris round. Server caps payout at stake × 1000 (or
-// 200 000 ₽ absolute, whichever smaller) and applies the deficit
-// circuit breaker if the slot's pnl is past floor.
+// Closes a tetris round. Server pays out the full claim (no cap)
+// and applies the deficit circuit breaker if the slot's pnl is
+// past floor.
 export async function finishTetrisRound(roundId, payoutRub) {
   const { data, error } = await supabase.rpc('finish_tetris_round', {
     p_round_id: roundId,
@@ -1084,10 +1084,9 @@ export async function finishTetrisRound(roundId, payoutRub) {
 //                         { round_id, balance, balls_count,
 //                           deficit_active }.
 //   finish_plinko_round — accepts the client's claimed total payout
-//                         for the launch (sum of all balls). Caps at
-//                         balls_count × stake × 10000 (theoretical max)
-//                         + 1 000 000 ₽ absolute. Applies the deficit
-//                         circuit breaker.
+//                         for the launch (sum of all balls). Pays out
+//                         the full claim (no cap). Applies the
+//                         deficit circuit breaker.
 export async function startPlinkoRound(userId, stakeRub, ballsCount = 1) {
   const { data, error } = await supabase.rpc('start_plinko_round', {
     p_user_id: userId,
@@ -1114,8 +1113,8 @@ export async function finishPlinkoRound(roundId, totalPayoutRub) {
 //   finish_pixel_mine_round — accepts the client's claimed total
 //                             cluster payout (sum across natural
 //                             cascades + scatter-explosion bonuses).
-//                             Caps at stake × 1000 + 1 000 000 ₽
-//                             absolute. Applies the deficit breaker.
+//                             Pays out the full claim (no cap).
+//                             Applies the deficit breaker.
 export async function startPixelMineRound(userId, stakeRub, isBuyBonus = false) {
   const { data, error } = await supabase.rpc('start_pixel_mine_round', {
     p_user_id: userId,
@@ -1137,9 +1136,9 @@ export async function finishPixelMineRound(roundId, payoutRub) {
 
 // ── Dice ───────────────────────
 // Classic above/below threshold game. start_dice_round atomically
-// debits the stake and opens a round; finish_dice_round caps the
-// client-claimed payout at stake × 100 000 with a 1 000 000 ₽
-// absolute ceiling and credits the user's balance.
+// debits the stake and opens a round; finish_dice_round pays out
+// the full client-claimed payout (no cap) and credits the user's
+// balance.
 export async function startDiceRound(userId, stakeRub) {
   const { data, error } = await supabase.rpc('start_dice_round', {
     p_user_id: userId,
