@@ -2116,29 +2116,31 @@ function DiceSlotArtwork({ large = false, animated = false }) {
 // card + preview overlay (the real in-game grid is 5×3, but the
 // card distills it down so it reads at thumbnail size):
 //   - 3 magnets row on top (with mult labels + real magnet.png)
-//   - tier ladder behind (2 dashed cells per column: 100 / 50 %)
+//   - tier ladder behind (2 dashed cells per column: 75 / 50 %)
 //   - 3×2 reel grid at the bottom with real pixel-art textures
 //
-// In the animated variant each column lifts toward its magnet on
-// a loop — the symbols visually rise THROUGH the tier ladder and
-// settle back, mimicking the in-game pull mechanic. Column reach
-// (how high they climb) is hand-picked so the loop reads as a
-// mix of weak/medium/strong pulls.
+// In the animated variant THREE individual symbols fly out of
+// their reel cells and land EXACTLY on a tier badge — col 1
+// sends both its symbols (top → 75 %, bottom → 50 %), col 2
+// sends only its top symbol → 75 %. They stagger one after
+// another and the loop repeats. Col 3 stays static.
 function MagneticSlotArtwork({ large = false, animated = false }) {
   const magnets = [25, 100, 50]
-  // Each column: 2 symbols top→bottom + how far the column should
-  // rise during the pull loop (% of the pull-track height). Reach
-  // values are aligned with the two tier rows so the animated
-  // columns visually LAND on a tier, not between them.
+  // Each column: 2 symbols top→bottom.
   const cols = [
-    { reels: [mgTexBolt,    mgTexCoin],     reach: 50 },
-    { reels: [mgTexOrb,     mgTexCompass],  reach: 75 },
-    { reels: [mgTexGem,     mgTexBolt],     reach: 50 },
+    { reels: [mgTexBolt,    mgTexCoin]    },
+    { reels: [mgTexOrb,     mgTexCompass] },
+    { reels: [mgTexGem,     mgTexBolt]    },
   ]
-  // Two tier rows — both packed into the upper half of the column
-  // so neither floats over the reel symbols. Reach values land
-  // exactly on these lines.
+  // Two tier rows packed into the upper half of the column.
   const tiers = [75, 50]
+  // Per-symbol flight script. Each entry: which column, which
+  // texture, which tier %, and when to start (s) within the loop.
+  const flies = [
+    { col: 0, tex: mgTexBolt, target: 75, delay: 0.0 },
+    { col: 0, tex: mgTexCoin, target: 50, delay: 0.5 },
+    { col: 1, tex: mgTexOrb,  target: 75, delay: 1.0 },
+  ]
 
   return (
     <div
@@ -2167,19 +2169,13 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
         ))}
       </div>
 
-      {/* Play board: tier ladder behind, animated reels in front. */}
+      {/* Play board: tier ladder behind, static reels at the
+        * bottom, and (in the animated variant) per-symbol flying
+        * ghosts overlaid on top. */}
       <div className="magnetic-card-board">
         {cols.map((col, ci) => (
-          <div
-            key={ci}
-            className="magnetic-card-col"
-            style={{
-              '--reach': `${col.reach}%`,
-              '--col-delay': `${ci * 0.22}s`,
-            }}
-          >
-            {/* Tier ladder — 4 dashed landing cells at the real
-              * game's 100 / 75 / 50 / 25 % heights. */}
+          <div key={ci} className="magnetic-card-col">
+            {/* Tier ladder — 2 dashed landing cells per column. */}
             <div className="magnetic-card-tiers" aria-hidden="true">
               {tiers.map(pct => (
                 <span
@@ -2192,9 +2188,7 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
               ))}
             </div>
 
-            {/* Reel — 3 cells stacked at the bottom of the column.
-              * Animated variant rises through the tier ladder and
-              * settles back, looping forever. */}
+            {/* Static reel — 2 cells stacked at the bottom. */}
             <div className="magnetic-card-reel">
               {col.reels.map((tex, ri) => (
                 <span key={ri} className="magnetic-card-cell">
@@ -2207,6 +2201,26 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
                 </span>
               ))}
             </div>
+
+            {/* Flying overlays — only mounted when animated, and
+              * only for cols listed in the `flies` script. Each
+              * one rises from the reel bottom to its target tier
+              * line (where the percent badge sits), holds, then
+              * drops back. */}
+            {animated && flies
+              .filter(f => f.col === ci)
+              .map((fly, fi) => (
+                <span
+                  key={'fly' + fi}
+                  className="magnetic-card-flying"
+                  style={{
+                    '--target-pct': `${fly.target}%`,
+                    '--fly-delay': `${fly.delay}s`,
+                    backgroundImage: `url("${fly.tex}")`,
+                  }}
+                />
+              ))
+            }
           </div>
         ))}
       </div>

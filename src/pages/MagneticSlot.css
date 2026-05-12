@@ -1179,20 +1179,52 @@
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
 }
 
-/* Pull-and-release loop. Symbols rise to --reach %, hold under
- * the magnets for a beat, then drop back. Each column gets its
- * own start offset via --col-delay so they pulse left-to-right
- * like the real spin's sequential pull. */
-.magnetic-slot-card-art--animated .magnetic-card-reel {
-  animation: magnetic-card-pull 3.6s cubic-bezier(0.3, 1.15, 0.4, 1) infinite;
-  animation-delay: var(--col-delay, 0s);
+/* Flying-symbol overlay. Sits ABSOLUTELY at the BOTTOM of the
+ * column at rest (lined up with the bottom reel cell), then
+ * during its fly cycle climbs upward via animated `bottom` so
+ * its CENTRE lands exactly on the tier badge at --target-pct
+ * from the column bottom.
+ *
+ * --sym-half = half the symbol's own height. Subtracting it
+ * from the target % aligns the symbol's centre with the tier
+ * badge's centre (which sits at --target-pct from bottom). */
+.magnetic-card-flying {
+  --sym-half: 8px;
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  transform: translateX(-50%);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
 }
-@keyframes magnetic-card-pull {
-  0%   { transform: translateY(0); }
-  28%  { transform: translateY(calc(var(--reach, 30%) * -1)); }
-  58%  { transform: translateY(calc(var(--reach, 30%) * -1)); }
-  86%  { transform: translateY(0); }
-  100% { transform: translateY(0); }
+.magnetic-slot-card-art--large .magnetic-card-flying {
+  --sym-half: 14px;
+  width: 28px;
+  height: 28px;
+}
+
+.magnetic-slot-card-art--animated .magnetic-card-flying {
+  animation: magnetic-card-fly 3.6s cubic-bezier(0.3, 1.15, 0.4, 1) infinite;
+  animation-delay: var(--fly-delay, 0s);
+}
+
+@keyframes magnetic-card-fly {
+  0%   { bottom: 0; opacity: 0; }
+  6%   { bottom: 0; opacity: 1; }
+  28%  { bottom: calc(var(--target-pct, 0%) - var(--sym-half)); opacity: 1; }
+  60%  { bottom: calc(var(--target-pct, 0%) - var(--sym-half)); opacity: 1; }
+  84%  { bottom: 0; opacity: 1; }
+  92%  { bottom: 0; opacity: 0; }
+  100% { bottom: 0; opacity: 0; }
 }
 
 .magnetic-slot-card-art--large {
