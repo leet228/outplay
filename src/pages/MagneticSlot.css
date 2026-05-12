@@ -579,6 +579,196 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ─────────────────────────────────────────────────────────────
+ * BONUS — scatter pulse, magnet merge, FS overlays.
+ * ───────────────────────────────────────────────────────────── */
+
+/* During scatter-pulse phase the field darkens so the eye is
+ * drawn to the three pulsing scatters. The strip cells fade and
+ * the tier ladder lighten back to default. */
+.magnetic-stage.is-scatter-pulse .magnetic-tier-ladder,
+.magnetic-stage.is-scatter-pulse .magnetic-pulled-symbol,
+.magnetic-stage.is-scatter-pulse .magnetic-reel-payout,
+.magnetic-stage.is-scatter-pulse .magnetic-magnets {
+  opacity: 0.22;
+  transition: opacity 0.4s ease;
+}
+
+/* Cells containing scatters bounce up/down to telegraph the
+ * bonus trigger. */
+.magnetic-cell.is-scatter-bouncing {
+  animation: magnetic-scatter-bounce 0.55s ease-in-out infinite alternate;
+  z-index: 6;
+  box-shadow:
+    0 0 14px rgba(56, 189, 248, 0.7),
+    0 0 28px rgba(56, 189, 248, 0.35);
+}
+@keyframes magnetic-scatter-bounce {
+  0%   { transform: scale(1);    }
+  100% { transform: scale(1.18); }
+}
+
+/* ── Mega-magnet (merged state during bonus FS) ── */
+.magnetic-magnets.is-merged {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--magnet-h);
+}
+
+.magnetic-magnet-mega {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: magnetic-mega-in 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  filter: drop-shadow(0 0 18px rgba(240, 171, 252, 0.65));
+}
+@keyframes magnetic-mega-in {
+  0%   { transform: scale(0.30) rotate(-10deg); opacity: 0; }
+  60%  { transform: scale(1.20) rotate(  4deg); opacity: 1; }
+  100% { transform: scale(1.00) rotate(  0deg); opacity: 1; }
+}
+.magnetic-magnet-mega .magnetic-magnet-body {
+  width: 56px;
+  height: 56px;
+}
+.magnetic-magnet-mega .magnetic-magnet-mult {
+  font-size: 18px;
+  margin-bottom: -16px;
+  text-shadow:
+    0 0 4px rgba(0, 0, 0, 0.95),
+    0 0 3px rgba(0, 0, 0, 0.95),
+    0 0 8px rgba(240, 171, 252, 0.85),
+    0 1px 0 rgba(0, 0, 0, 0.95);
+  color: #fae8ff;
+}
+
+/* Bonus-mode stage tint — slightly more saturated background so
+ * FS reads as a special mode. */
+.magnetic-stage.is-bonus {
+  background:
+    radial-gradient(60% 40% at 50% 0%, rgba(240, 171, 252, 0.22) 0%, transparent 70%),
+    linear-gradient(180deg, #5223a8 0%, #2a0e5c 100%);
+}
+
+/* ── Bonus overlays (intro / end) ── */
+.magnetic-bonus-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 5, 30, 0.78);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: magnetic-bonus-overlay-fade 0.32s ease both;
+}
+@keyframes magnetic-bonus-overlay-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.magnetic-bonus-card {
+  text-align: center;
+  animation: magnetic-bonus-card-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  padding: 0 24px;
+}
+@keyframes magnetic-bonus-card-pop {
+  0%   { transform: scale(0.30) rotate(-8deg); opacity: 0; }
+  55%  { transform: scale(1.10) rotate( 2deg); opacity: 1; }
+  80%  { transform: scale(0.95) rotate( 0deg); }
+  100% { transform: scale(1.00) rotate( 0deg); }
+}
+
+.magnetic-bonus-title {
+  font-weight: 950;
+  font-size: clamp(22px, 6.5vw, 38px);
+  color: #ffffff;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow:
+    0 0 10px rgba(240, 171, 252, 0.85),
+    0 0 20px rgba(196, 181, 253, 0.5),
+    0 4px 0 #2a0e5c,
+    0 6px 14px rgba(0, 0, 0, 0.6);
+}
+
+.magnetic-bonus-count {
+  margin-top: 12px;
+  font-weight: 950;
+  font-size: clamp(72px, 22vw, 144px);
+  color: #fae8ff;
+  text-shadow:
+    0 0 18px rgba(240, 171, 252, 0.9),
+    0 0 32px rgba(217, 70, 239, 0.6),
+    0 8px 0 #4a1da6,
+    0 12px 18px rgba(0, 0, 0, 0.7);
+  animation: magnetic-bonus-count-pulse 1.0s ease-in-out infinite alternate;
+  line-height: 1;
+}
+@keyframes magnetic-bonus-count-pulse {
+  from { transform: scale(1);    }
+  to   { transform: scale(1.07); }
+}
+
+.magnetic-bonus-sub {
+  margin-top: 14px;
+  font-weight: 800;
+  font-size: 14px;
+  color: rgba(250, 232, 255, 0.85);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.55);
+}
+
+.magnetic-bonus-total {
+  margin-top: 16px;
+  font-weight: 950;
+  font-size: clamp(30px, 8vw, 52px);
+  color: #6cf09c;
+  text-shadow:
+    0 0 12px rgba(108, 240, 156, 0.75),
+    0 0 22px rgba(74, 222, 128, 0.45),
+    0 4px 0 #0a3a1f,
+    0 8px 14px rgba(0, 0, 0, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tiny corner indicator showing remaining FS during the run. */
+.magnetic-bonus-indicator {
+  position: absolute;
+  top: 24px;
+  right: 22px;
+  z-index: 30;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(240, 171, 252, 0.38), rgba(168, 85, 247, 0.18));
+  border: 1px solid rgba(240, 171, 252, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.20),
+    0 0 12px rgba(240, 171, 252, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  font-weight: 900;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.magnetic-bonus-indicator span {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.85);
+}
+.magnetic-bonus-indicator strong {
+  font-size: 22px;
+  color: #fae8ff;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Exit dialog ── */
 .magnetic-exit-backdrop {
   position: fixed;

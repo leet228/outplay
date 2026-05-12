@@ -103,6 +103,12 @@ const TIER_PERCENTS = [100, 75, 50, 25]
 // feels rewarding while we iterate on visuals).
 const PAYOUT_DIVISOR = 50
 
+// ── Bonus tuning ──
+// 3+ 💎 scatters anywhere on the 15-cell grid trigger the bonus.
+const SCATTERS_TO_TRIGGER = 3
+// Number of free spins awarded when triggered.
+const BONUS_FREE_SPINS    = 4
+
 // Strip layouts: the LAST item is the final value, everything
 // above is random filler that scrolls past the viewport during
 // the spin animation.
@@ -182,6 +188,26 @@ export default function MagneticSlot() {
   const [phase, setPhase]               = useState('idle') // idle | spinning | pulling | settled
   const [spinning, setSpinning]         = useState(false)
   const [autoSpin, setAutoSpin]         = useState(false)
+
+  // ── Bonus state ──
+  // bonusPhase :  idle | scatter-pulse | overlay-intro | merge-magnets
+  //               | bonus-fs | overlay-end
+  // bonusSpinsLeft : counter for the 4 free spins
+  // bonusMegaMult  : sum of the 5 magnets from the triggering spin —
+  //                  used as the SINGLE mega-magnet for every FS
+  // bonusTotalWin  : cumulative win across all FS, shown on the
+  //                  end overlay
+  // scatterPositions : [{ ci, ri }, ...] — the cells that pulse
+  //                  during the scatter-pulse phase
+  // magnetsMerged  : flips true during merge animation +
+  //                  bonus-fs phase so the header renders one
+  //                  giant magnet instead of five separate ones
+  const [bonusPhase, setBonusPhase]               = useState('idle')
+  const [bonusSpinsLeft, setBonusSpinsLeft]       = useState(0)
+  const [bonusMegaMult, setBonusMegaMult]         = useState(0)
+  const [bonusTotalWin, setBonusTotalWin]         = useState(0)
+  const [scatterPositions, setScatterPositions]   = useState([])
+  const [magnetsMerged, setMagnetsMerged]         = useState(false)
   const [exitConfirm, setExitConfirm]   = useState(false)
 
   // ── Refs for stable async access ──
@@ -190,10 +216,14 @@ export default function MagneticSlot() {
   const spinningRef   = useRef(false)
   const autoRef       = useRef(false)
   const cancelRef     = useRef(false)
+  const bonusPhaseRef     = useRef('idle')
+  const bonusMegaMultRef  = useRef(0)
+  const bonusTotalWinRef  = useRef(0)
 
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current   = stake },   [stake])
   useEffect(() => { autoRef.current    = autoSpin }, [autoSpin])
+  useEffect(() => { bonusPhaseRef.current = bonusPhase }, [bonusPhase])
   useEffect(() => () => { cancelRef.current = true }, [])
 
   // ── Telegram BackButton ──
@@ -234,9 +264,9 @@ export default function MagneticSlot() {
     setStake(next)
   }
 
-  async function spin() {
+  async function spin({ bonusMode = false } = {}) {
     if (spinningRef.current) return
-    if (balanceRef.current < stakeRef.current) return
+    if (!bonusMode && balanceRef.current < stakeRef.current) return
 
     spinningRef.current = true
     setSpinning(true)
@@ -249,16 +279,25 @@ export default function MagneticSlot() {
     setPayoutByCol(Array(REELS).fill(0))
     setLastWin(0)
 
-    // Debit stake locally (dev-only).
-    const balanceAfterDebit = balanceRef.current - stakeRef.current
-    balanceRef.current = balanceAfterDebit
-    setBalance(balanceAfterDebit)
+    if (!bonusMode) {
+      // Debit stake locally (dev-only). Bonus free spins are free —
+      // payouts accumulate into bonusTotalWin and credit at the end
+      // of the bonus sequence.
+      const balanceAfterDebit = balanceRef.current - stakeRef.current
+      balanceRef.current = balanceAfterDebit
+      setBalance(balanceAfterDebit)
+    }
 
     // ── Pick final outcome ──
     const finalGridArr = Array.from({ length: REELS }, () =>
       Array.from({ length: ROWS }, pickSymbol)
     )
-    const finalMagnetsArr = Array.from({ length: REELS }, pickMagnet)
+    // In bonus mode all 5 magnets are the SAME mega-magnet (sum of
+    // the triggering spin's magnets); in normal mode each is rolled
+    // independently from the weighted pool.
+    const finalMagnetsArr = bonusMode
+      ? Array(REELS).fill(bonusMegaMultRef.current)
+      : Array.from({ length: REELS }, pickMagnet)
     setFinalGrid(finalGridArr)
     setFinalMagnets(finalMagnetsArr)
 
@@ -406,12 +445,21 @@ export default function MagneticSlot() {
     setLastWin(winTotal)
 
     if (winTotal > 0) {
-      const nb = balanceRef.current + winTotal
-      balanceRef.current = nb
-      setBalance(nb)
-      if (typeof setBalanceBounce === 'function') {
-        setBalanceBounce(true)
-        setTimeout(() => setBalanceBounce(false), 540)
+      if (bonusMode) {
+        // Accumulate the bonus winnings into the bonus pot —
+        // they credit to the balance at the end of the bonus
+        // sequence, not now.
+        const newBonusTotal = bonusTotalWinRef.current + winTotal
+        bonusTotalWinRef.current = newBonusTotal
+        setBonusTotalWin(newBonusTotal)
+      } else {
+        const nb = balanceRef.current + winTotal
+        balanceRef.current = nb
+        setBalance(nb)
+        if (typeof setBalanceBounce === 'function') {
+          setBalanceBounce(true)
+          setTimeout(() => setBalanceBounce(false), 540)
+        }
       }
       haptic('success')
     } else {
@@ -421,10 +469,134 @@ export default function MagneticSlot() {
     setPhase('settled')
     spinningRef.current = false
     setSpinning(false)
+
+    // ── Bonus trigger detection ──
+    // After a NORMAL spin settles (not during the bonus FS), check
+    // whether the final grid contains 3+ scatters. If yes, kick
+    // off the bonus sequence right here — autoLoop is gated on
+    // spinningRef which we just released, so runBonusSequence is
+    // free to run its own awaits without overlap.
+    if (!bonusMode && bonusPhaseRef.current === 'idle') {
+      const scatters = []
+      for (let ci = 0; ci < REELS; ci++) {
+        for (let ri = 0; ri < ROWS; ri++) {
+          const sym = finalGridArr[ci][ri]
+          if (sym && sym.isScatter) scatters.push({ ci, ri })
+        }
+      }
+      if (scatters.length >= SCATTERS_TO_TRIGGER) {
+        await runBonusSequence(scatters, finalMagnetsArr)
+      }
+    }
+  }
+
+  // ── Bonus sequence orchestrator ──
+  // Drives the 6-phase bonus flow the user spec'd:
+  //   1. scatter-pulse  — darken the field, pulse the scatters
+  //   2. overlay-intro  — modal "FREE SPINS / 4"
+  //   3. merge-magnets  — 5 magnets fuse into ONE mega-magnet
+  //   4. bonus-fs       — 4 free spins, all under the mega-magnet
+  //   5. overlay-end    — modal "BONUS COMPLETE / +N₽"
+  //   6. idle           — credit total, reset bonus state
+  async function runBonusSequence(scatters, triggerMagnets) {
+    // 1) Scatter pulse — field darkens, scatters bounce. The
+    //    just-settled pulled symbols stay visible; the scatters
+    //    in their reel cells also stay (they're scatters, they
+    //    never get pulled).
+    setScatterPositions(scatters)
+    setBonusPhase('scatter-pulse')
+    bonusPhaseRef.current = 'scatter-pulse'
+    haptic('success')
+    await sleep(1600)
+    if (cancelRef.current) return
+
+    // 2) Compute the mega-mult: sum of all 5 magnets from the
+    //    spin that triggered the bonus. That number becomes the
+    //    SINGLE multiplier every free spin shares.
+    const megaMult = triggerMagnets.reduce((a, b) => a + b, 0)
+    bonusMegaMultRef.current = megaMult
+    setBonusMegaMult(megaMult)
+
+    // 3) Intro overlay — "FREE SPINS / 4"
+    setBonusSpinsLeft(BONUS_FREE_SPINS)
+    setBonusPhase('overlay-intro')
+    bonusPhaseRef.current = 'overlay-intro'
+    await sleep(2400)
+    if (cancelRef.current) return
+
+    // 4) Clear the field (pulled symbols vanish, tier ladder
+    //    reverts to default brightness) so the merge animation
+    //    plays on a clean stage. Then start the merge — the 5
+    //    magnet cells animate into a single mega-magnet via CSS
+    //    (.magnets-merged class on the magnets row).
+    setPulledRows(Array(REELS).fill(0))
+    setScatterPositions([])
+    setPayoutByCol(Array(REELS).fill(0))
+    setLastWin(0)
+    setMagnetsMerged(true)
+    setBonusPhase('merge-magnets')
+    bonusPhaseRef.current = 'merge-magnets'
+    await sleep(1400)
+    if (cancelRef.current) return
+
+    // 5) Free-spin loop — 4 default spins, each with the mega
+    //    magnet held constant. Spin() handles bonusMode internally
+    //    (no stake debit, payouts → bonusTotalWin, no shuffle of
+    //    finalMagnets).
+    bonusTotalWinRef.current = 0
+    setBonusTotalWin(0)
+    setBonusPhase('bonus-fs')
+    bonusPhaseRef.current = 'bonus-fs'
+    for (let i = 0; i < BONUS_FREE_SPINS; i++) {
+      if (cancelRef.current) break
+      setBonusSpinsLeft(BONUS_FREE_SPINS - i)
+      // Release the spinning gate so the nested spin() doesn't
+      // see itself as already-running and bail.
+      spinningRef.current = false
+      await spin({ bonusMode: true })
+      await sleep(500)
+    }
+    setBonusSpinsLeft(0)
+    if (cancelRef.current) return
+
+    // 6) End overlay — "BONUS COMPLETE / +N₽"
+    setBonusPhase('overlay-end')
+    bonusPhaseRef.current = 'overlay-end'
+    await sleep(3200)
+    if (cancelRef.current) return
+
+    // Credit the accumulated bonus winnings to the balance.
+    const total = bonusTotalWinRef.current
+    if (total > 0) {
+      const nb = balanceRef.current + total
+      balanceRef.current = nb
+      setBalance(nb)
+      if (typeof setBalanceBounce === 'function') {
+        setBalanceBounce(true)
+        setTimeout(() => setBalanceBounce(false), 540)
+      }
+      haptic('success')
+    }
+
+    // Reset bonus state — back to a normal spin loop.
+    setMagnetsMerged(false)
+    setBonusMegaMult(0)
+    bonusMegaMultRef.current = 0
+    setBonusTotalWin(0)
+    bonusTotalWinRef.current = 0
+    setBonusPhase('idle')
+    bonusPhaseRef.current = 'idle'
   }
 
   async function autoLoop() {
     while (autoRef.current && !cancelRef.current) {
+      // Wait for any active bonus sequence to finish — bonus runs
+      // its own free spins via runBonusSequence and shouldn't be
+      // overlapped by the auto-loop's stake spins.
+      while (bonusPhaseRef.current !== 'idle' && !cancelRef.current && autoRef.current) {
+        await sleep(120)
+      }
+      if (!autoRef.current || cancelRef.current) break
       if (balanceRef.current < stakeRef.current) {
         setAutoSpin(false); autoRef.current = false
         break
@@ -437,12 +609,14 @@ export default function MagneticSlot() {
   function onSpinClick() {
     if (autoSpin) { setAutoSpin(false); autoRef.current = false; return }
     if (!canAfford || spinning) return
+    if (bonusPhase !== 'idle') return    // bonus drives itself
     spin()
   }
 
   function onAutoClick() {
     if (autoSpin) { setAutoSpin(false); autoRef.current = false; return }
     if (!canAfford || spinning) return
+    if (bonusPhase !== 'idle') return
     setAutoSpin(true); autoRef.current = true
     autoLoop()
   }
@@ -450,10 +624,25 @@ export default function MagneticSlot() {
   return (
     <div className={`magnetic-slot-page magnetic-slot-page--${phase}`}>
       <div className="magnetic-game-window">
-        <main className="magnetic-stage" aria-label="Magnetic">
-          {/* ── Magnets row ── */}
-          <div className="magnetic-magnets">
-            {magnetStrips.map((strip, mi) => {
+        <main className={'magnetic-stage' + (bonusPhase === 'scatter-pulse' ? ' is-scatter-pulse' : '') + (bonusPhase === 'bonus-fs' || bonusPhase === 'merge-magnets' ? ' is-bonus' : '')} aria-label="Magnetic">
+          {/* ── Magnets row ──
+            * Two modes:
+            *   - default: 5 magnets, each scrolling its own strip
+            *   - merged : ONE giant magnet in the centre during the
+            *              bonus FS, mult = sum of the 5 triggering
+            *              magnets
+            */}
+          <div className={'magnetic-magnets' + (magnetsMerged ? ' is-merged' : '')}>
+            {magnetsMerged && (
+              <div className="magnetic-magnet-mega">
+                <span className="magnetic-magnet-mult">×{bonusMegaMult}</span>
+                <span
+                  className="magnetic-magnet-body"
+                  style={{ backgroundImage: `url("${texMagnet}")` }}
+                />
+              </div>
+            )}
+            {!magnetsMerged && magnetStrips.map((strip, mi) => {
               const finalMult = finalMagnets[mi]
               const isHot     = finalMult >= 50
               // "Captured" lights up the magnet once the column has
@@ -604,8 +793,17 @@ export default function MagneticSlot() {
                     const finalSym = finalGrid[ci]?.[ri]
                     const isScatter = finalSym?.isScatter
                     const released = rows > ri && !isScatter
+                    // During scatter-pulse phase, the cells that
+                    // contain the triggering scatters bounce to
+                    // signal the bonus is launching.
+                    const isPulsing = bonusPhase === 'scatter-pulse' &&
+                                      isScatter &&
+                                      scatterPositions.some(p => p.ci === ci && p.ri === ri)
                     return (
-                      <span key={ri} className="magnetic-cell">
+                      <span
+                        key={ri}
+                        className={'magnetic-cell' + (isPulsing ? ' is-scatter-bouncing' : '')}
+                      >
                         {!released && (
                           <div
                             className="magnetic-strip"
@@ -654,7 +852,7 @@ export default function MagneticSlot() {
               type="button"
               className={'magnetic-spin-btn' + (autoSpin ? ' is-auto' : '')}
               onClick={onSpinClick}
-              disabled={!autoSpin && (!canAfford || spinning)}
+              disabled={!autoSpin && (!canAfford || spinning || bonusPhase !== 'idle')}
               aria-label={autoSpin ? (t.slotPlinkoStop || 'Стоп') : 'Spin'}
             >
               {autoSpin ? (
@@ -672,7 +870,7 @@ export default function MagneticSlot() {
               type="button"
               className={'magnetic-auto-btn' + (autoSpin ? ' is-on' : '')}
               onClick={onAutoClick}
-              disabled={!autoSpin && (!canAfford || spinning)}
+              disabled={!autoSpin && (!canAfford || spinning || bonusPhase !== 'idle')}
             >
               {autoSpin ? (t.slotPlinkoStop || 'СТОП') : (t.slotPlinkoAuto || 'АВТО')}
             </button>
@@ -701,6 +899,45 @@ export default function MagneticSlot() {
             </div>
           </div>
         </section>
+
+        {/* ── Bonus overlays ──
+          * Intro shows when the scatter trigger fires:
+          *     "FREE SPINS / 4"
+          * End shows after the last bonus spin:
+          *     "BONUS COMPLETE / +N₽"
+          */}
+        {(bonusPhase === 'overlay-intro' || bonusPhase === 'overlay-end') && (
+          <div className="magnetic-bonus-overlay">
+            <div className="magnetic-bonus-card">
+              {bonusPhase === 'overlay-intro' && (
+                <>
+                  <div className="magnetic-bonus-title">FREE SPINS</div>
+                  <div className="magnetic-bonus-count">{BONUS_FREE_SPINS}</div>
+                  <div className="magnetic-bonus-sub">
+                    Mega Magnet ×{bonusMegaMult}
+                  </div>
+                </>
+              )}
+              {bonusPhase === 'overlay-end' && (
+                <>
+                  <div className="magnetic-bonus-title">BONUS COMPLETE</div>
+                  <div className="magnetic-bonus-total">
+                    +{formatCurrency(bonusTotalWin, currency, rates)}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Small indicator pinned in the corner of the stage
+          * showing how many free spins remain. */}
+        {bonusPhase === 'bonus-fs' && (
+          <div className="magnetic-bonus-indicator">
+            <span>FREE SPINS</span>
+            <strong>{bonusSpinsLeft}</strong>
+          </div>
+        )}
       </div>
 
       {exitConfirm && (
