@@ -11,10 +11,7 @@ import iconRocket     from '../assets/games/rocket.png'
 import iconPlinko     from '../assets/games/plinko.png'
 import iconPixelMine  from '../assets/games/pixel_mine.png'
 import iconDice       from '../assets/games/dice.png'
-// Magnetic placeholder — uses the slot's own magnet texture
-// from src/assets/games/magnetic/magnet.png until a dedicated
-// 96-square card icon ships.
-import iconMagnetic   from '../assets/games/magnetic/magnet.png'
+import iconMagnetic   from '../assets/games/magnetic.png'
 
 import './LiveFeed.css'
 
