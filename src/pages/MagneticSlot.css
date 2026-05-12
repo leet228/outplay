@@ -769,6 +769,167 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ─────────────────────────────────────────────────────────────
+ * BUY BONUS — FAB button + confirmation modal.
+ * ───────────────────────────────────────────────────────────── */
+
+/* Pill FAB pinned to the bottom-left of the stage. Opens the
+ * confirm modal on tap. Disabled state mutes the gradient and
+ * stops interaction (used when the player can't afford it or
+ * a bonus / spin is already running). */
+.magnetic-buy-bonus-fab {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  background: linear-gradient(180deg, #e879f9 0%, #a855f7 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 4px 12px rgba(168, 85, 247, 0.55),
+    0 0 18px rgba(240, 171, 252, 0.40);
+  transition: transform 0.12s ease, filter 0.12s ease, opacity 0.2s ease;
+}
+.magnetic-buy-bonus-fab:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.magnetic-buy-bonus-fab:active:not(:disabled) { transform: translateY(1px); }
+.magnetic-buy-bonus-fab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+.magnetic-buy-bonus-fab-icon {
+  font-size: 16px;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.8));
+}
+
+.magnetic-buy-bonus-fab-text {
+  line-height: 1;
+}
+
+/* ── Buy-bonus modal ── */
+.magnetic-buy-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 5, 30, 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: magnetic-bonus-overlay-fade 0.25s ease both;
+}
+
+.magnetic-buy-modal-card {
+  width: min(100%, 320px);
+  padding: 22px 22px 18px;
+  border-radius: 22px;
+  text-align: center;
+  background:
+    linear-gradient(180deg, rgba(168, 85, 247, 0.22) 0%, rgba(74, 29, 150, 0.18) 100%),
+    #1a0a3e;
+  border: 1px solid rgba(196, 181, 253, 0.40);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 0 22px rgba(168, 85, 247, 0.35),
+    0 18px 60px rgba(0, 0, 0, 0.55);
+  animation: magnetic-bonus-card-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+.magnetic-buy-modal-title {
+  margin: 0 0 14px;
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  color: #fae8ff;
+  text-transform: uppercase;
+  text-shadow:
+    0 0 10px rgba(240, 171, 252, 0.65),
+    0 3px 0 #2a0e5c,
+    0 5px 10px rgba(0, 0, 0, 0.6);
+}
+
+.magnetic-buy-modal-cost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(196, 181, 253, 0.20);
+}
+.magnetic-buy-modal-cost span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 700;
+}
+.magnetic-buy-modal-cost strong {
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 8px rgba(240, 171, 252, 0.5);
+}
+
+.magnetic-buy-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.magnetic-buy-modal-cancel,
+.magnetic-buy-modal-buy {
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.14s ease;
+}
+
+.magnetic-buy-modal-cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+.magnetic-buy-modal-cancel:hover { background: rgba(255, 255, 255, 0.10); }
+.magnetic-buy-modal-cancel:active { transform: translateY(1px); }
+
+.magnetic-buy-modal-buy {
+  background: linear-gradient(180deg, #e879f9 0%, #a855f7 100%);
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    0 4px 12px rgba(168, 85, 247, 0.50),
+    0 0 14px rgba(240, 171, 252, 0.40);
+  border-color: rgba(240, 171, 252, 0.55);
+}
+.magnetic-buy-modal-buy:hover { filter: brightness(1.08); }
+.magnetic-buy-modal-buy:active { transform: translateY(1px); }
+
 /* ── Exit dialog ── */
 .magnetic-exit-backdrop {
   position: fixed;

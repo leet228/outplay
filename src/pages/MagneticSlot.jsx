@@ -208,6 +208,10 @@ export default function MagneticSlot() {
   const [bonusTotalWin, setBonusTotalWin]         = useState(0)
   const [scatterPositions, setScatterPositions]   = useState([])
   const [magnetsMerged, setMagnetsMerged]         = useState(false)
+  // Buy-bonus confirmation modal — opens on the FAB tap, closes
+  // on cancel/backdrop click, or fires confirmBuyBonus which
+  // debits 100× stake and runs a spin with 3 forced scatters.
+  const [buyBonusConfirm, setBuyBonusConfirm]     = useState(false)
   const [exitConfirm, setExitConfirm]   = useState(false)
 
   // ── Refs for stable async access ──
@@ -264,7 +268,7 @@ export default function MagneticSlot() {
     setStake(next)
   }
 
-  async function spin({ bonusMode = false } = {}) {
+  async function spin({ bonusMode = false, forceScatters = false } = {}) {
     if (spinningRef.current) return
     if (!bonusMode && balanceRef.current < stakeRef.current) return
 
@@ -292,6 +296,24 @@ export default function MagneticSlot() {
     const finalGridArr = Array.from({ length: REELS }, () =>
       Array.from({ length: ROWS }, pickSymbol)
     )
+    // Buy-bonus forces exactly 3 scatters into random positions so
+    // the post-settle trigger detection always fires.
+    if (forceScatters) {
+      const gemSym = SYMBOLS.find(s => s.id === 'gem')
+      const cells = []
+      for (let ci = 0; ci < REELS; ci++) {
+        for (let ri = 0; ri < ROWS; ri++) cells.push({ ci, ri })
+      }
+      // Shuffle and grab first 3 — that's our forced scatter set.
+      for (let i = cells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[cells[i], cells[j]] = [cells[j], cells[i]]
+      }
+      for (let n = 0; n < 3; n++) {
+        const { ci, ri } = cells[n]
+        finalGridArr[ci][ri] = gemSym
+      }
+    }
     // In bonus mode all 5 magnets are the SAME mega-magnet (sum of
     // the triggering spin's magnets); in normal mode each is rolled
     // independently from the weighted pool.
@@ -613,6 +635,43 @@ export default function MagneticSlot() {
     spin()
   }
 
+  // ── Buy-bonus controls ──
+  // FAB tap opens the confirmation modal. Confirm actually
+  // debits 100 × stake and fires a spin that's guaranteed to drop
+  // 3 scatters → trigger detection picks them up at the end of
+  // the spin and runs the standard bonus sequence.
+  const BUY_BONUS_MULT = 100
+  function onBuyBonusClick() {
+    if (autoSpin || spinning) return
+    if (bonusPhase !== 'idle') return
+    const cost = stakeRef.current * BUY_BONUS_MULT
+    if (balanceRef.current < cost) return
+    haptic('light')
+    setBuyBonusConfirm(true)
+  }
+  function confirmBuyBonus() {
+    setBuyBonusConfirm(false)
+    if (autoSpin || spinning) return
+    if (bonusPhase !== 'idle') return
+    const cost = stakeRef.current * BUY_BONUS_MULT
+    if (balanceRef.current < cost) return
+    // Debit the bonus cost up-front. The follow-on spin() will
+    // try to debit `stake` itself unless we set bonusMode — but
+    // for buy-bonus we want the spin to LOOK like a normal stake
+    // spin (it produces the scatter trigger), so we manually
+    // pre-debit the bonus cost MINUS one regular stake (spin()
+    // takes that one itself).
+    haptic('medium')
+    const overcharge = cost - stakeRef.current
+    const newBalance = balanceRef.current - overcharge
+    balanceRef.current = newBalance
+    setBalance(newBalance)
+    // Run a regular spin that's guaranteed to seed 3 scatters
+    // in the grid — trigger detection at settle time picks them
+    // up and runs the bonus sequence as normal.
+    spin({ forceScatters: true })
+  }
+
   function onAutoClick() {
     if (autoSpin) { setAutoSpin(false); autoRef.current = false; return }
     if (!canAfford || spinning) return
@@ -777,6 +836,26 @@ export default function MagneticSlot() {
             })}
           </div>
 
+          {/* Buy-bonus FAB — sits in the bottom-left of the stage,
+            * like Pixel Mine's. Tapping opens the confirmation
+            * modal; only after the user confirms do we charge
+            * the 100× stake and fire a force-scatter spin. */}
+          <button
+            type="button"
+            className="magnetic-buy-bonus-fab"
+            onClick={onBuyBonusClick}
+            disabled={
+              spinning ||
+              autoSpin ||
+              bonusPhase !== 'idle' ||
+              balance < stake * BUY_BONUS_MULT
+            }
+            aria-label="Buy Bonus"
+          >
+            <span className="magnetic-buy-bonus-fab-icon">💎</span>
+            <span className="magnetic-buy-bonus-fab-text">BUY</span>
+          </button>
+
           {/* ── Reels ──
             * Each cell hides its strip the instant `pulledRows[ci]`
             * passes its row index — UNLESS the symbol at that row
@@ -936,6 +1015,44 @@ export default function MagneticSlot() {
           <div className="magnetic-bonus-indicator">
             <span>FREE SPINS</span>
             <strong>{bonusSpinsLeft}</strong>
+          </div>
+        )}
+
+        {/* Buy-bonus confirmation modal — styled in the slot's
+          * violet/fuchsia theme. Tap backdrop OR cancel button
+          * to dismiss; "Купить" debits 100× stake and fires the
+          * forced-scatter spin. */}
+        {buyBonusConfirm && (
+          <div
+            className="magnetic-buy-modal-backdrop"
+            onClick={() => setBuyBonusConfirm(false)}
+          >
+            <div
+              className="magnetic-buy-modal-card"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="magnetic-buy-modal-title">BUY BONUS</h3>
+              <div className="magnetic-buy-modal-cost">
+                <span>Стоимость</span>
+                <strong>{formatCurrency(stake * BUY_BONUS_MULT, currency, rates)}</strong>
+              </div>
+              <div className="magnetic-buy-modal-actions">
+                <button
+                  type="button"
+                  className="magnetic-buy-modal-cancel"
+                  onClick={() => { haptic('light'); setBuyBonusConfirm(false) }}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="magnetic-buy-modal-buy"
+                  onClick={confirmBuyBonus}
+                >
+                  Купить
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
