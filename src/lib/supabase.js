@@ -1158,6 +1158,33 @@ export async function finishDiceRound(roundId, payoutRub) {
   return data
 }
 
+/* ── Magnetic ─────────────────────────────────────────────────── */
+// Opens a Magnetic round and atomically debits the stake (or
+// stake × 100 for a buy-bonus). Returns { ok, round_id, balance,
+// deficit_active, is_buy_bonus, debited_rub } or { error }.
+export async function startMagneticRound(userId, stakeRub, isBuyBonus = false) {
+  const { data, error } = await supabase.rpc('start_magnetic_round', {
+    p_user_id: userId,
+    p_stake_rub: stakeRub,
+    p_is_buy_bonus: !!isBuyBonus,
+  })
+  if (error) { console.error('startMagneticRound error:', error); return { error: error.message } }
+  return data
+}
+
+// Closes a Magnetic round with the client's total payout (base
+// spin + any bonus FS winnings, summed). Server caps it and
+// credits the balance. Returns { ok, balance, payout, pnl,
+// deficit_active } or { error }.
+export async function finishMagneticRound(roundId, payoutRub) {
+  const { data, error } = await supabase.rpc('finish_magnetic_round', {
+    p_round_id: roundId,
+    p_payout_rub: Math.max(0, Math.round(payoutRub || 0)),
+  })
+  if (error) { console.error('finishMagneticRound error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Admin: slot stats ───────────────────────
 export async function adminGetSlotStats() {
   const { data, error } = await supabase.rpc('admin_get_slot_stats')

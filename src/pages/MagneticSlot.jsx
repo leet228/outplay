@@ -5,6 +5,7 @@ import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
+import { startMagneticRound, finishMagneticRound } from '../lib/supabase'
 import './MagneticSlot.css'
 
 // 16×16 textures. Vite resolves these to hashed asset URLs at
@@ -249,6 +250,14 @@ export default function MagneticSlot() {
   const bonusPhaseRef     = useRef('idle')
   const bonusMegaMultRef  = useRef(0)
   const bonusTotalWinRef  = useRef(0)
+  // Round bookkeeping. currentRoundRef holds the server's round
+  // descriptor (round_id + balance) for the active round.
+  // finalizingRef is true while finish_magnetic_round is in
+  // flight — gates the next spin so it can't open a new round
+  // while the previous one is still being credited.
+  const currentRoundRef   = useRef(null)
+  const finalizingRef     = useRef(false)
+  const [finalizing, setFinalizing] = useState(false)
 
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current   = stake },   [stake])
@@ -295,11 +304,21 @@ export default function MagneticSlot() {
   }
 
   async function spin({ bonusMode = false, forceScatters = false } = {}) {
-    if (spinningRef.current) return
-    if (!bonusMode && balanceRef.current < stakeRef.current) return
+    // Bonus FS run INSIDE the outer spin's spinning state — they
+    // re-enter spin() with bonusMode:true and re-use the gate the
+    // outer spin already acquired.
+    if (!bonusMode) {
+      if (spinningRef.current) return
+      if (finalizingRef.current) return   // wait for prev finalize
+      const isBuy = !!forceScatters
+      const debit = isBuy ? stakeRef.current * BUY_BONUS_MULT : stakeRef.current
+      if (balanceRef.current < debit) return
+    }
 
-    spinningRef.current = true
-    setSpinning(true)
+    if (!bonusMode) {
+      spinningRef.current = true
+      setSpinning(true)
+    }
     haptic('light')
 
     // Reset everything from the previous round.
@@ -309,13 +328,48 @@ export default function MagneticSlot() {
     setPayoutByCol(Array(REELS).fill(0))
     setLastWin(0)
 
+    // ── Server start (top-level only) ──
+    // For bonus-mode FS, the OUTER spin already opened the round —
+    // we just animate and contribute to bonusTotalWinRef.
+    let round = null
+    let isDev = false
+    let startFailed = false
     if (!bonusMode) {
-      // Debit stake locally (dev-only). Bonus free spins are free —
-      // payouts accumulate into bonusTotalWin and credit at the end
-      // of the bonus sequence.
-      const balanceAfterDebit = balanceRef.current - stakeRef.current
-      balanceRef.current = balanceAfterDebit
-      setBalance(balanceAfterDebit)
+      isDev = !user || user.id === 'dev'
+      const isBuy = !!forceScatters
+      const debit = isBuy ? stakeRef.current * BUY_BONUS_MULT : stakeRef.current
+      if (isDev) {
+        const next = balanceRef.current - debit
+        balanceRef.current = next
+        setBalance(next)
+        round = {
+          ok: true,
+          round_id: `dev-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          balance: next,
+        }
+      } else {
+        const res = await startMagneticRound(user.id, stakeRef.current, isBuy)
+        if (cancelRef.current) {
+          spinningRef.current = false
+          setSpinning(false)
+          return
+        }
+        if (!res || res.error || !res.ok) {
+          console.error('startMagneticRound failed:', res)
+          startFailed = true
+          spinningRef.current = false
+          setSpinning(false)
+          setPhase('idle')
+          return
+        }
+        round = res
+        setBalance(res.balance)
+        balanceRef.current = res.balance
+      }
+      currentRoundRef.current = round
+      // Fresh round → reset bonus accumulator from any prior run.
+      bonusTotalWinRef.current = 0
+      setBonusTotalWin(0)
     }
 
     // ── Pick final outcome ──
@@ -510,6 +564,9 @@ export default function MagneticSlot() {
         bonusTotalWinRef.current = newBonusTotal
         setBonusTotalWin(newBonusTotal)
       } else {
+        // Optimistic base credit — reconciled with the server's
+        // capped/breaker-adjusted figure when finish_magnetic_round
+        // returns at the bottom of this function.
         const nb = balanceRef.current + winTotal
         balanceRef.current = nb
         setBalance(nb)
@@ -524,15 +581,13 @@ export default function MagneticSlot() {
     }
 
     setPhase('settled')
-    spinningRef.current = false
-    setSpinning(false)
 
     // ── Bonus trigger detection ──
-    // After a NORMAL spin settles (not during the bonus FS), check
-    // whether the final grid contains 3+ scatters. If yes, kick
-    // off the bonus sequence right here — autoLoop is gated on
-    // spinningRef which we just released, so runBonusSequence is
-    // free to run its own awaits without overlap.
+    // Only runs for TOP-LEVEL spins (not nested bonus FS). When
+    // hit, runBonusSequence drives the whole 6-phase bonus flow
+    // and accumulates winnings into bonusTotalWinRef, which is
+    // then summed with winTotal below and sent to the server in
+    // ONE finish call.
     if (!bonusMode && bonusPhaseRef.current === 'idle') {
       const scatters = []
       for (let ci = 0; ci < REELS; ci++) {
@@ -543,6 +598,40 @@ export default function MagneticSlot() {
       }
       if (scatters.length >= SCATTERS_TO_TRIGGER) {
         await runBonusSequence(scatters, finalMagnetsArr)
+        // bonusTotalWinRef.current now holds the bonus total —
+        // we'll fold it into the server finalize below.
+      }
+    }
+
+    // ── Server finalize (top-level only) ──
+    // Runs AFTER any bonus sequence has fully credited the
+    // optimistic balance, so the server confirms the grand
+    // total in one atomic transaction. Until this returns the
+    // Spin button stays disabled (finalizing flag) — that's the
+    // user's "bonus winnings cannot get lost on quick-respin"
+    // guarantee.
+    if (!bonusMode && round) {
+      finalizingRef.current = true
+      setFinalizing(true)
+      const grandTotal = winTotal + bonusTotalWinRef.current
+      try {
+        if (!isDev && round.round_id && !String(round.round_id).startsWith('dev-')) {
+          const res = await finishMagneticRound(round.round_id, grandTotal)
+          if (res && !res.error && typeof res.balance === 'number' && !cancelRef.current) {
+            setBalance(res.balance)
+            balanceRef.current = res.balance
+          }
+        }
+      } catch (err) {
+        console.error('finishMagneticRound failed:', err)
+      } finally {
+        finalizingRef.current = false
+        setFinalizing(false)
+        bonusTotalWinRef.current = 0
+        setBonusTotalWin(0)
+        currentRoundRef.current = null
+        spinningRef.current = false
+        setSpinning(false)
       }
     }
   }
@@ -652,10 +741,15 @@ export default function MagneticSlot() {
 
   async function autoLoop() {
     while (autoRef.current && !cancelRef.current) {
-      // Wait for any active bonus sequence to finish — bonus runs
-      // its own free spins via runBonusSequence and shouldn't be
-      // overlapped by the auto-loop's stake spins.
-      while (bonusPhaseRef.current !== 'idle' && !cancelRef.current && autoRef.current) {
+      // Wait for any active bonus sequence OR server finalize to
+      // settle before kicking off the next stake spin. Without
+      // the finalize gate the next start_magnetic_round would
+      // race the previous finish and could orphan its payout.
+      while (
+        (bonusPhaseRef.current !== 'idle' || finalizingRef.current) &&
+        !cancelRef.current &&
+        autoRef.current
+      ) {
         await sleep(120)
       }
       if (!autoRef.current || cancelRef.current) break
@@ -672,6 +766,7 @@ export default function MagneticSlot() {
     if (autoSpin) { setAutoSpin(false); autoRef.current = false; return }
     if (!canAfford || spinning) return
     if (bonusPhase !== 'idle') return    // bonus drives itself
+    if (finalizingRef.current) return    // previous round still finalising
     spin()
   }
 
@@ -700,22 +795,15 @@ export default function MagneticSlot() {
     setBuyBonusConfirm(false)
     if (autoSpin || spinning) return
     if (bonusPhase !== 'idle') return
+    if (finalizingRef.current) return
     const cost = stakeRef.current * BUY_BONUS_MULT
     if (balanceRef.current < cost) return
-    // Debit the bonus cost up-front. The follow-on spin() will
-    // try to debit `stake` itself unless we set bonusMode — but
-    // for buy-bonus we want the spin to LOOK like a normal stake
-    // spin (it produces the scatter trigger), so we manually
-    // pre-debit the bonus cost MINUS one regular stake (spin()
-    // takes that one itself).
     haptic('medium')
-    const overcharge = cost - stakeRef.current
-    const newBalance = balanceRef.current - overcharge
-    balanceRef.current = newBalance
-    setBalance(newBalance)
-    // Run a regular spin that's guaranteed to seed 3 scatters
-    // in the grid — trigger detection at settle time picks them
-    // up and runs the bonus sequence as normal.
+    // No client-side pre-debit — spin({forceScatters:true}) will
+    // open a round via start_magnetic_round(p_is_buy_bonus=true)
+    // and the server debits stake × 100 atomically. The grid is
+    // then seeded with 3 forced scatters so the trigger detector
+    // fires the normal bonus sequence at settle time.
     spin({ forceScatters: true })
   }
 
