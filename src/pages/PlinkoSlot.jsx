@@ -28,7 +28,7 @@ const SLOT_ID = 'plinko'
 const ROWS = 16
 const SLOTS = ROWS + 1            // 17 landing slots
 const RISK_LEVELS = ['low', 'medium', 'high']
-const BALLS_PER_LAUNCH = [1, 10, 20, 50, 100]
+const BALLS_PER_LAUNCH = [1, 5, 10, 20]
 
 // Multiplier tables for 16-row board. Symmetric around the centre.
 // All three risk modes are tuned so the analytic long-run RTP sits at
@@ -197,10 +197,10 @@ export default function PlinkoSlot() {
   const cancelRef         = useRef(false)
 
   // ── rAF coalescing ──
-  // 100-ball launches land in a tight cluster — without batching that's
-  // 100 setBalance + 100 setLaunchWin + 100 setHitSlots + 100 setBalls
-  // within ~1.5 s, each triggering a global Zustand re-render and a
-  // slot-row diff.
+  // 20-ball launches land in a tight cluster — without batching
+  // that's 20 setBalance + 20 setLaunchWin + 20 setHitSlots + 20
+  // setBalls within ~1 s, each triggering a global Zustand re-render
+  // and a slot-row diff.
   //
   // SINGLE shared rAF flush: all three pending operations (balance
   // win, hit-slot flash, ball removal) drain in one callback per
@@ -579,17 +579,13 @@ export default function PlinkoSlot() {
     //   Total clear time = 140 + (N − 1) × stagger + 16 × 180 + 180
     //                     ≈ (N − 1) × stagger + 3200 ms
     //
-    //     N=100 stagger 42 → 99·42 + 3200 ≈ 7360 ms  (budget 7.5 s) ✓
-    //     N=50  stagger 35 → 49·35 + 3200 ≈ 4915 ms  (budget 5.0 s) ✓
-    //     N=20  stagger 60 → 19·60 + 3200 ≈ 4340 ms
-    //     N=10  stagger 80 → 9·80  + 3200 ≈ 3920 ms
-    //
-    // Wider stagger at N=100 also caps peak concurrent balls at ~73
-    // instead of all 100, which lowers per-frame render pressure.
-    const stagger = N <= 10 ? 80
-                  : N <= 20 ? 60
-                  : N <= 50 ? 35
-                  : 42
+    //     N=20 stagger 60 → 19·60 + 3200 ≈ 4340 ms
+    //     N=10 stagger 80 → 9·80  + 3200 ≈ 3920 ms
+    //     N=5  stagger 100 → 4·100 + 3200 ≈ 3600 ms
+    //     N=1  stagger N/A → 3200 ms
+    const stagger = N <= 5  ? 100
+                  : N <= 10 ? 80
+                  :          60
     for (let i = 0; i < N; i++) {
       const m = meta[i]
       setTimeout(() => animateBall(m.id, m.path, m.landing), 140 + i * stagger)
