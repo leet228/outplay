@@ -23,10 +23,14 @@ const MAGNET_WEIGHTS = [38, 26, 16, 10, 6, 4]
 
 const REELS               = 5
 const ROWS                = 3
-const PAYOUT_DIVISOR      = 68         // tuned target ~95% RTP
+// Separate divisors for base / bonus so we can shift more of the
+// total RTP into the bonus event without breaking base-spin feel.
+const BASE_DIVISOR        = 115        // base spin payouts → ~54% base RTP
+const BONUS_DIVISOR       = 23         // bonus FS payouts (bigger wins per FS)
 const SCATTERS_TO_TRIGGER = 3
-const BONUS_FREE_SPINS    = 4
-const BUY_BONUS_MULT      = 20         // cost = stake × 20  (tuned for ~95% buy EV)
+const BONUS_FREE_SPINS    = 10         // user asked for 10 FS bonus
+const BUY_BONUS_MULT      = 100        // cost = stake × 100  (per user)
+const MAX_PAYOUT_CAP      = 5000       // hard cap per spin+bonus combo
 
 // ─────────────────────────────────────────────────────────────
 
@@ -55,7 +59,9 @@ function pickMagnet() {
 //   payout    : float (in stake units — stake = 1)
 //   scatters  : count of gem cells in the grid
 //   magnets   : the 5 magnet mults this spin generated
-function spin(megaMult /* optional */) {
+// `bonusMode` switches the divisor — base spins use BASE_DIVISOR,
+// bonus FS use the smaller BONUS_DIVISOR so each FS pays bigger.
+function spin(megaMult /* optional */, bonusMode = false) {
   let scatters = 0
   const grid = []
   for (let ci = 0; ci < REELS; ci++) {
@@ -71,6 +77,7 @@ function spin(megaMult /* optional */) {
     ? Array(REELS).fill(megaMult)
     : Array.from({ length: REELS }, pickMagnet)
 
+  const divisor = bonusMode ? BONUS_DIVISOR : BASE_DIVISOR
   let payout = 0
   for (let ci = 0; ci < REELS; ci++) {
     let sum = 0
@@ -78,7 +85,7 @@ function spin(megaMult /* optional */) {
       if (sym.isScatter) continue
       sum += sym.strength
     }
-    payout += (sum * magnets[ci]) / PAYOUT_DIVISOR
+    payout += (sum * magnets[ci]) / divisor
   }
   return { payout, scatters, magnets }
 }
@@ -89,7 +96,7 @@ function runBonus(triggerMagnets) {
   const megaMult = triggerMagnets.reduce((a, b) => a + b, 0)
   let total = 0
   for (let i = 0; i < BONUS_FREE_SPINS; i++) {
-    total += spin(megaMult).payout
+    total += spin(megaMult, true).payout
   }
   return total
 }
@@ -117,13 +124,15 @@ function simulate(N) {
   let bonusPayout  = 0
   let hitCount     = 0
   let bonusTriggers = 0
-  let maxSpinWin   = 0   // max win on a single non-bonus spin
-  let maxBonusWin  = 0   // max bonus session total win
-  let maxOverallWin = 0  // max single-spin including bonus payout
-  // Hit-rate thresholds: how often does a spin pay at least Nx stake.
-  const HIT_THRESHOLDS = [0.5, 1, 2, 5, 10, 50, 100]
+  let bonusesProfitable = 0   // bonuses paying ≥ buy cost (≥100×)
+  let bonusesAboveBase  = 0   // bonuses paying ≥ 50×
+  let bonusesHugeWin    = 0   // bonuses ≥ 500×
+  let cappedSpins       = 0   // spins where total payout hit the cap
+  let maxSpinWin   = 0
+  let maxBonusWin  = 0
+  let maxOverallWin = 0
+  const HIT_THRESHOLDS = [0.5, 1, 2, 5, 10, 50, 100, 500, 1000]
   const hitAt = HIT_THRESHOLDS.map(() => 0)
-
   const hist = {}
 
   for (let i = 0; i < N; i++) {
@@ -138,17 +147,28 @@ function simulate(N) {
     if (r.scatters >= SCATTERS_TO_TRIGGER) {
       bonusTriggers++
       const bonusWin = runBonus(r.magnets)
-      totalPayout  += bonusWin
-      bonusPayout  += bonusWin
-      perSpinTotal += bonusWin
+      if (bonusWin >= 100) bonusesProfitable++
+      if (bonusWin >= 50)  bonusesAboveBase++
+      if (bonusWin >= 500) bonusesHugeWin++
       if (bonusWin > maxBonusWin) maxBonusWin = bonusWin
+      perSpinTotal += bonusWin
+      bonusPayout  += bonusWin
+      totalPayout  += bonusWin
+    }
+
+    // Apply hard payout cap.
+    if (perSpinTotal > MAX_PAYOUT_CAP) {
+      const excess = perSpinTotal - MAX_PAYOUT_CAP
+      totalPayout -= excess
+      bonusPayout -= excess  // excess always came from a triggered bonus
+      perSpinTotal = MAX_PAYOUT_CAP
+      cappedSpins++
     }
 
     if (perSpinTotal > maxOverallWin) maxOverallWin = perSpinTotal
     for (let k = 0; k < HIT_THRESHOLDS.length; k++) {
       if (perSpinTotal >= HIT_THRESHOLDS[k]) hitAt[k]++
     }
-
     const b = bucket(perSpinTotal)
     hist[b] = (hist[b] || 0) + 1
   }
@@ -162,6 +182,10 @@ function simulate(N) {
     bonusTriggerRate:  bonusTriggers / N,
     bonusTriggerOneIn: bonusTriggers > 0 ? Math.round(N / bonusTriggers) : Infinity,
     avgBonusWin:       bonusTriggers > 0 ? bonusPayout / bonusTriggers : 0,
+    profitableBonuses: bonusTriggers > 0 ? bonusesProfitable / bonusTriggers : 0,
+    aboveBaseBonuses:  bonusTriggers > 0 ? bonusesAboveBase / bonusTriggers : 0,
+    hugeBonuses:       bonusTriggers > 0 ? bonusesHugeWin / bonusTriggers : 0,
+    cappedRate:        cappedSpins / N,
     maxSpinWin,
     maxBonusWin,
     maxOverallWin,
@@ -178,13 +202,17 @@ function simulateBuyBonus(N) {
   let totalCost   = 0
   let totalReturn = 0
   let maxWin      = 0
+  let cappedCount = 0
+  let profitableCount = 0
   for (let i = 0; i < N; i++) {
     totalCost += BUY_BONUS_MULT
-    const r = spin()   // the "stake spin" — its scatters get forced but mechanics same
-    // The base spin's own payout
-    let perRunTotal = r.payout
-    // Bonus is guaranteed to trigger — use the trigger spin's magnets
-    perRunTotal += runBonus(r.magnets)
+    const r = spin()
+    let perRunTotal = r.payout + runBonus(r.magnets)
+    if (perRunTotal > MAX_PAYOUT_CAP) {
+      perRunTotal = MAX_PAYOUT_CAP
+      cappedCount++
+    }
+    if (perRunTotal >= BUY_BONUS_MULT) profitableCount++
     totalReturn += perRunTotal
     if (perRunTotal > maxWin) maxWin = perRunTotal
   }
@@ -192,7 +220,9 @@ function simulateBuyBonus(N) {
     runs: N,
     avgReturn: totalReturn / N,
     avgCost:   BUY_BONUS_MULT,
-    buyEv:     totalReturn / totalCost,   // RTP of the buy-bonus action
+    buyEv:     totalReturn / totalCost,
+    profitableRate: profitableCount / N,
+    cappedRate: cappedCount / N,
     maxWin,
   }
 }
@@ -203,13 +233,17 @@ function fmtNum(x)  { return x.toFixed(2) }
 function reportSpinSim(label, res) {
   console.log(`\n── ${label} ──`)
   console.log('Spins              :', res.spins.toLocaleString())
-  console.log('RTP (total)        :', fmtPct(res.rtp))
-  console.log('  base RTP         :', fmtPct(res.baseRtp))
-  console.log('  bonus contrib.   :', fmtPct(res.bonusContribution))
-  console.log('Hit rate           :', fmtPct(res.hitRate))
+  console.log('Total RTP          :', fmtPct(res.rtp))
+  console.log('  Base RTP         :', fmtPct(res.baseRtp))
+  console.log('  Bonus RTP        :', fmtPct(res.bonusContribution))
+  console.log('Hit rate (any pay) :', fmtPct(res.hitRate))
   console.log('Bonus trigger rate :', fmtPct(res.bonusTriggerRate),
               `(≈ 1 per ${res.bonusTriggerOneIn})`)
-  console.log('Avg bonus win      :', fmtNum(res.avgBonusWin), 'x stake')
+  console.log('Avg bonus payout   :', fmtNum(res.avgBonusWin), 'x stake')
+  console.log('% bonuses ≥ 50×    :', fmtPct(res.aboveBaseBonuses))
+  console.log('% bonuses ≥ 100×   :', fmtPct(res.profitableBonuses), ' ← cost-recovery vs buy')
+  console.log('% bonuses ≥ 500×   :', fmtPct(res.hugeBonuses))
+  console.log('% spins hit cap    :', fmtPct(res.cappedRate), ` (cap ${MAX_PAYOUT_CAP}× stake)`)
   console.log('Max single spin    :', fmtNum(res.maxSpinWin), 'x stake')
   console.log('Max bonus total    :', fmtNum(res.maxBonusWin), 'x stake')
   console.log('Max overall (1 sp.):', fmtNum(res.maxOverallWin), 'x stake')
@@ -239,6 +273,9 @@ function reportBuyBonus(label, res) {
   console.log('Cost per buy       :', res.avgCost, 'x stake')
   console.log('Avg return         :', fmtNum(res.avgReturn), 'x stake')
   console.log('Buy-bonus EV / RTP :', fmtPct(res.buyEv))
+  console.log('% profitable buys  :', fmtPct(res.profitableRate),
+              `(buy returned ≥ ${BUY_BONUS_MULT}×)`)
+  console.log('% capped buys      :', fmtPct(res.cappedRate))
   console.log('Max win on buy     :', fmtNum(res.maxWin), 'x stake')
 }
 
@@ -270,11 +307,9 @@ function analyticReport() {
                 Math.pow(1 - scatterP, REELS * ROWS - k)
   }
 
-  const eBaseRtp = REELS * eSumPerCol * eMagnet / PAYOUT_DIVISOR
-  // bonus contribution: P(trigger) × FS × (5 cols × sumCol × megaMult / D)
-  // megaMult = sum of 5 magnets → E = 5 × eMagnet
+  const eBaseRtp = REELS * eSumPerCol * eMagnet / BASE_DIVISOR
   const eMega = REELS * eMagnet
-  const eBonusPerSpin = REELS * eSumPerCol * eMega / PAYOUT_DIVISOR
+  const eBonusPerSpin = REELS * eSumPerCol * eMega / BONUS_DIVISOR
   const eBonusContrib = pTrigger * BONUS_FREE_SPINS * eBonusPerSpin
 
   console.log('── Analytic expectations ──')
@@ -299,10 +334,12 @@ console.log('║  Magnetic Slot RTP simulator                               ║'
 console.log('╚════════════════════════════════════════════════════════════╝')
 console.log()
 console.log('Tunables in use:')
-console.log('  PAYOUT_DIVISOR       =', PAYOUT_DIVISOR)
+console.log('  BASE_DIVISOR         =', BASE_DIVISOR)
+console.log('  BONUS_DIVISOR        =', BONUS_DIVISOR)
 console.log('  SCATTERS_TO_TRIGGER  =', SCATTERS_TO_TRIGGER)
 console.log('  BONUS_FREE_SPINS     =', BONUS_FREE_SPINS)
 console.log('  BUY_BONUS_MULT       =', BUY_BONUS_MULT)
+console.log('  MAX_PAYOUT_CAP       =', MAX_PAYOUT_CAP)
 console.log()
 console.log('Symbol weights:',
             SYMBOLS.map(s => `${s.id}=${s.weight}`).join(' '))

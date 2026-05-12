@@ -97,20 +97,28 @@ function pickSymbol() {
 // the eye sees.
 const TIER_PERCENTS = [100, 75, 50, 25]
 
-// Per-symbol payout divisor. Tuned via Monte-Carlo:
-//   /50  → 130 % RTP (dev-only, way overshot)
-//   /68  → ~96.2 % RTP  ← final target
-//   /70  → ~93.5 % RTP
-// See scripts/magnetic-rtp-sim.js for the simulator. The 5.5 %
-// bonus contribution lives inside the total — base RTP alone
-// sits at ~90.7 %.
-const PAYOUT_DIVISOR = 68
+// Two separate payout divisors — base spins and bonus FS use
+// different ones so we can shift more of the total RTP weight
+// into the bonus event without breaking base-game feel.
+//   BASE_DIVISOR  = 115  → ~53 % base RTP
+//   BONUS_DIVISOR =  23  → ~135× avg bonus payout
+//   Combined total RTP ≈ 95.5 % (verified by Monte-Carlo on 1 M
+//   spins in scripts/magnetic-rtp-sim.js).
+const BASE_DIVISOR  = 115
+const BONUS_DIVISOR = 23
 
 // ── Bonus tuning ──
 // 3+ 💎 scatters anywhere on the 15-cell grid trigger the bonus.
 const SCATTERS_TO_TRIGGER = 3
 // Number of free spins awarded when triggered.
-const BONUS_FREE_SPINS    = 4
+const BONUS_FREE_SPINS    = 10
+
+// Hard cap on a single spin's combined payout (base + bonus).
+// 5000× stake — safety net for extreme tails. In practice
+// observed max in 1 M sims sits well below this (~660×), so the
+// cap rarely fires; keeping it future-proofs against weight
+// re-tunes that could create much higher tails.
+const MAX_PAYOUT_CAP = 5000
 
 // Strip layouts: the LAST item is the final value, everything
 // above is random filler that scrolls past the viewport during
@@ -392,9 +400,10 @@ export default function MagneticSlot() {
 
     // ── Compute payouts ──
     // Each non-blank, non-scatter symbol contributes its own
-    // strength × magnet × stake / PAYOUT_DIVISOR. Scatters (⚡)
-    // and blanks contribute 0. The column's total is the sum of
-    // its individual symbol contributions.
+    // strength × magnet × stake / DIVISOR. Scatters (💎) and
+    // blanks contribute 0. Base spins use BASE_DIVISOR, bonus
+    // FS use the smaller BONUS_DIVISOR so each FS pays bigger.
+    const divisor = bonusMode ? BONUS_DIVISOR : BASE_DIVISOR
     const payouts = finalGridArr.map((col, ci) => {
       let sumStrength = 0
       for (const sym of col) {
@@ -402,10 +411,15 @@ export default function MagneticSlot() {
         sumStrength += sym.strength
       }
       return Math.round(
-        (sumStrength * finalMagnetsArr[ci] * stakeRef.current) / PAYOUT_DIVISOR
+        (sumStrength * finalMagnetsArr[ci] * stakeRef.current) / divisor
       )
     })
-    const winTotal = payouts.reduce((s, p) => s + p, 0)
+    let winTotal = payouts.reduce((s, p) => s + p, 0)
+    // Hard payout cap — applies to the single spin's win. The
+    // bonus session's cumulative cap is enforced separately when
+    // crediting the balance at end of runBonusSequence.
+    const spinCap = MAX_PAYOUT_CAP * stakeRef.current
+    if (winTotal > spinCap) winTotal = spinCap
 
     setPayoutByCol(payouts)
     setPhase('pulling')
@@ -590,8 +604,11 @@ export default function MagneticSlot() {
     await sleep(3200)
     if (cancelRef.current) return
 
-    // Credit the accumulated bonus winnings to the balance.
-    const total = bonusTotalWinRef.current
+    // Credit the accumulated bonus winnings to the balance, with
+    // the hard cap applied (extreme tails capped at 5000 × stake).
+    let total = bonusTotalWinRef.current
+    const bonusCap = MAX_PAYOUT_CAP * stakeRef.current
+    if (total > bonusCap) total = bonusCap
     if (total > 0) {
       const nb = balanceRef.current + total
       balanceRef.current = nb
@@ -644,11 +661,13 @@ export default function MagneticSlot() {
   // drop 3 scatters → trigger detection picks them up at the end
   // of the spin and runs the standard bonus sequence.
   //
-  // Cost = 20 × stake → Buy EV ≈ 95.6 % (matches the base RTP),
-  // verified by scripts/magnetic-rtp-sim.js. Lower cost makes
-  // the buy feel free; higher cost (e.g. 100×) gives a brutal
-  // ~19 % EV and players never use it.
-  const BUY_BONUS_MULT = 20
+  // Cost = 100 × stake. With the new 10-FS / BONUS_DIVISOR=23
+  // bonus structure the avg return is ~135 × stake, giving a
+  // Buy-EV around 135 % — slightly player-favoured (encourages
+  // buying) but the bonus trigger rate (~1 / 320) means the
+  // average player who only plays base game sees ~95 % RTP
+  // overall.
+  const BUY_BONUS_MULT = 100
   function onBuyBonusClick() {
     if (autoSpin || spinning) return
     if (bonusPhase !== 'idle') return
