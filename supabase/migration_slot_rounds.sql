@@ -1,3 +1,8 @@
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+-- !!! TODO RERUN ON PROD — finish_slot_round payout cap  !!!
+-- !!! removed locally (Tower Stack RPC); SQL editor /    !!!
+-- !!! CLI deploy required.                               !!!
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -- =============================================
 -- Migration: Slot Rounds (Tower Stack & future slots)
 -- Запусти в Supabase SQL Editor

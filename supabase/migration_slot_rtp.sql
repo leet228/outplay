@@ -1,3 +1,9 @@
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+-- !!! TODO RERUN ON PROD — finish_slot_round payout cap        !!!
+-- !!! removed locally (Tower Stack RPC overrider). Apply this  !!!
+-- !!! AFTER migration_slot_rounds.sql so the new (uncapped)    !!!
+-- !!! version wins. SQL editor / CLI deploy required.          !!!
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -- =============================================
 -- Migration: Server-controlled RTP for slots
 -- Запусти в Supabase SQL Editor после migration_slot_rounds.sql

@@ -1,3 +1,7 @@
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+-- !!! TODO RERUN ON PROD — finish_plinko_round payout cap !!!
+-- !!! removed locally; SQL editor / CLI deploy required.  !!!
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -- =============================================
 -- Plinko — production flow (server round + RTP guards + live feed)
 -- Run AFTER migration_tetris_honest_v5.sql / migration_tower_honest.sql

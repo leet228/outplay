@@ -31,10 +31,14 @@ const COINS_TO_TRIGGER = 5     // coins on grid after initial drop → bonus
 // Bonus configuration.
 const BONUS_FREE_SPINS = 6
 const BONUS_PIECE_MULS = [0.025, 0.05, 0.05, 0.1] // each cell carries one of these in bonus (avg 0.05625)
+// Deficit-mode piece mults — every bonus cell carries the LOWEST
+// value so even if cascades happen during a buy-bonus run, the
+// payout barely registers. We DON'T touch the cascade logic or
+// match detection (per user's instruction) — only the values
+// each cell is stamped with at drop time.
+const BONUS_PIECE_MULS_DEFICIT = [0.025]
 const RAGE_MAX = 6              // line clears in bonus to fill the rage meter
 const BUY_BONUS_COST_MUL = 100  // buy-in price = stake × this
-// Single-spin payout cap mirroring the SQL hard cap.
-const SINGLE_SPIN_PAYOUT_CAP = 200000
 
 // Tetromino shapes (single rotation each).
 const PIECES = {
@@ -634,11 +638,18 @@ export default function TetrisCascadeSlot() {
 
     // Honest physics. clearWeight=0 means the smart-drop AI only avoids
     // tower / hole disasters, with NO bias toward or against matches.
-    // If the server says the deficit breaker is active, we suppress
-    // scatter coins so the bonus can't trigger during a forced-loss
-    // streak (server would zero the payout anyway).
+    // Deficit-mode handling. The server flips deficit_active on
+    // when the house has bled past its loss floor.
+    //   - Regular spin: suppress scatter coins so the bonus can't
+    //     organically trigger (player keeps losing naturally).
+    //   - Buy-bonus + FS: use BONUS_PIECE_MULS_DEFICIT (×0.025 only)
+    //     so even cascades in the bonus pay almost nothing.
+    // We DO NOT touch findMatches / pickColumn / cascade logic —
+    // gameplay still plays out naturally, just with weaker cells.
     const clearWeight = 0
-    const noSpecialThisSpin = !inBonus && round?.deficit_active === true
+    const isDeficit         = round?.deficit_active === true
+    const noSpecialThisSpin = !inBonus && isDeficit
+    const bonusMulTable     = isDeficit ? BONUS_PIECE_MULS_DEFICIT : BONUS_PIECE_MULS
 
     // Capture rage-buff state once; consumed after we commit to a script.
     const rageBuffActive = inBonus && forceNextIRef.current
@@ -657,7 +668,7 @@ export default function TetrisCascadeSlot() {
         const x = pickColumn(sg, piece, { clearWeight })
         if (x < 0) continue
         const mulProvider = inBonus
-          ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
+          ? () => bonusMulTable[Math.floor(Math.random() * bonusMulTable.length)]
           : null
         const { grid: ng } = dropPiece(sg, piece, x, mulProvider)
         script.push({ kind: 'place', gap: 110, gridAfter: ng })
@@ -710,7 +721,7 @@ export default function TetrisCascadeSlot() {
           const x = pickColumn(sg, piece, { clearWeight })
           if (x < 0) break
           const mulProvider = inBonus
-            ? () => BONUS_PIECE_MULS[Math.floor(Math.random() * BONUS_PIECE_MULS.length)]
+            ? () => bonusMulTable[Math.floor(Math.random() * bonusMulTable.length)]
             : null
           const { grid: ng } = dropPiece(sg, piece, x, mulProvider)
           script.push({ kind: 'place', gap: 120, gridAfter: ng })
@@ -733,9 +744,9 @@ export default function TetrisCascadeSlot() {
       setForceNextI(false)
     }
 
-    // Cap single-spin natural at the same hard cap the SQL applies.
-    // (The server caps anyway — this just keeps the visual honest.)
-    const cappedNatural = Math.min(totalNatural, currentStake * 1000, SINGLE_SPIN_PAYOUT_CAP)
+    // No client-side cap — trust the math and pay out whatever
+    // the simulator produced. The server has no cap either.
+    const cappedNatural = totalNatural
 
     // ── Phase 2: replay the script with animation, paying naturals ──
     let g = makeEmptyGrid()

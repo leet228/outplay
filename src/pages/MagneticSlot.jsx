@@ -56,11 +56,19 @@ const MAGNET_POOL    = [2, 5, 10, 25, 50, 100]
 const MAGNET_WEIGHTS = [38, 26, 16, 10, 6, 4]
 const MAGNET_WEIGHT_SUM = MAGNET_WEIGHTS.reduce((s, w) => s + w, 0)
 
-function pickMagnet() {
-  let r = Math.random() * MAGNET_WEIGHT_SUM
+// During deficit every magnet rolls the LOWEST mult (×2) — combined
+// with the loss-biased symbol pool, columns barely contribute to
+// payouts.
+const MAGNET_WEIGHTS_DEFICIT  = [100, 0, 0, 0, 0, 0]
+const MAGNET_WEIGHT_SUM_DEFICIT = MAGNET_WEIGHTS_DEFICIT.reduce((s, w) => s + w, 0)
+
+function pickMagnet(deficit = false) {
+  const weights = deficit ? MAGNET_WEIGHTS_DEFICIT : MAGNET_WEIGHTS
+  const total   = deficit ? MAGNET_WEIGHT_SUM_DEFICIT : MAGNET_WEIGHT_SUM
+  let r = Math.random() * total
   for (let i = 0; i < MAGNET_POOL.length; i++) {
-    if (r < MAGNET_WEIGHTS[i]) return MAGNET_POOL[i]
-    r -= MAGNET_WEIGHTS[i]
+    if (r < weights[i]) return MAGNET_POOL[i]
+    r -= weights[i]
   }
   return MAGNET_POOL[0]
 }
@@ -81,13 +89,31 @@ const SYMBOLS = [
 ]
 const SYM_WEIGHT_SUM = SYMBOLS.reduce((s, x) => s + x.weight, 0)
 
-function pickSymbol() {
-  let r = Math.random() * SYM_WEIGHT_SUM
-  for (const s of SYMBOLS) {
+// Loss-biased symbol pool. Mostly blank cells + a few low-strength
+// coins. No bolts/compass/orbs (the higher tiers), no gem scatter
+// (so base spins can't organically trigger the bonus during
+// deficit). The few non-blank symbols that DO drop are coins
+// (strength 0.25 — lowest tier) which barely pay anything when
+// paired with the deficit ×2 magnets.
+const SYMBOLS_DEFICIT = [
+  { id: 'blank',   texture: null,        strength: 0,    weight: 88 },
+  { id: 'coin',    texture: texCoin,     strength: 0.25, weight: 12 },
+  { id: 'bolt',    texture: texBolt,     strength: 0.50, weight: 0  },
+  { id: 'compass', texture: texCompass,  strength: 0.75, weight: 0  },
+  { id: 'orb',     texture: texOrb,      strength: 1.00, weight: 0  },
+  { id: 'gem',     texture: texGem,      strength: 0,    weight: 0, isScatter: true },
+]
+const SYM_WEIGHT_SUM_DEFICIT = SYMBOLS_DEFICIT.reduce((s, x) => s + x.weight, 0)
+
+function pickSymbol(deficit = false) {
+  const pool  = deficit ? SYMBOLS_DEFICIT : SYMBOLS
+  const total = deficit ? SYM_WEIGHT_SUM_DEFICIT : SYM_WEIGHT_SUM
+  let r = Math.random() * total
+  for (const s of pool) {
     if (r < s.weight) return s
     r -= s.weight
   }
-  return SYMBOLS[0]
+  return pool[0]
 }
 
 // During bonus FS we never want fresh scatters to drop — only the
@@ -95,13 +121,17 @@ function pickSymbol() {
 // this version. Pick from the non-scatter sub-pool.
 const SYMBOLS_NO_SCATTER     = SYMBOLS.filter(s => !s.isScatter)
 const SYM_NO_SCATTER_WEIGHT  = SYMBOLS_NO_SCATTER.reduce((s, x) => s + x.weight, 0)
-function pickSymbolNoScatter() {
-  let r = Math.random() * SYM_NO_SCATTER_WEIGHT
-  for (const s of SYMBOLS_NO_SCATTER) {
+const SYMBOLS_NO_SCATTER_DEFICIT     = SYMBOLS_DEFICIT.filter(s => !s.isScatter)
+const SYM_NO_SCATTER_WEIGHT_DEFICIT  = SYMBOLS_NO_SCATTER_DEFICIT.reduce((s, x) => s + x.weight, 0)
+function pickSymbolNoScatter(deficit = false) {
+  const pool  = deficit ? SYMBOLS_NO_SCATTER_DEFICIT : SYMBOLS_NO_SCATTER
+  const total = deficit ? SYM_NO_SCATTER_WEIGHT_DEFICIT : SYM_NO_SCATTER_WEIGHT
+  let r = Math.random() * total
+  for (const s of pool) {
     if (r < s.weight) return s
     r -= s.weight
   }
-  return SYMBOLS_NO_SCATTER[0]
+  return pool[0]
 }
 
 // Four tier cells per column: 100 / 75 / 50 / 25 %, evenly
@@ -137,16 +167,16 @@ const BONUS_FREE_SPINS    = 10
 // Strip layouts: the LAST item is the final value, everything
 // above is random filler that scrolls past the viewport during
 // the spin animation.
-function buildSymbolStrip(final, allowScatter = true) {
+function buildSymbolStrip(final, allowScatter = true, deficit = false) {
   const picker = allowScatter ? pickSymbol : pickSymbolNoScatter
   const strip = []
-  for (let i = 0; i < STRIP_LEN - 1; i++) strip.push(picker())
+  for (let i = 0; i < STRIP_LEN - 1; i++) strip.push(picker(deficit))
   strip.push(final)
   return strip
 }
-function buildMagnetStrip(final) {
+function buildMagnetStrip(final, deficit = false) {
   const strip = []
-  for (let i = 0; i < STRIP_LEN - 1; i++) strip.push(pickMagnet())
+  for (let i = 0; i < STRIP_LEN - 1; i++) strip.push(pickMagnet(deficit))
   strip.push(final)
   return strip
 }
@@ -257,6 +287,11 @@ export default function MagneticSlot() {
   const currentRoundRef   = useRef(null)
   const finalizingRef     = useRef(false)
   const [finalizing, setFinalizing] = useState(false)
+  // Sticky deficit flag for the whole round (base + any FS). Set
+  // from start_magnetic_round.deficit_active on the top-level
+  // spin; the bonus FS read it back via deficitRoundRef.current
+  // so the entire round stays cold.
+  const deficitRoundRef   = useRef(false)
 
   useEffect(() => { balanceRef.current = balance }, [balance])
   useEffect(() => { stakeRef.current   = stake },   [stake])
@@ -371,12 +406,24 @@ export default function MagneticSlot() {
       setBonusTotalWin(0)
     }
 
+    // Deficit-mode flag — comes from start_magnetic_round. When the
+    // house is in deficit, the client swaps in loss-biased symbol
+    // and magnet pools (mostly blanks + ×2 magnets), so the spin
+    // naturally produces a near-zero payout. The FS run inside a
+    // triggered bonus inherits the SAME deficit flag (via the
+    // outer round's deficit state) — no need to pass it through
+    // bonusMode because we cache it on the ref below.
+    const deficit = !bonusMode
+      ? !!round?.deficit_active
+      : !!deficitRoundRef.current
+    if (!bonusMode) deficitRoundRef.current = deficit
+
     // ── Pick final outcome ──
     // Bonus FS use the no-scatter pool so 💎 can't drop mid-bonus
     // (no re-triggers in this version).
     const picker = bonusMode ? pickSymbolNoScatter : pickSymbol
     const finalGridArr = Array.from({ length: REELS }, () =>
-      Array.from({ length: ROWS }, picker)
+      Array.from({ length: ROWS }, () => picker(deficit))
     )
     // Buy-bonus forces exactly 3 scatters into random positions so
     // the post-settle trigger detection always fires.
@@ -401,7 +448,7 @@ export default function MagneticSlot() {
     // independently from the weighted pool.
     const finalMagnetsArr = bonusMode
       ? Array(REELS).fill(bonusMegaMultRef.current)
-      : Array.from({ length: REELS }, pickMagnet)
+      : Array.from({ length: REELS }, () => pickMagnet(deficit))
     setFinalGrid(finalGridArr)
     setFinalMagnets(finalMagnetsArr)
 
@@ -411,13 +458,13 @@ export default function MagneticSlot() {
     // ty=-(STRIP_LEN-1) → last symbol (the FINAL one) is in view.
     const newCellStrips = finalGridArr.map(col =>
       col.map(final => ({
-        symbols: buildSymbolStrip(final, !bonusMode),
+        symbols: buildSymbolStrip(final, !bonusMode, deficit),
         ty: 0,
         td: 0,
       }))
     )
     const newMagnetStrips = finalMagnetsArr.map(final => ({
-      mults: buildMagnetStrip(final),
+      mults: buildMagnetStrip(final, deficit),
       ty: 0,
       td: 0,
     }))

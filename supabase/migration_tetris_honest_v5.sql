@@ -1,3 +1,8 @@
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+-- !!! TODO RERUN ON PROD — finish_tetris_round payout cap !!!
+-- !!! removed locally (Block Blast). SQL editor / CLI     !!!
+-- !!! deploy required.                                    !!!
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -- =============================================
 -- Tetris Cascade — HONEST RNG model (v5)
 -- Run AFTER migration_tetris_rtp_v4.sql

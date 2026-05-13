@@ -1,3 +1,7 @@
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+-- !!! TODO RERUN ON PROD — finish_magnetic_round payout cap !!!
+-- !!! removed locally; SQL editor / CLI deploy required.    !!!
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -- =============================================
 -- Magnetic — symbol-pull slot with mega-magnet bonus
 -- Run AFTER migration_dice.sql

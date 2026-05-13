@@ -67,11 +67,29 @@ function formatMul(mul) {
 }
 
 // One ball drop — fair coin per row. Returns the column path + landing.
-function rollPath() {
+//
+// `deficit` flag (from server's start_plinko_round.deficit_active)
+// biases each step so the ball ALWAYS lands in the centre slot
+// (k = ROWS/2 = 8 of 0..16). Centre slots hold the lowest mults
+// on every risk level — low.55, medium.2, high.1× — so deficit
+// rounds reliably refund a fraction of the stake. The path still
+// scatters naturally (random WHICH steps move right) so it
+// doesn't read as a scripted drop.
+function rollPath(deficit = false) {
   let k = 0
   const path = [k]
+  const centreTarget = Math.round(ROWS / 2)
   for (let r = 0; r < ROWS; r++) {
-    if (Math.random() < 0.5) k++
+    if (deficit) {
+      // Adaptive sampling: at each step, prob of incrementing is
+      // proportional to how many rights we still need in the
+      // remaining steps. End-of-loop k is guaranteed = centreTarget.
+      const remaining = ROWS - r
+      const need      = centreTarget - k
+      if (Math.random() * remaining < need) k++
+    } else {
+      if (Math.random() < 0.5) k++
+    }
     path.push(k)
   }
   return { path, landing: k }
@@ -557,12 +575,16 @@ export default function PlinkoSlot() {
     // single setBalls() commit. Without this, a 100-ball launch would
     // fire 100 separate "append ball" renders during the spawn window
     // (one every 14 ms) — each diffing the growing balls array.
+    //
+    // Deficit-mode: every ball's path is centre-biased so it lands in
+    // the lowest-mult slot (≈0.1× on high risk, 0.55× on low).
+    const deficit    = !!round?.deficit_active
     const launchSeed = Date.now()
     const newBalls = []
     const meta = []
     for (let i = 0; i < N; i++) {
       const id = `b${launchSeed}-${i}`
-      const { path, landing } = rollPath()
+      const { path, landing } = rollPath(deficit)
       newBalls.push({ id, row: 0, col: 0 })
       meta.push({ id, path, landing })
     }

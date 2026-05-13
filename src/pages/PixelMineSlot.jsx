@@ -124,8 +124,9 @@ const BLOCK_TEX = {
 //             Stone → Ore → Gold → Diamond → Obsidian, with the
 //             toughest block at the bottom).
 //   - Bottom: 5 chests — one per column. Cleared columns pop their
-//             chest, revealing a multiplier that's applied to the
-//             total spin payout. Multiple opened chests multiply.
+//             chest, revealing a multiplier that's ADDED to a
+//             combined chest-pool multiplier; the pool is applied
+//             to the cumulative raw win once at the end.
 //
 // Spin sequence (mirrors the source game):
 //   1. Reels spin → 15 random symbols.
@@ -138,8 +139,9 @@ const BLOCK_TEX = {
 //      explodes, dealing 2 damage to its column's top block + the
 //      top blocks of the columns immediately to the left and right.
 //   5. Any column whose blocks are all destroyed opens its chest;
-//      the chest's multiplier is multiplied into the total spin
-//      payout (multiple chests stack multiplicatively).
+//      the chest's multiplier is ADDED into the combined pool.
+//      Multiple opened chests STACK additively (×3 + ×5 + ×10 =
+//      total pool of ×18 applied to the raw win).
 //   6. 3+ Eyes of Ender → free spins (handled in Stage 4).
 //
 // Server contract is the same as Plinko — start_round debits
@@ -226,6 +228,27 @@ const COLUMN_ROW_TABLES = [
   ],
 ]
 
+// ── Deficit-mode block layout ──
+// Replaces COLUMN_ROW_TABLES when the house is in deficit. Every
+// row is biased toward the WEAKEST block available, and the
+// jackpot tiers (obsidian / diamond) are completely zeroed out
+// of rows 5-7. Even if a column somehow clears under deficit
+// (extremely rare given the biased reel produces near-zero
+// pickaxes), the cleared blocks pay almost nothing.
+const COLUMN_ROW_TABLES_DEFICIT = [
+  [{ type: 'grass',   weight: 100 }],
+  [{ type: 'dirt',    weight: 100 }],
+  [{ type: 'stone',   weight: 100 }],
+  [{ type: 'redstone',weight: 100 }],
+  // Rows 5-7: keep redstone-only floor (the lowest paying still-
+  // visible block in this slot). No gold / diamond / obsidian
+  // during deficit, so the player can't accidentally hit a 25×
+  // obsidian even on the rare chance a column clears.
+  [{ type: 'redstone',weight: 100 }],
+  [{ type: 'redstone',weight: 100 }],
+  [{ type: 'redstone',weight: 100 }],
+]
+
 // ── Reel symbol weights ──
 // Tuned via scripts/pixel-mine-rtp-sim.js (5 M-spin Monte Carlo)
 // to land long-run RTP at ≈ 94.3 %, just under the 95 % design
@@ -251,23 +274,54 @@ const REEL_TABLE = [
 ]
 const REEL_TOTAL_W = REEL_TABLE.reduce((s, e) => s + e.weight, 0)
 
+// ── Deficit-mode reel table ──
+// When server signals `deficit_active = true` the client switches
+// to THIS table. Mostly blanks + weak Wood pickaxes, NO scatters
+// (so the base spin cannot organically trigger the bonus), no
+// TNT (no scatter explosions), no Book (no pickaxe upgrades).
+// Result: gameplay LOOKS like a natural cold streak — the player
+// sees lots of blank reels and a few weak wood-pickaxe taps that
+// barely scratch the surface blocks. Buy-bonus still fires
+// (forced 3 enders) but its FS spins also use a biased table, so
+// the bonus pays out a tiny fraction of its 100× cost.
+const REEL_TABLE_DEFICIT = [
+  { sym: 'wood',      weight: 18,     kind: 'pickaxe' },
+  { sym: 'stone_p',   weight: 2,      kind: 'pickaxe' },
+  { sym: 'gold_p',    weight: 0,      kind: 'pickaxe' },
+  { sym: 'enchanted', weight: 0,      kind: 'pickaxe' },
+  { sym: 'tnt',       weight: 0,      kind: 'tnt'     },
+  { sym: 'book',      weight: 0,      kind: 'book'    },
+  { sym: 'ender',     weight: 0,      kind: 'scatter' },
+  { sym: 'blank',     weight: 80,     kind: 'blank'   },
+]
+const REEL_TOTAL_W_DEFICIT = REEL_TABLE_DEFICIT.reduce((s, e) => s + e.weight, 0)
+
 // Shorthand for the four pickaxe types — used by the upgrade pass.
 const PICKAXE_KINDS = new Set(['wood', 'stone_p', 'gold_p', 'enchanted'])
 
 // ── Chest multiplier table ──
 // Each spin every chest rolls a random multiplier from this table.
-// Cheaper mults are far more common; the 100× jackpot is a once-
-// in-a-blue-moon thrill. Open chests multiply the spin's total
-// payout (multiple chests stack multiplicatively).
+// Open chests now SUM their mults into a combined pool that's
+// applied once at the end (×3 + ×5 + ×10 = ×18 total). Weights
+// retuned vs the old multiplicative math so long-run RTP lands
+// at ≈ 94.6 % (verified by scripts/pixel-mine-rtp-sim.js on 800 K
+// spins). Mult VALUES (2/3/4/5/10/25/50/100) are locked.
 const CHEST_MUL_TABLE = [
-  { type: 2,   weight: 30 },
-  { type: 3,   weight: 20 },
-  { type: 4,   weight: 15 },
-  { type: 5,   weight: 12 },
-  { type: 10,  weight: 10 },
-  { type: 25,  weight: 8  },
-  { type: 50,  weight: 4  },
-  { type: 100, weight: 1  },
+  { type: 2,   weight: 25 },
+  { type: 3,   weight: 18 },
+  { type: 4,   weight: 14 },
+  { type: 5,   weight: 11 },
+  { type: 10,  weight: 14 },
+  { type: 25,  weight: 11 },
+  { type: 50,  weight: 5  },
+  { type: 100, weight: 2  },
+]
+
+// During deficit every chest rolls the LOWEST mult (×2) — so even
+// if a column somehow clears its chest (~impossible given the
+// biased reel + biased blocks), the pool stays tiny.
+const CHEST_MUL_TABLE_DEFICIT = [
+  { type: 2,   weight: 100 },
 ]
 
 function pickaxeHits(sym) {
@@ -279,20 +333,25 @@ function pickaxeHits(sym) {
 }
 
 // ── Helpers ──
-function pickReelSymbol() {
-  let r = Math.random() * REEL_TOTAL_W
-  for (const e of REEL_TABLE) {
+// `deficit` flag swaps in the loss-biased REEL_TABLE_DEFICIT — used
+// during base spins, FS spins, and even buy-bonus FS spins while the
+// house is in deficit mode (start_round.deficit_active = true).
+function pickReelSymbol(deficit = false) {
+  const table = deficit ? REEL_TABLE_DEFICIT : REEL_TABLE
+  const total = deficit ? REEL_TOTAL_W_DEFICIT : REEL_TOTAL_W
+  let r = Math.random() * total
+  for (const e of table) {
     r -= e.weight
     if (r < 0) return e.sym
   }
-  return REEL_TABLE[REEL_TABLE.length - 1].sym
+  return table[table.length - 1].sym
 }
 
-function generateReels() {
+function generateReels(deficit = false) {
   const reels = []
   for (let r = 0; r < REEL_ROWS; r++) {
     const row = []
-    for (let c = 0; c < REEL_COLS; c++) row.push(pickReelSymbol())
+    for (let c = 0; c < REEL_COLS; c++) row.push(pickReelSymbol(deficit))
     reels.push(row)
   }
   return reels
@@ -303,8 +362,8 @@ function generateReels() {
 // 4 spins triggered. Any roll that would have been an ender is
 // swapped to a `blank` so the symbol probabilities stay otherwise
 // identical to the base game.
-function generateReelsNoEnder() {
-  const reels = generateReels()
+function generateReelsNoEnder(deficit = false) {
+  const reels = generateReels(deficit)
   for (let r = 0; r < REEL_ROWS; r++) {
     for (let c = 0; c < REEL_COLS; c++) {
       if (reels[r][c] === 'ender') reels[r][c] = 'blank'
@@ -327,10 +386,10 @@ function countEnders(reels) {
 // Generate a normal-random reel grid GUARANTEED to contain at
 // least `minEnders` Eye-of-Ender scatters. Used by Buy Bonus and
 // the bonus-bet feature to force a trigger.
-function generateReelsWithMinEnders(minEnders) {
+function generateReelsWithMinEnders(minEnders, deficit = false) {
   // Flat list of 15 cells, then reshape.
   const cells = []
-  for (let i = 0; i < REEL_ROWS * REEL_COLS; i++) cells.push(pickReelSymbol())
+  for (let i = 0; i < REEL_ROWS * REEL_COLS; i++) cells.push(pickReelSymbol(deficit))
   let enderCount = cells.filter(s => s === 'ender').length
   if (enderCount < minEnders) {
     // Pick random non-ender slots and overwrite them with enders
@@ -367,16 +426,18 @@ function pickWeightedType(table) {
 // row rolls a weighted random tier from COLUMN_ROW_TABLES, so each
 // column is a unique skyline. Single-entry tables (rows 1, 3, 4)
 // always pick the same tier — the helper handles them naturally.
-function generateColumn() {
-  return COLUMN_ROW_TABLES.map(table => pickWeightedType(table))
+function generateColumn(deficit = false) {
+  const tables = deficit ? COLUMN_ROW_TABLES_DEFICIT : COLUMN_ROW_TABLES
+  return tables.map(table => pickWeightedType(table))
 }
 
 // Build a fresh chest row — one entry per column, each with a
 // random multiplier and `open: false`. Re-rolled at the start of
 // every spin (chests don't persist between spins in base game).
-function generateChests() {
+function generateChests(deficit = false) {
+  const table = deficit ? CHEST_MUL_TABLE_DEFICIT : CHEST_MUL_TABLE
   return Array.from({ length: GRID_COLS }, () => ({
-    mul:  pickWeightedType(CHEST_MUL_TABLE),
+    mul:  pickWeightedType(table),
     open: false,
   }))
 }
@@ -385,10 +446,10 @@ function generateChests() {
 // remaining hit count. The grid is laid out [row][col]; we
 // generate per-column then transpose so each column has its own
 // independent random skyline.
-function generateGrid() {
+function generateGrid(deficit = false) {
   // First build columns top→bottom, then flip to row-major.
   const cols = []
-  for (let c = 0; c < GRID_COLS; c++) cols.push(generateColumn())
+  for (let c = 0; c < GRID_COLS; c++) cols.push(generateColumn(deficit))
   const grid = []
   for (let r = 0; r < GRID_ROWS; r++) {
     const row = []
@@ -1093,20 +1154,33 @@ export default function PixelMineSlot() {
   }
 
   // ── revealChestsSequential ──
-  // Pops every pending chest one at a time, multiplying the
-  // running cumulative win by that chest's multiplier and bumping
-  // the on-screen win counter as the reveal lands.
+  // Pops every pending chest one at a time and ADDS its multiplier
+  // into a combined chest-pool multiplier. The cumulative raw win
+  // is multiplied by the running pool after every chest reveal so
+  // the on-screen win counter grows step by step:
+  //
+  //   running = startingWin × poolMult   (poolMult = sum of mults
+  //                                       opened so far)
+  //
+  // E.g. 3 chests opening ×3, ×5, ×10:
+  //   after chest 1 → startingWin × 3
+  //   after chest 2 → startingWin × 8     (3 + 5)
+  //   after chest 3 → startingWin × 18    (3 + 5 + 10)
+  //
+  // If NO chests are opened, no pool is applied and the player
+  // walks away with just the raw cumulative win.
   //
   //   opens          — [{col, mul}, ...] in detection order
   //   startingWin    — sum of pickaxe + TNT raw payouts (no chest
-  //                    mults applied yet) over the spin or bonus.
+  //                    pool applied yet) over the spin or bonus.
   //   onRunningChange — receives the new cumulative win after each
   //                    chest pop, so the caller can keep its own
-  //                    running total in sync (used for the
-  //                    server-side cap + final balance bump).
+  //                    running total in sync.
   //
   // Returns the final cumulative win after every chest is opened.
   async function revealChestsSequential(opens, startingWin, onRunningChange) {
+    if (!opens || opens.length === 0) return startingWin
+    let pool = 0
     let running = startingWin
     for (const { col, mul } of opens) {
       if (cancelRef.current) break
@@ -1116,9 +1190,11 @@ export default function PixelMineSlot() {
         next[col].open = true
         return next
       })
-      // 2. Multiply the running total — the lastWin display jumps
-      //    up to the new cumulative figure as the chest lands.
-      running = Math.round(running * mul)
+      // 2. Add this chest's mult into the running pool and recompute
+      //    the cumulative payout. lastWin jumps up to the new value
+      //    as the chest lands.
+      pool += mul
+      running = Math.round(startingWin * pool)
       if (typeof onRunningChange === 'function') onRunningChange(running)
       setLastWin(running)
       setBalanceBounce(true)
@@ -1199,23 +1275,33 @@ export default function PixelMineSlot() {
       }
       currentRoundRef.current = round
 
+      // ── Deficit mode ──
+      // Server signals it via round.deficit_active. When true, the
+      // client swaps in the LOSS-BIASED reel + block + chest tables
+      // (REEL_TABLE_DEFICIT etc.) so the spin naturally produces
+      // mostly blanks + weak wood pickaxes + redstone-floor blocks.
+      // No need for a server payout cap to fire — the math just
+      // doesn't pay out under deficit. Sticks for the entire round
+      // (trigger + any FS) so a triggered bonus also stays cold.
+      const deficit = !!round?.deficit_active
+
       // ── Decide the trigger-spin reel layout ──
       let rawReels
       if (forceEndersOpt) {
         // Buy Bonus (or bonus-bet) — guarantee at least 3 Eye-of-
         // Ender scatters so the trigger spin always activates the
         // free-spins bonus.
-        rawReels = generateReelsWithMinEnders(3)
+        rawReels = generateReelsWithMinEnders(3, deficit)
       } else {
-        rawReels = generateReels()
+        rawReels = generateReels(deficit)
       }
-      const targetGrid = generateGrid()
+      const targetGrid = generateGrid(deficit)
       // Re-roll the chests with fresh multipliers — each base spin
       // gets its own loadout. (FS iterations REUSE the chests from
       // the trigger spin; they're not regenerated below.)
       // Update the ref synchronously too so step 5 can read the new
       // loadout without waiting for the useEffect tick.
-      const freshChests = generateChests()
+      const freshChests = generateChests(deficit)
       chestsRef.current = freshChests
       setChests(freshChests)
 
@@ -1262,7 +1348,7 @@ export default function PixelMineSlot() {
             // FS reels — `generateReelsNoEnder` strips Eye-of-Ender
             // scatters (mapped to `blank`) so a bonus can never
             // re-trigger inside itself. The 4 free spins are sealed.
-            const fsRawReels = generateReelsNoEnder()
+            const fsRawReels = generateReelsNoEnder(deficit)
             const fsResult = await runSpinPhases(g, fsRawReels, { fillGrid: false })
             if (cancelRef.current) break
             g = fsResult.grid
@@ -1301,10 +1387,9 @@ export default function PixelMineSlot() {
         setBonusOverlay(null)
       }
 
-      // Cap the locally-claimed total at the server's hard cap so we
-      // don't show a number we'll have to walk back at finalize.
-      const localCap = baseStake * 5000
-      if (totalWin > localCap) totalWin = localCap
+      // No client-side cap — trust the math and send the full
+      // total to the server. The server has no cap either, so
+      // the player collects whatever the bonus produced.
 
       if (totalWin > 0) {
         const next = balanceRef.current + totalWin
@@ -1340,7 +1425,7 @@ export default function PixelMineSlot() {
       // even if gameplay threw. Sending the totalWin we computed up
       // to the throw point is the cleanest move: server already has
       // the cost debited, the finalize call credits whatever we
-      // claim (server caps it at baseStake × 5000 anyway).
+      // claim (no cap; deficit breaker is the only limiter).
       if (round && !isDev && !startFailed && round.round_id && !round.round_id.startsWith('dev-')) {
         setPhase('finishing')
         finalizingRef.current = true

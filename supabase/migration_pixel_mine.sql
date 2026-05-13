@@ -1,3 +1,7 @@
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+-- !!! TODO RERUN ON PROD — finish_pixel_mine_round payout cap !!!
+-- !!! removed locally; SQL editor / CLI deploy required.      !!!
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -- =============================================
 -- Pixel Mine — Minecraft-style mining slot (Mine Slot clone)
 -- Run AFTER migration_plinko.sql

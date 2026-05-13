@@ -125,9 +125,15 @@ function multiplierFor(target, mode) {
 //   below mode + loss → uniform in [target, 100]
 // Will be replaced by a server RPC once the dice round is wired
 // up. Returns { value, isWin }.
-function localRoll(target, mode) {
+//
+// `deficit` flag (from server's start_dice_round.deficit_active)
+// forces the outcome to a LOSS so the displayed value falls on
+// the losing side of the player's threshold. The roll still
+// looks honest — just always against the bet — until the house
+// recovers from deficit.
+function localRoll(target, mode, deficit = false) {
   const chance = chanceFor(target, mode)
-  const isWin = Math.random() * 100 < chance
+  const isWin = deficit ? false : (Math.random() * 100 < chance)
   let value
   if (mode === 'above') {
     if (isWin) {
@@ -439,7 +445,11 @@ export default function DiceSlot() {
       currentRoundRef.current = round
 
       // Decide outcome — chance-curve win/loss + consistent value.
-      const { value, isWin } = localRoll(targetRef.current, modeRef.current)
+      // Server signals deficit_active when the house is in deficit;
+      // localRoll then forces a losing outcome so the rolling cube
+      // lands on the wrong side of the threshold naturally.
+      const deficit = !!round?.deficit_active
+      const { value, isWin } = localRoll(targetRef.current, modeRef.current, deficit)
       totalWin = isWin
         ? Math.round(baseStake * multiplierFor(targetRef.current, modeRef.current))
         : 0

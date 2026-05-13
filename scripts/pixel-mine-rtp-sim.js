@@ -70,22 +70,28 @@ const COLUMN_ROW_TABLES = [
   ],
 ]
 
-// ── Chest multipliers (locked — design-spec values) ──
+// ── Chest multipliers ──
+// Mult VALUES are locked at the design-spec 2 / 3 / 4 / 5 / 10 / 25 /
+// 50 / 100. WEIGHTS are re-tuned to compensate for the switch from
+// multiplicative to additive chest stacking (sum pool gives K × M
+// instead of M^K, ~8× weaker at K = 3). The rarity curve still
+// favours small mults, just less aggressively, so the long-run
+// RTP lands near the 95 % design target.
 const CHEST_MUL_TABLE = [
-  { val: 2,   weight: 30 },
-  { val: 3,   weight: 20 },
-  { val: 4,   weight: 15 },
-  { val: 5,   weight: 12 },
-  { val: 10,  weight: 10 },
-  { val: 25,  weight: 8  },
-  { val: 50,  weight: 4  },
-  { val: 100, weight: 1  },
+  { val: 2,   weight: 25 },
+  { val: 3,   weight: 18 },
+  { val: 4,   weight: 14 },
+  { val: 5,   weight: 11 },
+  { val: 10,  weight: 14 },
+  { val: 25,  weight: 11 },
+  { val: 50,  weight: 5  },
+  { val: 100, weight: 2  },
 ]
 
 // ── Bonus config ──
 const SCATTER_TRIGGER = 3   // ≥3 Eye-of-Ender → 4 free spins
 const FS_COUNT        = 4
-const PAYOUT_CAP      = 5000  // server hard cap (× stake)
+// No payout cap — server pays whatever the math produces.
 
 // ── Helpers ──
 function pickWeighted(table, key) {
@@ -264,9 +270,9 @@ function runOnePhase(grid, rawReels, chests, stake) {
 }
 
 // One full round (trigger spin + optional 4 FS). Chest mults from
-// EVERY opened chest across the round multiply the CUMULATIVE raw
-// win at the end — not piecewise per spin. This matches the in-
-// game reveal sequence.
+// EVERY opened chest across the round SUM into a combined pool
+// multiplier and that pool is applied to the cumulative raw win
+// once at the end. If no chest opens, the raw is the total.
 function runFullSpin(stake) {
   const rawReels = generateReels()
   const grid = generateGrid()
@@ -288,13 +294,11 @@ function runFullSpin(stake) {
     }
   }
 
-  // Apply all chest mults to the cumulative raw, in detection order.
-  let total = cumulativeRaw
-  for (const m of allOpens) total = Math.round(total * m)
-
-  // Server-side cap
-  if (total > stake * PAYOUT_CAP) total = stake * PAYOUT_CAP
-  return total
+  // SUM all chest mults into a pool; apply once to the raw.
+  if (allOpens.length === 0) return cumulativeRaw
+  let pool = 0
+  for (const m of allOpens) pool += m
+  return Math.round(cumulativeRaw * pool)
 }
 
 // ── Monte Carlo ──
@@ -390,10 +394,14 @@ function diagnose(spins) {
       }
     }
 
-    // Stack all chest mults at the end.
+    // SUM all chest mults into a combined pool; apply once.
     let total = cumulativeRaw
-    for (const m of allOpens) total = Math.round(total * m)
-    const totalCapped = Math.min(total, stake * PAYOUT_CAP)
+    if (allOpens.length > 0) {
+      let pool = 0
+      for (const m of allOpens) pool += m
+      total = Math.round(cumulativeRaw * pool)
+    }
+    const totalCapped = total   // no cap
 
     if (isBonus) {
       bonusWin += totalCapped       // entire round (incl. trigger raw)
@@ -411,7 +419,7 @@ function diagnose(spins) {
       if (totalCapped >= stake * 50)     bonusGte50x++
       if (totalCapped >= stake * 100)    bonusGte100x++
       if (totalCapped >= stake * 500)    bonusGte500x++
-      if (totalCapped >= stake * PAYOUT_CAP) bonusGteCap++
+      if (totalCapped >= stake * 5000)   bonusGteCap++   // legacy "5000×" milestone
     } else {
       baseWin += totalCapped
     }
@@ -484,5 +492,5 @@ console.log(`  % paying ≥ 10×:     ${(d.pctBonus10x     * 100).toFixed(2)} %`
 console.log(`  % paying ≥ 50×:     ${(d.pctBonus50x     * 100).toFixed(2)} %`)
 console.log(`  % paying ≥ 100×:    ${(d.pctBonus100x    * 100).toFixed(2)} %  (Buy Bonus break-even)`)
 console.log(`  % paying ≥ 500×:    ${(d.pctBonus500x    * 100).toFixed(2)} %`)
-console.log(`  % hitting cap 5000×:${(d.pctBonusCap     * 100).toFixed(3)} %`)
+console.log(`  % paying ≥ 5000×:   ${(d.pctBonusCap     * 100).toFixed(3)} %`)
 console.log('═'.repeat(50))
