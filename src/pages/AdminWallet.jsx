@@ -1,17 +1,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
-import { TON_ADDRESS } from '../lib/addresses'
+import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
 import { adminRequestWithdrawal } from '../lib/supabase'
 import useGameStore from '../store/useGameStore'
+import smallTonSrc  from '../assets/crypto/small_ton.svg'
+import smallUsdtSrc from '../assets/crypto/small_usdt.svg'
 
-// ── Chain icon ──
+// ── Chain icons — compact "small" variants (cleanest disc, no
+//    extra stroke) that match the deposit-detail hero icons.
+//    Rendered raw — no colored backing square. ──
 function TonIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <path d="M12 2L2 8.5L12 22L22 8.5L12 2Z" fill="currentColor" opacity="0.9"/>
-      <path d="M12 2L2 8.5H22L12 2Z" fill="currentColor"/>
-    </svg>
-  )
+  return <img src={smallTonSrc} width={32} height={32} alt="" draggable="false" />
+}
+
+function UsdtIcon() {
+  return <img src={smallUsdtSrc} width={32} height={32} alt="" draggable="false" />
 }
 
 // ── Blockchain API fetchers ──
@@ -21,6 +24,25 @@ async function fetchTonBalance(addr) {
     if (!r.ok) return 0
     const d = await r.json()
     return d.ok ? Number(BigInt(d.result)) / 1e9 : 0
+  } catch { return 0 }
+}
+
+// Our USDT jetton-wallet balance. TonCenter v3 returns the
+// balance as a raw integer in micro-USDT (6 decimals). If the
+// jetton-wallet hasn't been deployed yet (no USDT ever received)
+// the array comes back empty → we return 0.
+async function fetchUsdtBalance(ownerAddr) {
+  try {
+    const url = new URL('https://toncenter.com/api/v3/jetton/wallets')
+    url.searchParams.set('owner_address', ownerAddr)
+    url.searchParams.set('jetton_address', USDT_MASTER)
+    url.searchParams.set('limit', '1')
+    const r = await fetch(url)
+    if (!r.ok) return 0
+    const d = await r.json()
+    const raw = d?.jetton_wallets?.[0]?.balance
+    if (!raw) return 0
+    return Number(BigInt(raw)) / 1e6
   } catch { return 0 }
 }
 
@@ -39,11 +61,21 @@ async function fetchPrices() {
         rubRate = rd.rates?.RUB ?? 90
       }
     } catch {}
-    _priceCache = { ton: { usd, rub: usd * rubRate } }
+    // USDT is pegged ~$1, so its USD price is 1 and its RUB
+    // price is exactly the USD-RUB rate. Keeping both coins on
+    // the same shape (`{ usd, rub }`) lets the rest of the UI
+    // treat them identically.
+    _priceCache = {
+      ton:  { usd,    rub: usd * rubRate },
+      usdt: { usd: 1, rub: rubRate },
+    }
     return _priceCache
   } catch {
     if (_priceCache) return _priceCache
-    return { ton: { usd: 3, rub: 270 } }
+    return {
+      ton:  { usd: 3, rub: 270 },
+      usdt: { usd: 1, rub: 90  },
+    }
   }
 }
 
@@ -64,9 +96,11 @@ const TON_ADDR_RE = /^(UQ|EQ|kQ|0:)[A-Za-z0-9_\-+/]{32,}/
 export default function AdminWallet() {
   const user = useGameStore(s => s.user)
   const [tonBalance, setTonBalance] = useState(null)
+  const [usdtBalance, setUsdtBalance] = useState(null)
   const [prices, setPrices] = useState(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [usdtCopied, setUsdtCopied] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -82,12 +116,14 @@ export default function AdminWallet() {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [bal, priceData] = await Promise.all([
+      const [tonBal, usdtBal, priceData] = await Promise.all([
         fetchTonBalance(TON_ADDRESS),
+        fetchUsdtBalance(TON_ADDRESS),
         fetchPrices(),
       ])
       setPrices(priceData)
-      setTonBalance(bal)
+      setTonBalance(tonBal)
+      setUsdtBalance(usdtBal)
       setLastRefresh(new Date())
     } catch (err) {
       console.error('AdminWallet fetch error:', err)
@@ -161,9 +197,18 @@ export default function AdminWallet() {
     }
   }
 
-  const fiatVal = tonBalance != null && prices ? tonBalance * prices.ton[fiatCur] : 0
-  const amountNum = parseFloat(wdAmount) || 0
-  const fiatPreview = amountNum > 0 && prices ? amountNum * prices.ton[fiatCur] : 0
+  const fiatVal      = tonBalance  != null && prices ? tonBalance  * prices.ton[fiatCur]  : 0
+  const usdtFiatVal  = usdtBalance != null && prices ? usdtBalance * prices.usdt[fiatCur] : 0
+  const totalFiatVal = fiatVal + usdtFiatVal
+  const amountNum    = parseFloat(wdAmount) || 0
+  const fiatPreview  = amountNum > 0 && prices ? amountNum * prices.ton[fiatCur] : 0
+
+  function handleCopyUsdt() {
+    haptic('light')
+    copyText(TON_ADDRESS)
+    setUsdtCopied(true)
+    setTimeout(() => setUsdtCopied(false), 2000)
+  }
 
   return (
     <div className="admin-wallet">
@@ -192,12 +237,12 @@ export default function AdminWallet() {
         </div>
       )}
 
-      {/* Total balance card */}
-      {tonBalance != null && (
+      {/* Total balance card — sum of TON + USDT in selected fiat */}
+      {tonBalance != null && usdtBalance != null && (
         <div className="admin-total-card">
-          <span className="admin-total-label">TON Balance</span>
-          <span className="admin-total-value">{fmtFiat(fiatVal, fiatCur)}</span>
-          {tonBalance === 0 && (
+          <span className="admin-total-label">Total Balance</span>
+          <span className="admin-total-value">{fmtFiat(totalFiatVal, fiatCur)}</span>
+          {totalFiatVal === 0 && (
             <span className="admin-total-empty">Wallet is empty</span>
           )}
         </div>
@@ -217,7 +262,7 @@ export default function AdminWallet() {
             <div className="admin-wallet-accent" style={{ background: 'linear-gradient(135deg, #0098EA 0%, #00D1FF 100%)' }} />
 
             <div className="admin-wallet-top">
-              <div className="admin-wallet-icon-wrap" style={{ background: 'linear-gradient(135deg, #0098EA 0%, #00D1FF 100%)' }}>
+              <div className="admin-wallet-icon-wrap" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
                 <TonIcon />
               </div>
               <div className="admin-wallet-title">
@@ -253,6 +298,55 @@ export default function AdminWallet() {
               Вывести TON
             </button>
           </div>
+
+          {/* USDT card — same layout as TON above, green Tether
+            * theme, withdraw disabled (coming soon). */}
+          {usdtBalance != null && (
+            <div className="admin-wallet-card">
+              <div className="admin-wallet-accent" style={{ background: 'linear-gradient(135deg, #26A17B 0%, #4ECCA3 100%)' }} />
+
+              <div className="admin-wallet-top">
+                <div className="admin-wallet-icon-wrap" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
+                  <UsdtIcon />
+                </div>
+                <div className="admin-wallet-title">
+                  <span className="admin-wallet-name">
+                    USDT <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.78em' }}>(Toncoin)</span>
+                  </span>
+                  <span className="admin-wallet-fiat">{fmtFiat(usdtFiatVal, fiatCur)}</span>
+                </div>
+              </div>
+
+              <div className="admin-wallet-balance-row">
+                <span className="admin-wallet-balance">{usdtBalance.toFixed(2)}</span>
+                <span className="admin-wallet-symbol">USDT</span>
+              </div>
+
+              <div className="admin-wallet-addr-row">
+                <code className="admin-wallet-addr">{truncAddr(TON_ADDRESS)}</code>
+                <button className="admin-copy-btn" onClick={handleCopyUsdt}>
+                  {usdtCopied ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  )}
+                </button>
+              </div>
+
+              {/* Withdraw disabled — backend support pending */}
+              <button
+                className="admin-wd-toggle"
+                disabled
+                style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                title="USDT withdraw coming soon"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M19 12l-7 7-7-7"/>
+                </svg>
+                Вывести USDT (скоро)
+              </button>
+            </div>
+          )}
 
           {/* Withdraw form */}
           {showWithdraw && (
@@ -351,13 +445,21 @@ export default function AdminWallet() {
         </div>
       )}
 
-      {/* Price chip */}
+      {/* Price chip — TON & USDT current prices in the selected
+        * fiat. USDT is pegged so its USD value is always 1.00,
+        * but the chip is still useful for the live RUB-rate
+        * cross-check. */}
       {prices && (
         <div className="admin-prices-bar">
           <div className="admin-price-chip">
             <span className="admin-price-dot" style={{ background: '#0098EA' }} />
             <span>TON</span>
             <span className="admin-price-val">{fmtFiat(prices.ton[fiatCur], fiatCur)}</span>
+          </div>
+          <div className="admin-price-chip">
+            <span className="admin-price-dot" style={{ background: '#26A17B' }} />
+            <span>USDT</span>
+            <span className="admin-price-val">{fmtFiat(prices.usdt[fiatCur], fiatCur)}</span>
           </div>
         </div>
       )}

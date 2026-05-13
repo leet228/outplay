@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getAdminStats, adminSearchUser, getBotStarsBalance } from '../lib/supabase'
-import { TON_ADDRESS } from '../lib/addresses'
+import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
 
 // ── Blockchain fetchers (same as wallet, but lightweight here) ──
 async function fetchTonBalance(addr) {
@@ -12,6 +12,36 @@ async function fetchTonBalance(addr) {
   } catch { return 0 }
 }
 
+// Our USDT (Toncoin) jetton-wallet balance. v3 endpoint returns
+// balance as raw micro-USDT (6 decimals); we divide to plain
+// USDT. Returns 0 if the jetton-wallet is not yet deployed or
+// TonCenter doesn't index it for us.
+async function fetchUsdtBalance(ownerAddr) {
+  try {
+    const url = new URL('https://toncenter.com/api/v3/jetton/wallets')
+    url.searchParams.set('owner_address', ownerAddr)
+    url.searchParams.set('jetton_address', USDT_MASTER)
+    url.searchParams.set('limit', '1')
+    const r = await fetch(url)
+    if (!r.ok) return 0
+    const d = await r.json()
+    const raw = d?.jetton_wallets?.[0]?.balance
+    if (!raw) return 0
+    return Number(BigInt(raw)) / 1e6
+  } catch { return 0 }
+}
+
+// USD→RUB exchange rate. Pulled out as its own helper because
+// both TON (priced in USD) and USDT (pegged ~$1) need it.
+async function fetchUsdRubRate() {
+  try {
+    const r = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
+    if (!r.ok) return 90
+    const d = await r.json()
+    return d?.rates?.RUB ?? 90
+  } catch { return 90 }
+}
+
 async function fetchTonPriceRub() {
   try {
     // CoinLore: TON id=54683, цена в USD
@@ -20,15 +50,8 @@ async function fetchTonPriceRub() {
     const d = await r.json()
     const usdPrice = parseFloat(d[0]?.price_usd) || 0
     if (usdPrice <= 0) return 270
-    // Конвертируем USD → RUB через курс ЦБ
-    try {
-      const rr = await fetch('https://api.exchangerate-api.com/v4/latest/USD')
-      if (rr.ok) {
-        const rd = await rr.json()
-        return usdPrice * (rd.rates?.RUB ?? 90)
-      }
-    } catch {}
-    return usdPrice * 90 // fallback курс
+    const rubRate = await fetchUsdRubRate()
+    return usdPrice * rubRate
   } catch { return 270 }
 }
 
@@ -92,30 +115,40 @@ export default function AdminDashboard() {
     async function load() {
       setLoading(true)
       try {
-        const [statsData, tonBal, tonPriceRub, realBotStars] = await Promise.all([
+        const [statsData, tonBal, tonPriceRub, usdtBal, usdRubRate, realBotStars] = await Promise.all([
           getAdminStats(),
           fetchTonBalance(TON_ADDRESS),
           fetchTonPriceRub(),
+          fetchUsdtBalance(TON_ADDRESS),
+          fetchUsdRubRate(),
           getBotStarsBalance(),
         ])
         if (cancelled) return
         setStats(statsData)
 
         if (statsData) {
-          const walletRub = tonBal * tonPriceRub
-          const depositsTotal = statsData.deposits_total ?? 0
-          const cryptoStars = statsData.crypto_deposits_stars ?? 0
-          const botStars = realBotStars // real balance from Telegram API
-          const userBalances = statsData.total_user_balances ?? 0
+          const walletRub      = tonBal  * tonPriceRub
+          // USDT is ~$1 peg → its RUB value is just usdtBal × USD-RUB.
+          const usdtWalletRub  = usdtBal * usdRubRate
+          const depositsTotal  = statsData.deposits_total ?? 0
+          const cryptoStars    = statsData.crypto_deposits_stars ?? 0
+          const botStars       = realBotStars // real balance from Telegram API
+          const userBalances   = statsData.total_user_balances ?? 0
           const guildPrizePool = statsData.guild_prize_pool ?? 0
-          const totalAssetsRub = botStars + walletRub // 1 star ≈ 1 RUB
+          // Total Assets now includes BOTH on-chain wallets: TON
+          // native + USDT jetton. 1 star ≈ 1 RUB for parity with
+          // the bot stars balance.
+          const totalAssetsRub   = botStars + walletRub + usdtWalletRub
           const totalLiabilities = userBalances + guildPrizePool
-          const netRevenue = totalAssetsRub - totalLiabilities
+          const netRevenue       = totalAssetsRub - totalLiabilities
           setRevenue({
             botStars,
             cryptoStars,
             depositsTotal,
             walletRub,
+            usdtBal,
+            usdtWalletRub,
+            usdRubRate,
             userBalances,
             guildPrizePool,
             totalLiabilities,
@@ -371,6 +404,15 @@ export default function AdminDashboard() {
             </div>
             <div className="admin-revenue-row admin-revenue-row-sub">
               <span>{revenue.tonBal.toFixed(4)} TON × {fmtNum(Math.round(revenue.tonPriceRub))} {'\u20BD'}</span>
+              <span></span>
+            </div>
+
+            <div className="admin-revenue-row" style={{ marginTop: 6 }}>
+              <span>{'💵'} USDT (Toncoin) Wallet</span>
+              <span className="admin-revenue-highlight">{fmtRub(revenue.usdtWalletRub)}</span>
+            </div>
+            <div className="admin-revenue-row admin-revenue-row-sub">
+              <span>{revenue.usdtBal.toFixed(2)} USDT × {fmtNum(Math.round(revenue.usdRubRate))} {'₽'}</span>
               <span></span>
             </div>
 

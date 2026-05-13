@@ -14,6 +14,14 @@ const CACHE_TTL = 60 * 60 * 1000 // 1 hour
 // Hardcoded fallback (approximate, updated manually)
 const FALLBACK_RATES = { RUB: 1, USD: 0.0127, EUR: 0.0109 }
 
+// ── TON price cache ────────────────────────────────────────
+// Separate from fiat rates because the source is different
+// (CoinGecko, not Frankfurter). USD per 1 TON. USDT-on-TON is
+// pegged ~$1 so we treat it as USD for the deposit equivalent.
+const TON_PRICE_CACHE_KEY = 'outplay_ton_price'
+const TON_PRICE_CACHE_TTL = 5 * 60 * 1000 // 5 min — TON is volatile
+const TON_PRICE_FALLBACK  = 3.00          // safe approx, refreshed by fetch
+
 /**
  * Fetch live rates from Frankfurter API.
  * Returns { RUB: 1, USD: x, EUR: y } or cached/fallback.
@@ -45,6 +53,57 @@ export async function fetchRates() {
 
   // 4. Hardcoded fallback
   return { ...FALLBACK_RATES }
+}
+
+/**
+ * Fetch TON/USD price from CoinLore. Returns USD per 1 TON.
+ * Cached for 5 minutes in localStorage. Falls back to a static
+ * approximation if the API is down so the UI never shows "—".
+ *
+ * CoinLore is the same source used by the admin panel
+ * (AdminDashboard, AdminWallet) — keeping it in sync here so
+ * the player-facing deposit screen and the admin balance read
+ * the SAME number.
+ *   id=54683 = Toncoin (TON) on CoinLore's ticker index.
+ */
+export async function fetchTonPrice() {
+  const cached = readTonPriceCache()
+  if (cached && cached.fresh) return cached.price
+
+  try {
+    const res = await fetch('https://api.coinlore.net/api/ticker/?id=54683')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const price = parseFloat(data?.[0]?.price_usd)
+    if (Number.isFinite(price) && price > 0) {
+      writeTonPriceCache(price)
+      return price
+    }
+    throw new Error('no price in response')
+  } catch (err) {
+    console.warn('fetchTonPrice failed:', err.message)
+  }
+
+  if (cached) return cached.price
+  return TON_PRICE_FALLBACK
+}
+
+function readTonPriceCache() {
+  try {
+    const raw = localStorage.getItem(TON_PRICE_CACHE_KEY)
+    if (!raw) return null
+    const { price, ts } = JSON.parse(raw)
+    if (!price || !ts) return null
+    return { price, fresh: Date.now() - ts < TON_PRICE_CACHE_TTL }
+  } catch {
+    return null
+  }
+}
+
+function writeTonPriceCache(price) {
+  try {
+    localStorage.setItem(TON_PRICE_CACHE_KEY, JSON.stringify({ price, ts: Date.now() }))
+  } catch { /* quota */ }
 }
 
 function readCache() {

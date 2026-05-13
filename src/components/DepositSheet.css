@@ -441,6 +441,192 @@
   color: var(--text-muted);
 }
 
+/* === Crypto section inside main view === */
+/* The "Криптовалюта" heading that sits above the TON + USDT row
+ * inside the main deposit screen. Styled as a quiet section
+ * label, not a button. */
+.deposit-section-heading {
+  margin: 4px 2px -4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.deposit-coin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Coin card — text top-left, big icon bottom-right. Both TON and
+ * USDT share the same dark-gray surface (no per-coin tint) so the
+ * row reads as one cohesive section, matching the reference. */
+.deposit-coin-card {
+  position: relative;
+  display: block;
+  /* Tighter top padding so the text sits visibly closer to the
+   * top of the card. Bottom padding stays loose so the big icon
+   * has room to peek out. */
+  padding: 0 12px 14px 14px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  min-height: 88px;
+  transition: transform 0.12s ease, border-color 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.deposit-coin-card:active {
+  transform: scale(0.97);
+}
+
+/* Text block sits in the top-left corner above the icon. The
+ * card has overflow:hidden so the icon clips against the right
+ * edge — text never overlaps because the icon stays in the
+ * bottom-right quadrant. */
+.deposit-coin-card-text {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+/* Crypto cards: pull the text block tighter to the top by
+ * removing the default line-height halo and nudging the block
+ * upward. Stars card uses the --right variant + flex centring
+ * so it's untouched. */
+.deposit-coin-card:not(.deposit-coin-card--stars) .deposit-coin-card-text {
+  /* Aggressively pull the text block above the content edge.
+   * Card's overflow: hidden + border-radius will clip anything
+   * past the very top, but with line-height: 1 the glyphs sit
+   * tight enough that the visible text still reads clean. */
+  margin-top: -8px;
+}
+.deposit-coin-card:not(.deposit-coin-card--stars) .deposit-coin-card-name {
+  line-height: 1;
+}
+.deposit-coin-card:not(.deposit-coin-card--stars) .deposit-coin-card-sub {
+  line-height: 1;
+}
+
+.deposit-coin-card-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.deposit-coin-card-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+/* Big coin art — positioned in the bottom-right, slightly
+ * outside the card so the border-radius clips the disc on the
+ * right edge (matches the reference's "icon bleeding off"
+ * look). */
+.deposit-coin-card-art {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 64%;
+  max-width: 88px;
+  height: auto;
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Stars-card variant — same dark-gray surface as the crypto
+ * cards. Big star icon bleeds out of the TOP-LEFT corner (a
+ * good chunk literally hangs outside the card boundary). Text
+ * sits vertically centred, slightly right of centre. */
+.deposit-coin-card--stars {
+  width: 100%;
+  /* Shorter than the crypto cards — the Stars row is meant to
+   * scan quickly, no need for a tall surface. */
+  min-height: 60px;
+  /* Flex so we can vertically centre the text block. */
+  display: flex;
+  align-items: center;
+  /* Explicit padding overrides the base card's shorthand —
+   * keeps the text comfortably away from the top edge even
+   * after the base padding-top dropped to 0 for crypto cards.
+   * Padding-left leaves room for the (mostly off-card) icon. */
+  padding: 14px 12px 8px 100px;
+}
+
+/* Big star icon — sized larger than the card's tighter
+ * dimension and pulled into the negative on both axes so a
+ * generous chunk sits OUTSIDE the card and is clipped by the
+ * overflow: hidden parent. */
+.deposit-coin-card-art--topleft {
+  position: absolute;
+  left: -20px;
+  top: 0;
+  right: auto;
+  bottom: auto;
+  /* Square — width matches height. Larger than the card's
+   * inner height, but absolute-positioned + overflow: hidden
+   * on the parent means the excess clips without affecting
+   * card sizing. */
+  width: 80px;
+  height: 80px;
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Chevron-arrow on the right side of the card — signals that
+ * the whole row is tappable and leads to another screen. Sits
+ * vertically centred (the card is `display: flex; align-items:
+ * center`) and shrinks last in the flex layout. */
+.deposit-coin-card-arrow {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-left: 8px;
+  color: var(--text-muted);
+  z-index: 2;
+}
+
+/* Text block. align-items: flex-start keeps the two lines tight
+ * to each other; margin-left: auto + text-align: left puts the
+ * block in the right portion of the card without flushing it
+ * against the right edge. */
+.deposit-coin-card-text--right {
+  align-items: flex-start;
+  text-align: left;
+  margin-left: 0;
+  flex: 1 1 auto;
+}
+
+/* TON network badge pinned to the CARD's bottom-right corner
+ * (USDT-on-TON marker). Sits ABOVE the big USDT disc art —
+ * signals the network on which the jetton lives. Z-index
+ * keeps it above the disc even when the disc bleeds past the
+ * right edge. */
+.deposit-coin-card-net-badge {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 30px;
+  height: 30px;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
 /* === Crypto Detail view === */
 .deposit-crypto-detail {
   display: flex;
@@ -462,16 +648,21 @@
   padding: 2px 0 6px;
 }
 
+/* Hero icon — bare image, no card/box around it. The coin
+ * itself is the visual focus. Size differs per coin via the
+ * variant classes below. */
 .deposit-crypto-hero-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 13px;
-  background: color-mix(in srgb, var(--coin-color) 12%, transparent);
-  border: 1.5px solid color-mix(in srgb, var(--coin-color) 18%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+/* Note: we only style DIRECT child imgs so the USDT icon's
+ * stack-wrapped imgs keep their inline width/height from the
+ * <UsdtTonIcon size={…} /> prop. */
+.deposit-crypto-hero-icon > img {
+  display: block;
 }
 
 .deposit-crypto-hero-text {
@@ -584,6 +775,15 @@
 .deposit-crypto-info-row strong {
   color: var(--accent);
   font-weight: 700;
+}
+
+/* Crypto equivalent next to the fiat min amount — slightly
+ * dimmer so the fiat value stays the primary number, with the
+ * crypto figure as a quick reference. */
+.deposit-crypto-min-crypto {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Warnings */
