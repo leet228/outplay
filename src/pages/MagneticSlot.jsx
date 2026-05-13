@@ -56,10 +56,12 @@ const MAGNET_POOL    = [2, 5, 10, 25, 50, 100]
 const MAGNET_WEIGHTS = [38, 26, 16, 10, 6, 4]
 const MAGNET_WEIGHT_SUM = MAGNET_WEIGHTS.reduce((s, w) => s + w, 0)
 
-// During deficit every magnet rolls the LOWEST mult (×2) — combined
-// with the loss-biased symbol pool, columns barely contribute to
-// payouts.
-const MAGNET_WEIGHTS_DEFICIT  = [100, 0, 0, 0, 0, 0]
+// During deficit magnets roll mostly ×5 (with a sprinkle of ×2/×10)
+// so the rare coin landing actually produces a visible 1-3 ₽
+// payout instead of rounding to a clean 0. The deficit symbol
+// pool already filters out high-strength symbols, so even at
+// ×10 magnet the per-col payout stays well under the stake.
+const MAGNET_WEIGHTS_DEFICIT  = [20, 70, 10, 0, 0, 0]   // ×2 / ×5 / ×10 / —
 const MAGNET_WEIGHT_SUM_DEFICIT = MAGNET_WEIGHTS_DEFICIT.reduce((s, w) => s + w, 0)
 
 function pickMagnet(deficit = false) {

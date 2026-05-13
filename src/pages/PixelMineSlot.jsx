@@ -228,26 +228,12 @@ const COLUMN_ROW_TABLES = [
   ],
 ]
 
-// ── Deficit-mode block layout ──
-// Replaces COLUMN_ROW_TABLES when the house is in deficit. Every
-// row is biased toward the WEAKEST block available, and the
-// jackpot tiers (obsidian / diamond) are completely zeroed out
-// of rows 5-7. Even if a column somehow clears under deficit
-// (extremely rare given the biased reel produces near-zero
-// pickaxes), the cleared blocks pay almost nothing.
-const COLUMN_ROW_TABLES_DEFICIT = [
-  [{ type: 'grass',   weight: 100 }],
-  [{ type: 'dirt',    weight: 100 }],
-  [{ type: 'stone',   weight: 100 }],
-  [{ type: 'redstone',weight: 100 }],
-  // Rows 5-7: keep redstone-only floor (the lowest paying still-
-  // visible block in this slot). No gold / diamond / obsidian
-  // during deficit, so the player can't accidentally hit a 25×
-  // obsidian even on the rare chance a column clears.
-  [{ type: 'redstone',weight: 100 }],
-  [{ type: 'redstone',weight: 100 }],
-  [{ type: 'redstone',weight: 100 }],
-]
+// Block layout stays NORMAL during deficit — the biased reel
+// table already produces almost no pickaxes / TNT, so the player
+// can't break through to the high-value rows anyway. Keeping the
+// normal block distribution means the FIELD LOOKS the same as a
+// regular cold streak (gold / diamond / obsidian still visible
+// in the lower rows, just unreachable).
 
 // ── Reel symbol weights ──
 // Tuned via scripts/pixel-mine-rtp-sim.js (5 M-spin Monte Carlo)
@@ -426,9 +412,8 @@ function pickWeightedType(table) {
 // row rolls a weighted random tier from COLUMN_ROW_TABLES, so each
 // column is a unique skyline. Single-entry tables (rows 1, 3, 4)
 // always pick the same tier — the helper handles them naturally.
-function generateColumn(deficit = false) {
-  const tables = deficit ? COLUMN_ROW_TABLES_DEFICIT : COLUMN_ROW_TABLES
-  return tables.map(table => pickWeightedType(table))
+function generateColumn() {
+  return COLUMN_ROW_TABLES.map(table => pickWeightedType(table))
 }
 
 // Build a fresh chest row — one entry per column, each with a
@@ -446,10 +431,10 @@ function generateChests(deficit = false) {
 // remaining hit count. The grid is laid out [row][col]; we
 // generate per-column then transpose so each column has its own
 // independent random skyline.
-function generateGrid(deficit = false) {
+function generateGrid() {
   // First build columns top→bottom, then flip to row-major.
   const cols = []
-  for (let c = 0; c < GRID_COLS; c++) cols.push(generateColumn(deficit))
+  for (let c = 0; c < GRID_COLS; c++) cols.push(generateColumn())
   const grid = []
   for (let r = 0; r < GRID_ROWS; r++) {
     const row = []
@@ -1295,7 +1280,7 @@ export default function PixelMineSlot() {
       } else {
         rawReels = generateReels(deficit)
       }
-      const targetGrid = generateGrid(deficit)
+      const targetGrid = generateGrid()
       // Re-roll the chests with fresh multipliers — each base spin
       // gets its own loadout. (FS iterations REUSE the chests from
       // the trigger spin; they're not regenerated below.)
