@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { adminRequestWithdrawal } from '../lib/supabase'
+import { adminRequestWithdrawal, adminRequestUsdtWithdrawal } from '../lib/supabase'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
 import smallUsdtSrc from '../assets/crypto/small_usdt.svg'
@@ -104,8 +104,10 @@ export default function AdminWallet() {
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
-  // Withdraw form
-  const [showWithdraw, setShowWithdraw] = useState(false)
+  // Withdraw form — single shared form whose fields are interpreted
+  // per the active coin (`wdCoin`). `null` keeps the form hidden;
+  // 'ton' / 'usdt' toggle the matching panel under either card.
+  const [wdCoin, setWdCoin] = useState(null) // 'ton' | 'usdt' | null
   const [wdAddress, setWdAddress] = useState('')
   const [wdAmount, setWdAmount] = useState('')
   const [wdMemo, setWdMemo] = useState('')
@@ -164,16 +166,34 @@ export default function AdminWallet() {
       setWdError('Невалидный TON адрес')
       return
     }
-    if (tonBalance !== null && amount > tonBalance - 0.05) {
-      setWdError(`Макс. ${(tonBalance - 0.05).toFixed(4)} TON (оставить на газ)`)
-      return
+    // Coin-specific max checks:
+    //   TON  → leave 0.05 TON cushion for gas (same as before).
+    //   USDT → cap at USDT balance; TON gas (~0.06 TON per send)
+    //          is paid from the hot TON balance, so we just warn
+    //          the operator if the hot wallet looks too thin.
+    if (wdCoin === 'ton') {
+      if (tonBalance !== null && amount > tonBalance - 0.05) {
+        setWdError(`Макс. ${(tonBalance - 0.05).toFixed(4)} TON (оставить на газ)`)
+        return
+      }
+    } else if (wdCoin === 'usdt') {
+      if (usdtBalance !== null && amount > usdtBalance) {
+        setWdError(`Макс. ${usdtBalance.toFixed(2)} USDT`)
+        return
+      }
+      if (tonBalance !== null && tonBalance < 0.08) {
+        setWdError(`Мало TON на газ (нужно ≥ 0.08, есть ${tonBalance.toFixed(4)})`)
+        return
+      }
     }
 
     setWdSending(true)
     haptic('medium')
 
     try {
-      const result = await adminRequestWithdrawal(user.id, wdAddress.trim(), amount, wdMemo.trim())
+      const result = wdCoin === 'usdt'
+        ? await adminRequestUsdtWithdrawal(user.id, wdAddress.trim(), amount, wdMemo.trim())
+        : await adminRequestWithdrawal(user.id, wdAddress.trim(), amount, wdMemo.trim())
       if (result?.error) {
         setWdError(result.error)
         haptic('error')
@@ -182,7 +202,7 @@ export default function AdminWallet() {
         haptic('success')
         setTimeout(() => {
           setWdSuccess(false)
-          setShowWithdraw(false)
+          setWdCoin(null)
           setWdAddress('')
           setWdAmount('')
           setWdMemo('')
@@ -197,11 +217,135 @@ export default function AdminWallet() {
     }
   }
 
+  // Open / toggle the withdraw form for a specific coin. Resets the
+  // amount field on coin switch so a TON amount doesn't leak into
+  // the USDT field (and vice-versa).
+  function toggleWithdraw(coin) {
+    haptic('light')
+    if (wdCoin === coin) {
+      setWdCoin(null)
+      return
+    }
+    setWdCoin(coin)
+    setWdAmount('')
+    setWdError('')
+  }
+
   const fiatVal      = tonBalance  != null && prices ? tonBalance  * prices.ton[fiatCur]  : 0
   const usdtFiatVal  = usdtBalance != null && prices ? usdtBalance * prices.usdt[fiatCur] : 0
   const totalFiatVal = fiatVal + usdtFiatVal
   const amountNum    = parseFloat(wdAmount) || 0
-  const fiatPreview  = amountNum > 0 && prices ? amountNum * prices.ton[fiatCur] : 0
+  // Fiat preview tracks whichever coin's form is currently open.
+  const fiatPreview  = amountNum > 0 && prices && wdCoin
+    ? amountNum * prices[wdCoin][fiatCur]
+    : 0
+
+  // Per-coin labels / MAX behavior. Centralized here so the JSX
+  // stays a single shared shell instead of two near-identical
+  // panels. The 0.05 TON cushion mirrors the user-facing TON
+  // withdraw flow — without it MAX would empty the hot wallet
+  // and the next batch couldn't pay its own gas.
+  function renderWithdrawForm() {
+    if (!wdCoin) return null
+    const isUsdt = wdCoin === 'usdt'
+    const coinLabel = isUsdt ? 'USDT' : 'TON'
+    const stepValue = isUsdt ? '0.01' : '0.01'
+    const onMax = () => {
+      haptic('light')
+      if (isUsdt && usdtBalance != null) {
+        setWdAmount(usdtBalance.toFixed(2))
+      } else if (!isUsdt && tonBalance != null) {
+        const max = Math.max(0, tonBalance - 0.05)
+        setWdAmount(max.toFixed(4))
+      }
+    }
+    const canMax = isUsdt ? usdtBalance != null : tonBalance != null
+
+    return (
+      <div className="admin-wd-form">
+        {wdSuccess ? (
+          <div className="admin-wd-success">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+            <span>Вывод отправлен в очередь</span>
+          </div>
+        ) : (
+          <>
+            <div className="admin-wd-field">
+              <label className="admin-wd-label">TON адрес</label>
+              <div className="admin-wd-input-wrap">
+                <input
+                  className="admin-wd-input"
+                  placeholder="UQ... или EQ..."
+                  value={wdAddress}
+                  onChange={e => setWdAddress(e.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            <div className="admin-wd-field">
+              <label className="admin-wd-label">Сумма {coinLabel}</label>
+              <div className="admin-wd-amount-row">
+                <input
+                  className="admin-wd-input admin-wd-input--amount"
+                  type="number"
+                  step={stepValue}
+                  min="0"
+                  placeholder={isUsdt ? '0.00' : '0.0000'}
+                  value={wdAmount}
+                  onChange={e => setWdAmount(e.target.value)}
+                  inputMode="decimal"
+                />
+                {canMax && (
+                  <button className="admin-wd-max" onClick={onMax}>MAX</button>
+                )}
+              </div>
+              {fiatPreview > 0 && (
+                <span className="admin-wd-fiat-preview">
+                  ~ {fmtFiat(fiatPreview, fiatCur)}
+                </span>
+              )}
+            </div>
+
+            <div className="admin-wd-field">
+              <label className="admin-wd-label">Memo <span className="admin-wd-optional">(необязательно)</span></label>
+              <input
+                className="admin-wd-input"
+                placeholder="Комментарий..."
+                value={wdMemo}
+                onChange={e => setWdMemo(e.target.value)}
+              />
+            </div>
+
+            <div className="admin-wd-info">
+              <span>Комиссия</span>
+              <span className="admin-wd-no-fee">Без комиссии</span>
+            </div>
+
+            {wdError && (
+              <div className="admin-wd-error">{wdError}</div>
+            )}
+
+            <button
+              className="admin-wd-submit"
+              onClick={handleWithdraw}
+              disabled={wdSending || !wdAmount || !wdAddress}
+            >
+              {wdSending ? (
+                <span className="admin-wd-spinner" />
+              ) : (
+                <>Отправить {amountNum > 0 ? `${amountNum} ${coinLabel}` : ''}</>
+              )}
+            </button>
+          </>
+        )}
+      </div>
+    )
+  }
 
   function handleCopyUsdt() {
     haptic('light')
@@ -290,17 +434,23 @@ export default function AdminWallet() {
             {/* Withdraw button */}
             <button
               className="admin-wd-toggle"
-              onClick={() => { setShowWithdraw(!showWithdraw); haptic('light') }}
+              onClick={() => toggleWithdraw('ton')}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 5v14M19 12l-7 7-7-7"/>
               </svg>
               Вывести TON
             </button>
+
+            {/* TON withdraw form — appears under the TON card so
+              * the operator's eye doesn't have to jump to a panel
+              * below an unrelated coin. */}
+            {wdCoin === 'ton' && renderWithdrawForm()}
           </div>
 
           {/* USDT card — same layout as TON above, green Tether
-            * theme, withdraw disabled (coming soon). */}
+            * theme. Withdraw routes through the same Edge
+            * Function batch as TON (asset='usdt-ton'). */}
           {usdtBalance != null && (
             <div className="admin-wallet-card">
               <div className="admin-wallet-accent" style={{ background: 'linear-gradient(135deg, #26A17B 0%, #4ECCA3 100%)' }} />
@@ -333,113 +483,21 @@ export default function AdminWallet() {
                 </button>
               </div>
 
-              {/* Withdraw disabled — backend support pending */}
+              {/* USDT withdraw — same shape as TON. The Edge
+                * Function pays TON gas (~0.06 TON / send) from
+                * the hot wallet, so we soft-guard against an
+                * empty TON balance inside handleWithdraw. */}
               <button
                 className="admin-wd-toggle"
-                disabled
-                style={{ opacity: 0.5, cursor: 'not-allowed' }}
-                title="USDT withdraw coming soon"
+                onClick={() => toggleWithdraw('usdt')}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 5v14M19 12l-7 7-7-7"/>
                 </svg>
-                Вывести USDT (скоро)
+                Вывести USDT
               </button>
-            </div>
-          )}
 
-          {/* Withdraw form */}
-          {showWithdraw && (
-            <div className="admin-wd-form">
-              {wdSuccess ? (
-                <div className="admin-wd-success">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M9 12l2 2 4-4"/>
-                  </svg>
-                  <span>Вывод отправлен в очередь</span>
-                </div>
-              ) : (
-                <>
-                  <div className="admin-wd-field">
-                    <label className="admin-wd-label">TON адрес</label>
-                    <div className="admin-wd-input-wrap">
-                      <input
-                        className="admin-wd-input"
-                        placeholder="UQ... или EQ..."
-                        value={wdAddress}
-                        onChange={e => setWdAddress(e.target.value)}
-                        spellCheck={false}
-                        autoComplete="off"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="admin-wd-field">
-                    <label className="admin-wd-label">Сумма TON</label>
-                    <div className="admin-wd-amount-row">
-                      <input
-                        className="admin-wd-input admin-wd-input--amount"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        value={wdAmount}
-                        onChange={e => setWdAmount(e.target.value)}
-                        inputMode="decimal"
-                      />
-                      {tonBalance != null && (
-                        <button
-                          className="admin-wd-max"
-                          onClick={() => {
-                            const max = Math.max(0, tonBalance - 0.05)
-                            setWdAmount(max.toFixed(4))
-                            haptic('light')
-                          }}
-                        >
-                          MAX
-                        </button>
-                      )}
-                    </div>
-                    {fiatPreview > 0 && (
-                      <span className="admin-wd-fiat-preview">
-                        ~ {fmtFiat(fiatPreview, fiatCur)}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="admin-wd-field">
-                    <label className="admin-wd-label">Memo <span className="admin-wd-optional">(необязательно)</span></label>
-                    <input
-                      className="admin-wd-input"
-                      placeholder="Комментарий..."
-                      value={wdMemo}
-                      onChange={e => setWdMemo(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="admin-wd-info">
-                    <span>Комиссия</span>
-                    <span className="admin-wd-no-fee">Без комиссии</span>
-                  </div>
-
-                  {wdError && (
-                    <div className="admin-wd-error">{wdError}</div>
-                  )}
-
-                  <button
-                    className="admin-wd-submit"
-                    onClick={handleWithdraw}
-                    disabled={wdSending || !wdAmount || !wdAddress}
-                  >
-                    {wdSending ? (
-                      <span className="admin-wd-spinner" />
-                    ) : (
-                      <>Отправить {amountNum > 0 ? `${amountNum} TON` : ''}</>
-                    )}
-                  </button>
-                </>
-              )}
+              {wdCoin === 'usdt' && renderWithdrawForm()}
             </div>
           )}
         </div>

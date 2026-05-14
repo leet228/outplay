@@ -440,11 +440,48 @@ export async function requestWithdrawal(userId, amountRub, tonAddress, memo) {
   return data
 }
 
+// Mirror of requestWithdrawal but for USDT (Toncoin) — the Edge
+// Function builds a jetton-transfer body instead of a native TON
+// message and credits the recipient in USDT at the live USD-RUB
+// rate. Same signature as the TON version so WithdrawalSheet can
+// dispatch on `view` without changing call sites.
+export async function requestUsdtWithdrawal(userId, amountRub, tonAddress, memo) {
+  const { data, error } = await supabase.rpc('request_usdt_withdrawal', {
+    p_user_id: userId,
+    p_amount_rub: amountRub,
+    p_ton_address: tonAddress,
+    p_memo: memo || '',
+  })
+  if (error) throw error
+
+  supabase.functions.invoke('process-withdrawals').catch(() => {})
+
+  return data
+}
+
 export async function adminRequestWithdrawal(adminUserId, tonAddress, tonAmount, memo) {
   const { data, error } = await supabase.rpc('admin_request_withdrawal', {
     p_admin_user_id: adminUserId,
     p_ton_address: tonAddress,
     p_ton_amount: tonAmount,
+    p_memo: memo || '',
+  })
+  if (error) throw error
+
+  supabase.functions.invoke('process-withdrawals').catch(() => {})
+
+  return data
+}
+
+// Admin USDT (Toncoin) withdrawal — mirrors adminRequestWithdrawal
+// but routes through admin_request_usdt_withdrawal so the Edge
+// Function builds a jetton-transfer body and credits the recipient
+// in USDT. No fees, no balance deduction.
+export async function adminRequestUsdtWithdrawal(adminUserId, tonAddress, usdtAmount, memo) {
+  const { data, error } = await supabase.rpc('admin_request_usdt_withdrawal', {
+    p_admin_user_id: adminUserId,
+    p_ton_address: tonAddress,
+    p_usdt_amount: usdtAmount,
     p_memo: memo || '',
   })
   if (error) throw error

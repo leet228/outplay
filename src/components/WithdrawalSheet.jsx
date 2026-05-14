@@ -3,7 +3,7 @@ import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { formatCurrency, convertFromRub } from '../lib/currency'
 import { translations } from '../lib/i18n'
-import { requestWithdrawal } from '../lib/supabase'
+import { requestWithdrawal, requestUsdtWithdrawal } from '../lib/supabase'
 import tonIconSrc    from '../assets/crypto/ton.svg'
 import usdtIconSrc   from '../assets/crypto/usdt.svg'
 import tonBadgeSrc   from '../assets/crypto/small_ton_for_usdt.svg'
@@ -18,14 +18,22 @@ import './DepositSheet.css'
 import './WithdrawalSheet.css'
 
 const MIN_WITHDRAW_RUB = 500
-// Combined network fee: includes gas + 1% platform fee
+// Combined network fee: includes gas + 1% platform fee.
+// TON path mirrors request_withdrawal: 0.01 TON @ 250 ₽/TON ≈ 2.5 ₽.
+// USDT path mirrors request_usdt_withdrawal: jetton-wallet hop +
+// recipient notification cost ~0.07 TON, fixed at 25 ₽ server-side.
 const FEE_PERCENT = 0.01
 const GAS_TON = 0.01
 const TON_RUB_PRICE = 250
+const GAS_RUB_USDT = 25
 
 // Brand icons shared with the deposit sheet.
 function TonIcon({ size = 22 }) {
   return <img src={smallTonSrc} width={size} height={size} alt="" draggable="false" />
+}
+
+function UsdtIcon({ size = 22 }) {
+  return <img src={smallUsdtSrc} width={size} height={size} alt="" draggable="false" />
 }
 
 function SuccessCheckmark() {
@@ -68,7 +76,10 @@ export default function WithdrawalSheet() {
   // Convert min withdrawal to user currency for display
   const minInCurrency = convertFromRub(MIN_WITHDRAW_RUB, currency.code, rates)
   const maxInCurrency = convertFromRub(balance, currency.code, rates)
-  const gasInRub = GAS_TON * TON_RUB_PRICE
+  // Gas math is view-aware: USDT withdraws pay a flat 25 ₽ to
+  // cover the on-chain jetton-transfer hop, TON withdraws pay
+  // ~2.5 ₽ for a plain TON message.
+  const gasInRub = view === 'usdt' ? GAS_RUB_USDT : GAS_TON * TON_RUB_PRICE
 
   const numAmount = Number(amount) || 0
   // Convert user input back to RUB for validation
@@ -159,7 +170,11 @@ export default function WithdrawalSheet() {
 
     try {
       const amountRub = Math.round(amountInRub)
-      const result = await requestWithdrawal(user.id, amountRub, wallet.trim(), memo.trim())
+      // Dispatch by view — both RPCs share the same shape and
+      // return identical error codes so the handling below is
+      // a single code path.
+      const submit = view === 'usdt' ? requestUsdtWithdrawal : requestWithdrawal
+      const result = await submit(user.id, amountRub, wallet.trim(), memo.trim())
 
       if (result?.error) {
         setStatus('error')
@@ -413,15 +428,19 @@ export default function WithdrawalSheet() {
                 </div>
               )}
 
-              {/* Disabled submit — visible green CTA with
-                * "Скоро" copy until the server-side USDT-jetton
-                * signer is implemented. */}
+              {/* Submit — real handler now that the Edge
+                * Function signs jetton transfers. Same loading
+                * / disabled gating as the TON form. */}
               <button
-                className="wd-submit-btn wd-submit-btn--soon"
-                disabled
-                title={t.withdrawSoon}
+                className="wd-submit-btn"
+                disabled={!canSubmit || status === 'loading'}
+                onClick={handleSubmit}
               >
-                {t.withdrawSoon}
+                {status === 'loading' ? (
+                  <div className="wd-btn-spinner" />
+                ) : (
+                  <>{t.withdrawBtn} <UsdtIcon size={18} /></>
+                )}
               </button>
             </div>
           </>

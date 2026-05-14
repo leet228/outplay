@@ -28,6 +28,21 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const WALLET_TON_MNEMONIC = Deno.env.get('WALLET_TON_MNEMONIC')!
 const TONCENTER_API_KEY = Deno.env.get('TONCENTER_API_KEY') || undefined
 
+// ── USDT-on-TON jetton wallet ──
+// Our jetton-wallet sub-contract for USDT (resolved once on chain
+// via scripts/resolve-usdt-wallet.js). USDT withdrawals are
+// implemented as a jetton transfer FROM this sub-contract TO the
+// recipient's main TON address — the highload wallet just signs
+// internal messages that target this address with a jetton-
+// transfer body.
+const USDT_JETTON_WALLET = 'UQD35azoUEPUPyTucTRbKj3SVOdtbB5-f3akyFyZmR7YAwyV'
+// TON value to attach to each internal message that triggers a
+// jetton transfer. Covers our jetton-wallet's storage + send + the
+// notification gas forwarded to the recipient. ≈ 0.05 TON is the
+// industry-standard amount; we leave a touch extra for safety.
+const USDT_JETTON_FORWARD_TON   = 0.01   // tip sent to recipient with the notification
+const USDT_JETTON_TRANSFER_VALUE = 0.05  // TON attached to our internal message
+
 // Query ID tracking (persisted in-memory per Edge Function instance)
 // Use timestamp-based shift to guarantee uniqueness across invocations
 // 8191 possible shifts × 1023 bit numbers = ~8.3M unique IDs per 24h timeout
@@ -147,33 +162,91 @@ function nextQueryId(): { shift: number; bitNumber: number } {
   return result
 }
 
-// Send a single transfer via Highload V3
-// Each withdrawal = one external message with direct ref to internal message
+// Build a standard text-comment Cell (op = 0, then UTF-8 bytes).
+function buildCommentCell(text: string): Cell {
+  const bytes = new TextEncoder().encode(text)
+  const b = beginCell().storeUint(0, 32)
+  for (const x of bytes) b.storeUint(x, 8)
+  return b.endCell()
+}
+
+// Build a TIP-3 jetton transfer body. This is what the highload
+// wallet sends INTO our USDT jetton-wallet — the jetton-wallet
+// then routes the USDT to the recipient's own jetton-wallet and
+// optionally forwards a small TON tip + text comment.
+//
+//   op = 0x0f8a7ea5  (jetton.transfer)
+//   query_id (uint64)
+//   amount   (VarUInteger 16) — micro-USDT
+//   destination       (MsgAddress) — recipient's MAIN TON address
+//   response_destination (MsgAddress) — where unspent TON returns
+//   custom_payload    (Maybe ^Cell) — always null here
+//   forward_ton_amount (VarUInteger 16) — TON tipped along with the
+//                       jetton, also covers recipient notification gas
+//   forward_payload   (Either Cell ^Cell) — text comment if present
+function buildJettonTransferBody(
+  amountMicroUsdt: bigint,
+  destination: Address,
+  responseDestination: Address,
+  forwardTonAmount: bigint,
+  comment?: string,
+): Cell {
+  const b = beginCell()
+    .storeUint(0x0f8a7ea5, 32)
+    .storeUint(0, 64) // query_id — set to 0; deduplication happens via highload queryId
+    .storeCoins(amountMicroUsdt)
+    .storeAddress(destination)
+    .storeAddress(responseDestination)
+    .storeBit(false)            // no custom_payload
+    .storeCoins(forwardTonAmount)
+
+  if (comment && comment.length > 0) {
+    // Forward payload as a referenced cell carrying the comment.
+    b.storeBit(true)
+    b.storeRef(buildCommentCell(comment))
+  } else {
+    // Empty forward_payload (no notification body).
+    b.storeBit(false)
+  }
+  return b.endCell()
+}
+
+// Send a single transfer via Highload V3.
+// Each withdrawal = one external message with direct ref to one
+// internal message. The internal message body is either:
+//   - empty   (TON transfer, no memo)
+//   - a text-comment cell (TON transfer with memo)
+//   - a jetton-transfer cell (USDT-on-TON withdrawal)
 async function sendSingleTransfer(
   client: TonClient,
   secretKey: Uint8Array,
   publicKey: Uint8Array,
   to: Address,
   value: bigint,
-  memo?: string,
+  options: { memo?: string; bodyCell?: Cell } = {},
 ): Promise<void> {
   const walletAddress = getWalletAddress(publicKey)
+  const { memo, bodyCell } = options
 
-  // Build internal message with optional memo (comment)
+  // Build internal message
   const msgBuilder = beginCell()
     .storeUint(0x10, 6)        // int_msg_info, no bounce
     .storeAddress(to)
     .storeCoins(value)
 
-  if (memo) {
-    const textBytes = new TextEncoder().encode(memo)
-    const bodyBuilder = beginCell().storeUint(0, 32) // text comment prefix
-    for (const b of textBytes) bodyBuilder.storeUint(b, 8)
-    const bodyCell = bodyBuilder.endCell()
+  // Resolve which body (if any) attaches to this message.
+  //   - bodyCell wins  → arbitrary cell (jetton transfer etc.)
+  //   - memo present   → standard text-comment cell
+  //   - neither        → empty body
+  const effectiveBody: Cell | null = bodyCell
+    ? bodyCell
+    : (memo ? buildCommentCell(memo) : null)
+
+  if (effectiveBody) {
     msgBuilder.storeUint(0, 1 + 4 + 4 + 64 + 32) // no state init fields
     msgBuilder.storeBit(false) // no state init
     msgBuilder.storeBit(true)  // body as ref
-    msgBuilder.storeRef(bodyCell)
+    msgBuilder.storeRef(effectiveBody)
   } else {
     msgBuilder.storeUint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1) // no state init, no body
   }
@@ -217,15 +290,20 @@ async function sendSingleTransfer(
 }
 
 // Send multiple transfers — each as separate external message
-// Highload V3 processes them without seqno blocking (parallel-safe)
+// Highload V3 processes them without seqno blocking (parallel-safe).
+// Each entry can carry either a `memo` (becomes a text-comment body)
+// or a fully-built `bodyCell` (e.g. jetton transfer for USDT).
 async function sendBatch(
   client: TonClient,
   secretKey: Uint8Array,
   publicKey: Uint8Array,
-  messages: { to: Address; value: bigint; memo?: string }[]
+  messages: { to: Address; value: bigint; memo?: string; bodyCell?: Cell }[]
 ): Promise<void> {
   for (const msg of messages) {
-    await sendSingleTransfer(client, secretKey, publicKey, msg.to, msg.value, msg.memo)
+    await sendSingleTransfer(client, secretKey, publicKey, msg.to, msg.value, {
+      memo: msg.memo,
+      bodyCell: msg.bodyCell,
+    })
     // Small delay between sends to avoid rate limiting
     if (messages.length > 1) {
       await new Promise(r => setTimeout(r, 300))
@@ -281,10 +359,16 @@ serve(async (req) => {
       return jsonResponse({ completed: 0, failed: 0, reason: 'worker_active', ton_price_rub: tonPriceRub })
     }
 
-    // Pick ALL pending
+    // Live USD-RUB rate — needed for USDT (pegged to USD).
+    const usdRubRate = await getUsdRubRate()
+
+    // Pick ALL pending — both TON and USDT in one pass.
+    // `usdt_amount` is read so admin USDT withdrawals can preset
+    // the exact send amount the same way `ton_amount` does for
+    // admin TON withdrawals.
     const { data: pending, error: pickErr } = await sb
       .from('withdrawals')
-      .select('id, user_id, net_rub, ton_amount, ton_address, memo')
+      .select('id, user_id, net_rub, ton_amount, usdt_amount, ton_address, memo, asset')
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
       .limit(MAX_BATCH_SIZE)
@@ -300,70 +384,141 @@ serve(async (req) => {
 
     console.log(`Processing batch of ${pending.length} withdrawals`)
 
-    // Calculate TON amounts
-    const validWithdrawals: { address: string; amountTon: number; memo: string; id: string }[] = []
+    // ── Split & convert per asset ──
+    // TON withdrawals: net_rub → TON using live TON price.
+    // USDT withdrawals: net_rub → USDT using live USD-RUB rate
+    //                   (USDT ≈ $1 peg).
+    interface TonWd  { id: string; address: string; amountTon: number;  memo: string }
+    interface UsdtWd { id: string; address: string; amountUsdt: number; memo: string }
+    const tonWds:  TonWd[]  = []
+    const usdtWds: UsdtWd[] = []
     const failedIds: string[] = []
 
     for (const wd of pending) {
-      let tonRounded: number
-      if (wd.ton_amount && Number(wd.ton_amount) > 0) {
-        tonRounded = Math.floor(Number(wd.ton_amount) * 1e9) / 1e9
-      } else {
-        tonRounded = Math.floor((wd.net_rub / tonPriceRub) * 1e9) / 1e9
-      }
+      const asset = (wd as { asset?: string }).asset || 'ton'
 
-      if (tonRounded <= 0.001) {
-        await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: `TON too small: ${tonRounded}` })
-        failedIds.push(wd.id)
-        continue
+      if (asset === 'usdt-ton') {
+        // Admin USDT withdrawals pre-set usdt_amount so we send
+        // exactly that. Regular user USDT rows have usdt_amount=NULL
+        // and rely on net_rub / usd-rub-rate. Floor to 6 decimals
+        // (USDT precision on TON) in both paths.
+        const presetUsdt = (wd as { usdt_amount?: number | string | null }).usdt_amount
+        let usdtRounded: number
+        if (presetUsdt != null && Number(presetUsdt) > 0) {
+          usdtRounded = Math.floor(Number(presetUsdt) * 1e6) / 1e6
+        } else {
+          usdtRounded = Math.floor((wd.net_rub / usdRubRate) * 1e6) / 1e6
+        }
+        if (!Number.isFinite(usdtRounded) || usdtRounded <= 0.001) {
+          await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: `USDT too small: ${usdtRounded}` })
+          failedIds.push(wd.id)
+          continue
+        }
+        usdtWds.push({ id: wd.id, address: wd.ton_address, amountUsdt: usdtRounded, memo: wd.memo || '' })
+      } else {
+        // TON path — unchanged from the original flow.
+        let tonRounded: number
+        if (wd.ton_amount && Number(wd.ton_amount) > 0) {
+          tonRounded = Math.floor(Number(wd.ton_amount) * 1e9) / 1e9
+        } else {
+          tonRounded = Math.floor((wd.net_rub / tonPriceRub) * 1e9) / 1e9
+        }
+        if (tonRounded <= 0.001) {
+          await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: `TON too small: ${tonRounded}` })
+          failedIds.push(wd.id)
+          continue
+        }
+        tonWds.push({ id: wd.id, address: wd.ton_address, amountTon: tonRounded, memo: wd.memo || '' })
       }
-      validWithdrawals.push({ address: wd.ton_address, amountTon: tonRounded, memo: wd.memo || '', id: wd.id })
     }
 
-    if (validWithdrawals.length === 0) {
+    if (tonWds.length === 0 && usdtWds.length === 0) {
       return jsonResponse({ completed: 0, failed: failedIds.length, ton_price_rub: tonPriceRub })
     }
 
-    // Check wallet balance
+    // ── Wallet balance check ──
+    // Native TON withdrawals consume their full amountTon. USDT
+    // withdrawals consume USDT_JETTON_TRANSFER_VALUE TON each
+    // (covers our jetton-wallet's send + recipient notification).
     const client = getTonClient()
     const walletBalance = Number(await client.getBalance(walletAddress)) / 1e9
-    const totalTon = validWithdrawals.reduce((s, w) => s + w.amountTon, 0)
-    const gasReserve = 0.1 + validWithdrawals.length * 0.01
+    const totalTon       = tonWds.reduce((s, w) => s + w.amountTon, 0)
+    const totalUsdtTonGas = usdtWds.length * USDT_JETTON_TRANSFER_VALUE
+    const gasReserve     = 0.1 + (tonWds.length + usdtWds.length) * 0.01
+    const totalRequired  = totalTon + totalUsdtTonGas + gasReserve
 
-    if (walletBalance < totalTon + gasReserve) {
-      for (const wd of validWithdrawals) {
+    if (walletBalance < totalRequired) {
+      for (const wd of [...tonWds, ...usdtWds]) {
         await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: `Balance low: ${walletBalance.toFixed(4)}` })
         failedIds.push(wd.id)
       }
-      await logToAdmin('error', 'Wallet balance too low', { balance: walletBalance, needed: totalTon + gasReserve })
+      await logToAdmin('error', 'Wallet balance too low', { balance: walletBalance, needed: totalRequired })
       return jsonResponse({ completed: 0, failed: failedIds.length, reason: 'wallet_low_balance' })
     }
 
-    // Send batch
-    try {
-      const messages = validWithdrawals.map(wd => ({
-        to: Address.parse(wd.address),
-        value: toNano(wd.amountTon.toFixed(9)),
-        memo: wd.memo || undefined,
-      }))
+    // ── Build batch messages ──
+    // TON withdrawals: plain transfer with text-comment memo.
+    // USDT withdrawals: internal message TO our jetton-wallet
+    // with a jetton_transfer body that routes USDT to the recipient.
+    const usdtJettonWallet = Address.parse(USDT_JETTON_WALLET)
+    const messages: { to: Address; value: bigint; memo?: string; bodyCell?: Cell }[] = []
 
+    for (const wd of tonWds) {
+      messages.push({
+        to:    Address.parse(wd.address),
+        value: toNano(wd.amountTon.toFixed(9)),
+        memo:  wd.memo || undefined,
+      })
+    }
+
+    for (const wd of usdtWds) {
+      const microUsdt    = BigInt(Math.round(wd.amountUsdt * 1e6))
+      const jettonBody = buildJettonTransferBody(
+        microUsdt,
+        Address.parse(wd.address),  // recipient main TON address
+        walletAddress,              // refunds + excess TON → our highload
+        toNano(USDT_JETTON_FORWARD_TON.toFixed(9)),
+        wd.memo || undefined,
+      )
+      messages.push({
+        to:       usdtJettonWallet,
+        value:    toNano(USDT_JETTON_TRANSFER_VALUE.toFixed(9)),
+        bodyCell: jettonBody,
+      })
+    }
+
+    // ── Sign + send ──
+    try {
       await sendBatch(client, keyPair.secretKey, keyPair.publicKey, messages)
 
-      // Mark all completed
       const txRef = `highload-${Date.now()}`
-      for (const wd of validWithdrawals) {
-        await sb.rpc('complete_withdrawal', { p_withdrawal_id: wd.id, p_tx_hash: txRef, p_ton_amount: wd.amountTon })
+      for (const wd of tonWds) {
+        await sb.rpc('complete_withdrawal',      { p_withdrawal_id: wd.id, p_tx_hash: txRef, p_ton_amount:  wd.amountTon })
+      }
+      for (const wd of usdtWds) {
+        await sb.rpc('complete_usdt_withdrawal', { p_withdrawal_id: wd.id, p_tx_hash: txRef, p_usdt_amount: wd.amountUsdt })
       }
 
       const elapsed = Date.now() - startTime
-      const summary = { completed: validWithdrawals.length, failed: failedIds.length, total_ton: totalTon, ton_price_rub: tonPriceRub, elapsed_ms: elapsed, mode: 'highload-v3' }
+      const summary = {
+        completed:    tonWds.length + usdtWds.length,
+        completed_ton:  tonWds.length,
+        completed_usdt: usdtWds.length,
+        failed:        failedIds.length,
+        total_ton:     totalTon,
+        total_usdt:    usdtWds.reduce((s, w) => s + w.amountUsdt, 0),
+        ton_price_rub: tonPriceRub,
+        usd_rub_rate:  usdRubRate,
+        elapsed_ms:    elapsed,
+        mode:          'highload-v3',
+      }
       console.log('Summary:', JSON.stringify(summary))
-      await logToAdmin('info', `Batch: ${validWithdrawals.length} ok, ${failedIds.length} failed`, summary)
+      await logToAdmin('info', `Batch: ${tonWds.length} TON + ${usdtWds.length} USDT ok, ${failedIds.length} failed`, summary)
       return jsonResponse(summary)
 
     } catch (sendErr) {
       console.error('Batch send error:', sendErr)
-      for (const wd of validWithdrawals) {
+      for (const wd of [...tonWds, ...usdtWds]) {
         try { await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: (sendErr as Error).message }) } catch {}
         failedIds.push(wd.id)
       }
