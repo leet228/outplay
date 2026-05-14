@@ -68,6 +68,39 @@
   padding: 0;
 }
 
+/* Inline back-arrow in the header — used on the TON / USDT
+ * detail views so the user can hop back to the coin picker
+ * without dismissing the whole sheet. Mirrors the deposit
+ * sheet's .deposit-back button visually. */
+.wd-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 6px;
+  background: var(--surface2);
+  border: none;
+  border-radius: 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* The full USDT withdraw form re-uses every `.wd-*` style
+ * from the TON flow. We only need a green badge variant on
+ * the disabled "Скоро" submit button so it feels consistent
+ * with the USDT card surface above it. */
+.wd-submit-btn:disabled {
+  cursor: not-allowed;
+}
+.wd-submit-btn--soon {
+  background: rgba(38, 161, 123, 0.55);
+  opacity: 0.85;
+}
+.wd-submit-btn--soon:hover {
+  background: rgba(38, 161, 123, 0.55);
+}
+
 /* === Body === */
 .wd-body {
   display: flex;
@@ -75,21 +108,31 @@
   gap: 16px;
 }
 
-/* === TON Banner === */
-.wd-ton-banner {
+/* === Coin Banner === */
+/* Shared icon + text block at the top of a coin detail view.
+ * `.wd-ton-banner` keeps its TON-blue tint; `.wd-usdt-banner`
+ * swaps to the Tether-green palette so the two coin flows
+ * read as visually distinct without re-skinning every field. */
+.wd-ton-banner,
+.wd-usdt-banner {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: 14px;
   border-radius: 14px;
+}
+.wd-ton-banner {
   background: rgba(0, 152, 234, 0.06);
   border: 1px solid rgba(0, 152, 234, 0.12);
 }
+.wd-usdt-banner {
+  background: rgba(38, 161, 123, 0.07);
+  border: 1px solid rgba(38, 161, 123, 0.16);
+}
+/* Bare icon — no blue tint square around it. The icon itself
+ * is the brand mark, the surrounding card already signals the
+ * coin context via its accent background. */
 .wd-ton-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: rgba(0, 152, 234, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;

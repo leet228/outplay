@@ -364,7 +364,7 @@ export const translations = {
     withdraw: 'Вывод',
     withdrawMin: 'Вывод доступен от {amount}',
     withdrawTitle: 'Вывод средств',
-    withdrawDesc: 'Средства отправляются в сети TON.\nУкажите адрес кошелька TON.',
+    withdrawDesc: 'Средства отправляются в сети Toncoin\nУкажите адрес кошелька TON',
     withdrawWallet: 'Адрес кошелька',
     withdrawWalletPlaceholder: 'UQ... или EQ...',
     withdrawMemo: 'Комментарий (memo)',
@@ -380,6 +380,14 @@ export const translations = {
     withdrawSuccessSub: 'Средства поступят на кошелёк в течение нескольких минут',
     withdrawInvalidAddress: 'Неверный адрес TON кошелька',
     withdrawInsufficientBalance: 'Недостаточно средств',
+    // Coin picker (matches deposit sheet labels).
+    withdrawChooseCoin: 'Выбери валюту',
+    withdrawBack: 'Назад',
+    // USDT description mirrors TON's "сети Toncoin / адрес TON"
+    // structure — same chain, same wallet format, just the
+    // asset differs.
+    withdrawUsdtDesc: 'Средства отправляются в сети Toncoin\nУкажите адрес кошелька USDT (Toncoin)',
+    withdrawSoon: 'Скоро',
     games: 'Игр',
     allTime: 'за всё время',
 
@@ -966,7 +974,7 @@ export const translations = {
     withdraw: 'Withdraw',
     withdrawMin: 'Withdrawal available from {amount}',
     withdrawTitle: 'Withdraw Funds',
-    withdrawDesc: 'Funds are sent via the TON network.\nPlease enter your TON wallet address.',
+    withdrawDesc: 'Funds are sent via the Toncoin network\nPlease enter your TON wallet address',
     withdrawWallet: 'Wallet address',
     withdrawWalletPlaceholder: 'UQ... or EQ...',
     withdrawMemo: 'Comment (memo)',
@@ -981,6 +989,13 @@ export const translations = {
     withdrawSuccess: 'Request submitted!',
     withdrawSuccessSub: 'Funds will arrive in your wallet within a few minutes',
     withdrawInvalidAddress: 'Invalid TON wallet address',
+    // Coin picker (matches deposit sheet labels).
+    withdrawChooseCoin: 'Choose currency',
+    withdrawBack: 'Back',
+    // USDT description mirrors TON's "Toncoin network / TON
+    // wallet" structure — same chain, same wallet format.
+    withdrawUsdtDesc: 'Funds are sent via the Toncoin network\nPlease enter your USDT (Toncoin) wallet address',
+    withdrawSoon: 'Coming soon',
     withdrawInsufficientBalance: 'Insufficient balance',
     games: 'Games',
     allTime: 'all time',
