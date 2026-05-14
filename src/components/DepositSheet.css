@@ -928,6 +928,15 @@
 .deposit-tonconnect-btn:hover  { background: #0086D1; }
 .deposit-tonconnect-btn:active { transform: scale(0.98); }
 
+/* USDT variant — Tether-green pill instead of TON-blue, so the
+ * CTA reads as a "USDT action" inside the green-themed USDT
+ * detail view. Same shape + sizing as the TON button. */
+.deposit-tonconnect-btn--usdt {
+  background: #26A17B;
+  box-shadow: 0 8px 24px -12px rgba(38, 161, 123, 0.6);
+}
+.deposit-tonconnect-btn--usdt:hover { background: #1F8B6A; }
+
 /* ── TON Connect deposit (one-tap pay) view ───────────────────
  * The screen you reach after tapping "Top Up via TON Wallet"
  * when a wallet is connected. Stacked: title → balance card →
@@ -1018,6 +1027,30 @@
   font-weight: 700;
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+/* Meta row under the amount input: minimum on the left, live
+ * fiat-equivalent on the right. The fiat helper always uses the
+ * user's selected currency (RUB / USD / EUR), not hardcoded RUB. */
+.deposit-tonwallet-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 4px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: -2px;
+}
+.deposit-tonwallet-min {
+  flex: 1;
+  min-width: 0;
+}
+.deposit-tonwallet-fiat {
+  flex-shrink: 0;
+  color: var(--text);
+  font-weight: 600;
 }
 
 .deposit-tonwallet-error {

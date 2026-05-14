@@ -5,7 +5,7 @@ import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
 import { createStarsInvoice, processDeposit, getUserBalance } from '../lib/supabase'
 import { formatCurrency, convertFromRub, fetchTonPrice } from '../lib/currency'
 import { translations } from '../lib/i18n'
-import { TON_ADDRESS, USDT_ADDRESS } from '../lib/addresses'
+import { TON_ADDRESS, USDT_ADDRESS, USDT_MASTER } from '../lib/addresses'
 import tgStarSrc      from '../assets/star/tgstar.png'
 import tonIconSrc     from '../assets/crypto/ton.svg'
 import usdtIconSrc    from '../assets/crypto/usdt.svg'
@@ -156,6 +156,21 @@ export default function DepositSheet() {
   // recomputed below once tonPrice resolves.
   const MIN_TON_FALLBACK = 0.5
 
+  // ── USDT-via-TonConnect state ──
+  // Mirrors the TON path: balance read, amount input, send.
+  // Extra `usdtJettonWallet` is the user's TIP-3 jetton-wallet
+  // address derived from their connected main wallet — that's
+  // the contract `sendTransaction` actually targets (not the
+  // master, not their main address).
+  const [usdtJettonWallet, setUsdtJettonWallet] = useState(null)
+  const [usdtWalletBalance, setUsdtWalletBalance] = useState(null)
+  const [usdtWalletAmount, setUsdtWalletAmount] = useState('')
+  const [usdtWalletSending, setUsdtWalletSending] = useState(false)
+  const [usdtWalletError, setUsdtWalletError] = useState('')
+  // ~$2.50 — picked so even at very low TON prices the user
+  // still has a sensible floor if the live rate fails to load.
+  const MIN_USDT_FALLBACK = 2.5
+
   // Lazy-fetch the TON price when the user lands on a coin
   // detail view. Cached for 5 min by the currency lib, so
   // re-opening the sheet during that window is a no-op.
@@ -191,6 +206,11 @@ export default function DepositSheet() {
       setView('ton')
       setTonWalletAmount('')
       setTonWalletError('')
+    } else if (view === 'usdt-wallet') {
+      // Symmetric to ton-wallet → back to the USDT detail screen.
+      setView('usdt')
+      setUsdtWalletAmount('')
+      setUsdtWalletError('')
     } else {
       // Coin detail (ton / usdt) → back to main (which now has
       // the TON + USDT cards inline under "Криптовалюта").
@@ -213,6 +233,9 @@ export default function DepositSheet() {
         setTonWalletAmount('')
         setTonWalletError('')
         setTonWalletSending(false)
+        setUsdtWalletAmount('')
+        setUsdtWalletError('')
+        setUsdtWalletSending(false)
       }, 300)
     }
   }, [depositOpen])
@@ -237,6 +260,35 @@ export default function DepositSheet() {
       } catch { /* ignore — UI falls back to no-balance state */ }
     }
     fetchWalletBalance()
+    return () => { cancelled = true }
+  }, [view, tonAddrFriendly])
+
+  // Resolve the user's USDT jetton-wallet + balance when they
+  // land on the USDT-Connect deposit view. TonCenter v3 returns
+  // both the wallet address and the raw micro-USDT balance in a
+  // single call — perfect because we need both to build the
+  // jetton-transfer body AND to render the balance card.
+  useEffect(() => {
+    if (view !== 'usdt-wallet' || !tonAddrFriendly) return
+    let cancelled = false
+    const fetchUsdtWalletInfo = async () => {
+      try {
+        const url = new URL('https://toncenter.com/api/v3/jetton/wallets')
+        url.searchParams.set('owner_address', tonAddrFriendly)
+        url.searchParams.set('jetton_address', USDT_MASTER)
+        url.searchParams.set('limit', '1')
+        const r = await fetch(url)
+        if (!r.ok) return
+        const d = await r.json()
+        const w = d?.jetton_wallets?.[0]
+        if (!cancelled) {
+          if (w?.address) setUsdtJettonWallet(w.address)
+          if (w?.balance) setUsdtWalletBalance(Number(BigInt(w.balance)) / 1e6)
+          else setUsdtWalletBalance(0)
+        }
+      } catch { /* ignore */ }
+    }
+    fetchUsdtWalletInfo()
     return () => { cancelled = true }
   }, [view, tonAddrFriendly])
 
@@ -389,12 +441,18 @@ export default function DepositSheet() {
     } catch (err) {
       console.error('TON Connect disconnect error:', err)
     }
-    // Clear local form state but keep the user on the TON detail
-    // screen so the CTA gracefully reverts to "Connect TON Wallet".
-    setView('ton')
+    // Clear local form state but keep the user on the relevant
+    // coin detail (TON / USDT) so the CTA gracefully reverts to
+    // "Connect TON Wallet" without any view jump.
+    const goTo = view === 'usdt-wallet' ? 'usdt' : 'ton'
+    setView(goTo)
     setTonWalletAmount('')
     setTonWalletError('')
     setTonWalletBalance(null)
+    setUsdtWalletAmount('')
+    setUsdtWalletError('')
+    setUsdtWalletBalance(null)
+    setUsdtJettonWallet(null)
   }
 
   // Build a comment cell payload (op = 0, then UTF-8 bytes of the
@@ -490,6 +548,129 @@ export default function DepositSheet() {
     }
   }
 
+  // Build a TIP-3 jetton-transfer body (op 0x0f8a7ea5) and return
+  // a base64 BOC for use as TON Connect `payload`. Mirrors the
+  // shape the Edge Function builds server-side for outgoing
+  // withdrawals — same op code, same field order, just routed
+  // FROM the user's jetton-wallet TO our hot wallet instead of
+  // the other way around.
+  //
+  //   amountMicroUsdt    — USDT to send, integer in micro-USDT (6 dec).
+  //   destination        — recipient's MAIN TON address (our hot wallet).
+  //   responseDestination — refund recipient (user's main wallet).
+  //   forwardTonAmount   — TON tipped along with the jetton (also
+  //                        funds the recipient-side notification).
+  //   comment            — text payload that ends up in
+  //                        `forward_payload`; check-usdt-deposits
+  //                        reads it as the user's telegram_id.
+  function buildJettonTransferPayloadBase64({
+    amountMicroUsdt, destination, responseDestination, forwardTonNano, comment,
+  }) {
+    return import('@ton/core').then(({ beginCell, Address }) => {
+      const b = beginCell()
+        .storeUint(0x0f8a7ea5, 32)
+        .storeUint(0, 64)              // query_id — TonConnect handles dedup
+        .storeCoins(amountMicroUsdt)
+        .storeAddress(Address.parse(destination))
+        .storeAddress(Address.parse(responseDestination))
+        .storeBit(false)               // no custom_payload
+        .storeCoins(forwardTonNano)
+
+      if (comment) {
+        const bytes = new TextEncoder().encode(comment)
+        const c = beginCell().storeUint(0, 32)
+        for (const x of bytes) c.storeUint(x, 8)
+        b.storeBit(true)
+        b.storeRef(c.endCell())
+      } else {
+        b.storeBit(false)
+      }
+
+      const boc = b.endCell().toBoc()
+      const view = boc instanceof Uint8Array ? boc : new Uint8Array(boc)
+      let bin = ''
+      for (let i = 0; i < view.length; i++) bin += String.fromCharCode(view[i])
+      return window.btoa(bin)
+    })
+  }
+
+  async function handleUsdtWalletSend() {
+    setUsdtWalletError('')
+    const amount = Number(usdtWalletAmount.replace(',', '.'))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setUsdtWalletError(t.depositUsdtWalletMin.replace('{min}', minUsdt ? minUsdt.toFixed(2) : MIN_USDT_FALLBACK.toFixed(2)))
+      return
+    }
+    const effectiveMin = (minUsdt && minUsdt > 0) ? minUsdt : MIN_USDT_FALLBACK
+    if (amount < effectiveMin) {
+      setUsdtWalletError(t.depositUsdtWalletMin.replace('{min}', effectiveMin.toFixed(2)))
+      return
+    }
+    if (usdtWalletBalance != null && amount > usdtWalletBalance) {
+      setUsdtWalletError(t.depositTonWalletInsuff)
+      return
+    }
+    if (!usdtJettonWallet) {
+      // The wallet has no USDT jetton-wallet deployed — we can't
+      // build a jetton-transfer because there's no contract to
+      // send it to. The user must receive some USDT first to
+      // auto-deploy the jetton-wallet sub-contract.
+      setUsdtWalletError(t.depositTonWalletNoUsdt)
+      return
+    }
+
+    setUsdtWalletSending(true)
+    haptic('medium')
+    try {
+      const memo = String(user?.telegram_id ?? '')
+      if (!memo || !/^\d+$/.test(memo)) {
+        setUsdtWalletError(t.depositTonWalletFailed)
+        setUsdtWalletSending(false)
+        return
+      }
+
+      // micro-USDT (6 decimals). Floor avoids overpaying due to
+      // float imprecision (e.g. 10.000001 would otherwise round up).
+      const microUsdt = BigInt(Math.floor(amount * 1e6))
+      // 0.01 TON forwarded to the recipient with the jetton — acts
+      // as the notification gas + a tiny tip. Matches the value
+      // process-withdrawals uses for the reverse direction.
+      const forwardTonNano = BigInt(Math.round(0.01 * 1e9))
+
+      const payload = await buildJettonTransferPayloadBase64({
+        amountMicroUsdt:     microUsdt,
+        destination:         TON_ADDRESS,           // our hot wallet (final USDT recipient)
+        responseDestination: tonAddrFriendly,       // refund excess TON to the user
+        forwardTonNano,
+        comment:             memo,
+      })
+
+      // 0.05 TON attached to cover gas for the user's
+      // jetton-wallet hop + the forward to our jetton-wallet.
+      const valueNano = BigInt(Math.round(0.05 * 1e9)).toString()
+
+      await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(Date.now() / 1000) + 600,
+        messages: [{
+          address: usdtJettonWallet,   // user's USDT jetton-wallet
+          amount:  valueNano,
+          payload,
+        }],
+      })
+
+      successAmountRef.current = 0
+      setStatus('success')
+      haptic('heavy')
+    } catch (err) {
+      console.error('USDT sendTransaction error:', err)
+      const userCancelled = /reject|cancel|user/i.test(String(err?.message || ''))
+      setUsdtWalletError(userCancelled ? t.depositTonWalletCancelled : t.depositTonWalletFailed)
+      haptic('medium')
+    } finally {
+      setUsdtWalletSending(false)
+    }
+  }
+
   const memoTag = user?.telegram_id || user?.id || 'dev'
   const MIN_RUB = 200
   const minFormatted = formatCurrency(MIN_RUB, currency, rates, { approximate: true })
@@ -514,6 +695,31 @@ export default function DepositSheet() {
   // are smaller per unit so 3 decimals reads better).
   const fmtUsdt = minUsdt != null ? `${minUsdt.toFixed(2)} USDT` : null
   const fmtTon  = minTon  != null ? `${minTon.toFixed(3)} TON`  : null
+
+  // ── Live fiat-equivalent helpers for the wallet-deposit views ──
+  // Both helpers expect the entered coin amount as a string from
+  // the input field. They convert coin → RUB and then run it
+  // through formatCurrency so the displayed equivalent always
+  // matches the user's selected fiat (RUB / USD / EUR / …),
+  // never hardcoded rubles. Returns '' when the input is empty
+  // or invalid so the JSX can hide the helper line cleanly.
+  function tonAmountAsFiat(amountStr) {
+    const n = Number(String(amountStr).replace(',', '.'))
+    if (!Number.isFinite(n) || n <= 0 || !tonPrice || tonPrice <= 0) return ''
+    const usd = n * tonPrice
+    const rub = rates?.USD ? usd / rates.USD : 0
+    if (rub <= 0) return ''
+    return formatCurrency(rub, currency, rates, { approximate: true })
+  }
+
+  function usdtAmountAsFiat(amountStr) {
+    const n = Number(String(amountStr).replace(',', '.'))
+    if (!Number.isFinite(n) || n <= 0) return ''
+    // USDT is pegged 1:1 with USD, so USDT amount == USD amount.
+    const rub = rates?.USD ? n / rates.USD : 0
+    if (rub <= 0) return ''
+    return formatCurrency(rub, currency, rates, { approximate: true })
+  }
 
   return (
     <>
@@ -837,6 +1043,21 @@ export default function DepositSheet() {
               <span className="deposit-tonwallet-amount-coin">TON</span>
             </div>
 
+            {/* Min-coin hint + live fiat-equivalent (in the user's
+              * selected currency — RUB / USD / EUR). Hint stays
+              * visible always; equivalent only shows once a valid
+              * amount is in the input. */}
+            <div className="deposit-tonwallet-meta">
+              <span className="deposit-tonwallet-min">
+                {t.depositTonWalletMin.replace('{min}', (minTon ?? MIN_TON_FALLBACK).toFixed(3))}
+              </span>
+              {tonAmountAsFiat(tonWalletAmount) && (
+                <span className="deposit-tonwallet-fiat">
+                  {tonAmountAsFiat(tonWalletAmount)}
+                </span>
+              )}
+            </div>
+
             {tonWalletError && (
               <div className="deposit-tonwallet-error">{tonWalletError}</div>
             )}
@@ -847,6 +1068,72 @@ export default function DepositSheet() {
               disabled={tonWalletSending || !tonWalletAmount}
             >
               {tonWalletSending
+                ? <div className="deposit-btn-spinner" />
+                : t.depositTonWalletContinue}
+            </button>
+          </div>
+        )}
+
+        {/* ── USDT TON Connect deposit (one-tap pay via connected wallet) ── */}
+        {status === 'idle' && view === 'usdt-wallet' && (
+          <div className="deposit-crypto-detail deposit-tonwallet-view">
+            <span className="deposit-tonwallet-title">{t.depositUsdtWalletTitle}</span>
+
+            <div className="deposit-tonwallet-card">
+              <div className="deposit-tonwallet-card-left">
+                <SmallUsdtIcon size={36} />
+                <div className="deposit-tonwallet-card-text">
+                  <span className="deposit-tonwallet-card-label">{t.depositTonWalletBalance}</span>
+                  <span className="deposit-tonwallet-card-balance">
+                    {usdtWalletBalance != null ? usdtWalletBalance.toFixed(2) : '—'}
+                  </span>
+                </div>
+              </div>
+              <button
+                className="deposit-tonwallet-logout"
+                onClick={handleDisconnectTonWallet}
+              >
+                {t.depositTonWalletLogout}
+              </button>
+            </div>
+
+            <div className="deposit-tonwallet-amount-wrap">
+              <input
+                className="deposit-tonwallet-amount-input"
+                type="text"
+                inputMode="decimal"
+                placeholder={t.depositTonWalletAmount}
+                value={usdtWalletAmount}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^\d.,]/g, '').replace(',', '.')
+                  setUsdtWalletAmount(v)
+                  if (usdtWalletError) setUsdtWalletError('')
+                }}
+              />
+              <span className="deposit-tonwallet-amount-coin">USDT</span>
+            </div>
+
+            <div className="deposit-tonwallet-meta">
+              <span className="deposit-tonwallet-min">
+                {t.depositUsdtWalletMin.replace('{min}', (minUsdt ?? MIN_USDT_FALLBACK).toFixed(2))}
+              </span>
+              {usdtAmountAsFiat(usdtWalletAmount) && (
+                <span className="deposit-tonwallet-fiat">
+                  {usdtAmountAsFiat(usdtWalletAmount)}
+                </span>
+              )}
+            </div>
+
+            {usdtWalletError && (
+              <div className="deposit-tonwallet-error">{usdtWalletError}</div>
+            )}
+
+            <button
+              className={`deposit-tonwallet-submit ${usdtWalletSending ? 'loading' : ''}`}
+              onClick={handleUsdtWalletSend}
+              disabled={usdtWalletSending || !usdtWalletAmount}
+            >
+              {usdtWalletSending
                 ? <div className="deposit-btn-spinner" />
                 : t.depositTonWalletContinue}
             </button>
@@ -918,6 +1205,22 @@ export default function DepositSheet() {
               <p>{t.depositCryptoWarn1Usdt}</p>
               <p>{t.depositCryptoWarn2}</p>
             </div>
+
+            {/* TON Connect CTA — same as TON detail. Tap to either
+              * connect a TON wallet (which can sign jetton
+              * transfers too) or hop straight into the USDT pay
+              * view if a wallet is already bound. */}
+            <button
+              className="deposit-tonconnect-btn deposit-tonconnect-btn--usdt"
+              onClick={isTonWalletConnected
+                ? () => { haptic('medium'); setView('usdt-wallet') }
+                : handleConnectTonWallet}
+            >
+              <SmallUsdtIcon size={22} />
+              <span>
+                {isTonWalletConnected ? t.depositTonTopUpViaWallet : t.depositTonConnect}
+              </span>
+            </button>
           </div>
         )}
       </div>
