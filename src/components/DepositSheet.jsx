@@ -1,5 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-react'
+// Static imports of @ton/core — building cells (text-comment for
+// TON deposits, jetton-transfer body for USDT) is on the critical
+// path of the Continue button, so a one-time bundle cost (~30 KB
+// gzipped) is cheaper than the inevitable first-tap latency of a
+// dynamic import + the occasional dev-mode chunk-fetch failure.
+import { beginCell as tonBeginCell, Address as TonAddress } from '@ton/core'
 import useGameStore from '../store/useGameStore'
 import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
 import { createStarsInvoice, processDeposit, getUserBalance } from '../lib/supabase'
@@ -459,33 +465,24 @@ export default function DepositSheet() {
   // memo) as a base64 BOC. The same shape `process-withdrawals`
   // attaches to outgoing TON transfers — our crypto indexer reads
   // the memo to attribute the deposit back to the right user_id.
+  // Helper: convert a Uint8Array / Buffer-like to base64 via
+  // window.btoa. Standalone so the comment + jetton-transfer
+  // body builders share the exact same encoding path.
+  function bocToBase64(boc) {
+    const view = boc instanceof Uint8Array ? boc : new Uint8Array(boc)
+    let bin = ''
+    for (let i = 0; i < view.length; i++) bin += String.fromCharCode(view[i])
+    return window.btoa(bin)
+  }
+
   function buildCommentPayloadBase64(text) {
-    // 11 bits: 0x10 unbounced internal-message tag is on the
-    // outer envelope; here we only need to build the body cell.
     // A standard text-comment body is:
-    //   storeUint(0, 32) + UTF-8 bytes (one byte per char-cell).
+    //   storeUint(0, 32)  → op=0 (text comment)
+    //   then UTF-8 bytes of the comment, one byte per snake cell.
     const bytes = new TextEncoder().encode(text)
-    // Build the cell BOC manually. We can avoid bringing in
-    // @ton/core into the client bundle by leaning on the fact
-    // that TON Connect's `payload` field accepts any base64 BOC
-    // — but we DO need a valid serialisation. Using a tiny
-    // helper from @ton/core is the simplest correct path.
-    // Lazy-import keeps the bundle slim until the user actually
-    // taps Continue.
-    return import('@ton/core').then(({ beginCell }) => {
-      const b = beginCell().storeUint(0, 32)
-      for (const x of bytes) b.storeUint(x, 8)
-      const cell = b.endCell()
-      // toBoc returns a Uint8Array (or Buffer-like) — base64 it
-      // via the browser's btoa using a per-byte char copy. The
-      // mini-app only ever runs in a browser context so there's
-      // no Node fallback to worry about.
-      const boc = cell.toBoc()
-      const view = boc instanceof Uint8Array ? boc : new Uint8Array(boc)
-      let bin = ''
-      for (let i = 0; i < view.length; i++) bin += String.fromCharCode(view[i])
-      return window.btoa(bin)
-    })
+    const b = tonBeginCell().storeUint(0, 32)
+    for (const x of bytes) b.storeUint(x, 8)
+    return bocToBase64(b.endCell().toBoc())
   }
 
   async function handleTonWalletSend() {
@@ -519,7 +516,7 @@ export default function DepositSheet() {
         setTonWalletSending(false)
         return
       }
-      const payload = await buildCommentPayloadBase64(memo)
+      const payload = buildCommentPayloadBase64(memo)
       const nanoAmount = BigInt(Math.round(amount * 1e9)).toString()
 
       await tonConnectUI.sendTransaction({
@@ -540,8 +537,16 @@ export default function DepositSheet() {
       haptic('heavy')
     } catch (err) {
       console.error('sendTransaction error:', err)
-      const userCancelled = /reject|cancel|user/i.test(String(err?.message || ''))
-      setTonWalletError(userCancelled ? t.depositTonWalletCancelled : t.depositTonWalletFailed)
+      const rawMsg = String(err?.message || err || '').trim()
+      const userCancelled = /reject|cancel|user/i.test(rawMsg)
+      // Append the raw wallet/SDK error in production too — it's
+      // the only way the operator can tell whether the failure
+      // was a manifest/network/address issue without console
+      // access. Truncate so the UI doesn't wrap forever.
+      const tail = rawMsg ? ' — ' + rawMsg.slice(0, 200) : ''
+      setTonWalletError(userCancelled
+        ? t.depositTonWalletCancelled
+        : t.depositTonWalletFailed + tail)
       haptic('medium')
     } finally {
       setTonWalletSending(false)
@@ -566,32 +571,26 @@ export default function DepositSheet() {
   function buildJettonTransferPayloadBase64({
     amountMicroUsdt, destination, responseDestination, forwardTonNano, comment,
   }) {
-    return import('@ton/core').then(({ beginCell, Address }) => {
-      const b = beginCell()
-        .storeUint(0x0f8a7ea5, 32)
-        .storeUint(0, 64)              // query_id — TonConnect handles dedup
-        .storeCoins(amountMicroUsdt)
-        .storeAddress(Address.parse(destination))
-        .storeAddress(Address.parse(responseDestination))
-        .storeBit(false)               // no custom_payload
-        .storeCoins(forwardTonNano)
+    const b = tonBeginCell()
+      .storeUint(0x0f8a7ea5, 32)
+      .storeUint(0, 64)              // query_id — TonConnect handles dedup
+      .storeCoins(amountMicroUsdt)
+      .storeAddress(TonAddress.parse(destination))
+      .storeAddress(TonAddress.parse(responseDestination))
+      .storeBit(false)               // no custom_payload
+      .storeCoins(forwardTonNano)
 
-      if (comment) {
-        const bytes = new TextEncoder().encode(comment)
-        const c = beginCell().storeUint(0, 32)
-        for (const x of bytes) c.storeUint(x, 8)
-        b.storeBit(true)
-        b.storeRef(c.endCell())
-      } else {
-        b.storeBit(false)
-      }
+    if (comment) {
+      const bytes = new TextEncoder().encode(comment)
+      const c = tonBeginCell().storeUint(0, 32)
+      for (const x of bytes) c.storeUint(x, 8)
+      b.storeBit(true)
+      b.storeRef(c.endCell())
+    } else {
+      b.storeBit(false)
+    }
 
-      const boc = b.endCell().toBoc()
-      const view = boc instanceof Uint8Array ? boc : new Uint8Array(boc)
-      let bin = ''
-      for (let i = 0; i < view.length; i++) bin += String.fromCharCode(view[i])
-      return window.btoa(bin)
-    })
+    return bocToBase64(b.endCell().toBoc())
   }
 
   async function handleUsdtWalletSend() {
@@ -637,7 +636,7 @@ export default function DepositSheet() {
       // process-withdrawals uses for the reverse direction.
       const forwardTonNano = BigInt(Math.round(0.01 * 1e9))
 
-      const payload = await buildJettonTransferPayloadBase64({
+      const payload = buildJettonTransferPayloadBase64({
         amountMicroUsdt:     microUsdt,
         destination:         TON_ADDRESS,           // our hot wallet (final USDT recipient)
         responseDestination: tonAddrFriendly,       // refund excess TON to the user
@@ -663,8 +662,12 @@ export default function DepositSheet() {
       haptic('heavy')
     } catch (err) {
       console.error('USDT sendTransaction error:', err)
-      const userCancelled = /reject|cancel|user/i.test(String(err?.message || ''))
-      setUsdtWalletError(userCancelled ? t.depositTonWalletCancelled : t.depositTonWalletFailed)
+      const rawMsg = String(err?.message || err || '').trim()
+      const userCancelled = /reject|cancel|user/i.test(rawMsg)
+      const tail = rawMsg ? ' — ' + rawMsg.slice(0, 200) : ''
+      setUsdtWalletError(userCancelled
+        ? t.depositTonWalletCancelled
+        : t.depositTonWalletFailed + tail)
       haptic('medium')
     } finally {
       setUsdtWalletSending(false)
