@@ -127,7 +127,7 @@ async function pollBalance(userId, prevBalance, maxRetries = 4) {
 }
 
 export default function DepositSheet() {
-  const { depositOpen, setDepositOpen, lang, currency, rates, user, setBalance, setBalanceBounce, appSettings } = useGameStore()
+  const { depositOpen, setDepositOpen, lang, currency, rates, user, balance, setBalance, setBalanceBounce, appSettings } = useGameStore()
   const t = translations[lang]
   const starsEnabled = appSettings.stars_deposits !== false
   const cryptoEnabled = appSettings.crypto_deposits !== false
@@ -173,6 +173,13 @@ export default function DepositSheet() {
   const [usdtWalletAmount, setUsdtWalletAmount] = useState('')
   const [usdtWalletSending, setUsdtWalletSending] = useState(false)
   const [usdtWalletError, setUsdtWalletError] = useState('')
+
+  // Snapshot of the user's balance at the moment we go into
+  // 'confirming' — used to compute the credited delta when the
+  // realtime channel on `transactions` finally fires and the
+  // store's `balance` bumps up. Null means we're not currently
+  // waiting on an on-chain confirmation.
+  const [confirmingPrevBalance, setConfirmingPrevBalance] = useState(null)
   // ~$2.50 — picked so even at very low TON prices the user
   // still has a sensible floor if the live rate fails to load.
   const MIN_USDT_FALLBACK = 2.5
@@ -242,6 +249,7 @@ export default function DepositSheet() {
         setUsdtWalletAmount('')
         setUsdtWalletError('')
         setUsdtWalletSending(false)
+        setConfirmingPrevBalance(null)
       }, 300)
     }
   }, [depositOpen])
@@ -339,6 +347,36 @@ export default function DepositSheet() {
       }, 1500)
       return () => clearTimeout(timer)
     }
+  }, [status])
+
+  // confirming → success transition. The store's `balance` is
+  // updated by App.jsx's Realtime listener on the `transactions`
+  // table the moment our indexer credits the deposit. We compare
+  // against the snapshot taken when sendTransaction resolved and,
+  // as soon as the balance bumps, flip to success with the actual
+  // credited delta in `successAmountRef` so the user sees a real
+  // "+N RUB" line instead of "+0".
+  useEffect(() => {
+    if (status !== 'confirming' || confirmingPrevBalance == null) return
+    if (balance > confirmingPrevBalance) {
+      successAmountRef.current = balance - confirmingPrevBalance
+      setStatus('success')
+      setConfirmingPrevBalance(null)
+    }
+  }, [status, balance, confirmingPrevBalance])
+
+  // Safety net — TON-Center / Realtime can hiccup. If we've been
+  // sitting in 'confirming' for 90 s with no balance bump, fall
+  // through to success with a 0 amount so the sheet doesn't trap
+  // the user forever. Reset is handled by the close-reset effect.
+  useEffect(() => {
+    if (status !== 'confirming') return
+    const timer = setTimeout(() => {
+      successAmountRef.current = 0
+      setStatus('success')
+      setConfirmingPrevBalance(null)
+    }, 90_000)
+    return () => clearTimeout(timer)
   }, [status])
 
   function handlePreset(amount) {
@@ -552,8 +590,15 @@ export default function DepositSheet() {
       // within 10-15 s instead of waiting up to a full pg_cron tick.
       supabase.functions.invoke('check-crypto-deposits').catch(() => {})
 
-      successAmountRef.current = 0 // hide "+N RUB" line (we don't know the RUB equivalent yet)
-      setStatus('success')
+      // Show a spinner until the realtime channel on
+      // `transactions` actually fires (App.jsx updates the store
+      // balance). The effect below watches the store and flips
+      // us to 'success' with the real credited delta as soon as
+      // the balance bumps. Snapshotting the previous balance
+      // *before* setting status guarantees we never miss a fast
+      // confirmation.
+      setConfirmingPrevBalance(useGameStore.getState().balance)
+      setStatus('confirming')
       haptic('heavy')
     } catch (err) {
       console.error('sendTransaction error:', err)
@@ -684,8 +729,9 @@ export default function DepositSheet() {
       // downside.
       supabase.functions.invoke('check-usdt-deposits').catch(() => {})
 
-      successAmountRef.current = 0
-      setStatus('success')
+      // Spinner-until-confirmed (see TON branch for rationale).
+      setConfirmingPrevBalance(useGameStore.getState().balance)
+      setStatus('confirming')
       haptic('heavy')
     } catch (err) {
       console.error('USDT sendTransaction error:', err)
@@ -758,7 +804,7 @@ export default function DepositSheet() {
       <div className={`deposit-sheet ${depositOpen ? 'open' : ''}`}>
         <div className="deposit-handle" />
 
-        {status !== 'success' && (
+        {status !== 'success' && status !== 'confirming' && (
           <div className="deposit-header">
             {view !== 'main'
               ? <BackButton label={t.depositBack} onClick={goBack} />
@@ -772,14 +818,30 @@ export default function DepositSheet() {
           </div>
         )}
 
+        {/* ── Confirming on-chain ── */}
+        {/* Shown after sendTransaction resolves while we wait for
+          * the realtime channel on `transactions` to fire. Same
+          * card geometry as the success state but with a spinner
+          * instead of the green check, so the layout doesn't jump
+          * when we transition into success. */}
+        {status === 'confirming' && (
+          <div className="deposit-success">
+            <div className="deposit-confirming-spinner" />
+            <span className="deposit-success-title">{t.depositTonWalletConfirmingTitle}</span>
+            <span className="deposit-success-sub">{t.depositTonWalletConfirmingSub}</span>
+          </div>
+        )}
+
         {/* ── Success ── */}
         {status === 'success' && (
           <div className="deposit-success">
             <SuccessCheckmark />
             <span className="deposit-success-title">{t.depositSuccess}</span>
-            <span className="deposit-success-amount">
-              {formatCurrency(successAmountRef.current, currency, rates, { sign: '+' })}
-            </span>
+            {successAmountRef.current > 0 && (
+              <span className="deposit-success-amount">
+                {formatCurrency(successAmountRef.current, currency, rates, { sign: '+' })}
+              </span>
+            )}
           </div>
         )}
 

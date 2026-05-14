@@ -515,6 +515,8 @@ export const translations = {
     depositTonWalletFailed:   'Не удалось отправить транзакцию',
     depositTonWalletCancelled:'Подтверждение отменено',
     depositTonWalletNoUsdt:   'В этом кошельке нет USDT — пополните его сначала',
+    depositTonWalletConfirmingTitle: 'Ждём подтверждение',
+    depositTonWalletConfirmingSub:   'Транзакция в сети — баланс обновится через несколько секунд',
 
     // Guilds
     guilds: 'Гильдии',
@@ -1140,6 +1142,8 @@ export const translations = {
     depositTonWalletFailed:   'Transaction failed',
     depositTonWalletCancelled:'Confirmation cancelled',
     depositTonWalletNoUsdt:   'No USDT in this wallet — receive some USDT first',
+    depositTonWalletConfirmingTitle: 'Awaiting confirmation',
+    depositTonWalletConfirmingSub:   'Transaction is on the network — your balance will update in a few seconds',
 
     // Guilds
     guilds: 'Guilds',
