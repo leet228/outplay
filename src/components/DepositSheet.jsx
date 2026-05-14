@@ -274,6 +274,12 @@ export default function DepositSheet() {
   // both the wallet address and the raw micro-USDT balance in a
   // single call — perfect because we need both to build the
   // jetton-transfer body AND to render the balance card.
+  //
+  // The wallet address comes back in raw `0:hex` form which the
+  // TON Connect SDK rejects with "Wrong 'address' format" —
+  // run it through TonAddress.parse(...).toString() to
+  // canonicalize to a bounceable EQ-prefixed address that both
+  // the SDK and every wallet accept.
   useEffect(() => {
     if (view !== 'usdt-wallet' || !tonAddrFriendly) return
     let cancelled = false
@@ -287,11 +293,17 @@ export default function DepositSheet() {
         if (!r.ok) return
         const d = await r.json()
         const w = d?.jetton_wallets?.[0]
-        if (!cancelled) {
-          if (w?.address) setUsdtJettonWallet(w.address)
-          if (w?.balance) setUsdtWalletBalance(Number(BigInt(w.balance)) / 1e6)
-          else setUsdtWalletBalance(0)
+        if (cancelled) return
+        if (w?.address) {
+          try {
+            const canonical = TonAddress.parse(w.address).toString({ bounceable: true })
+            setUsdtJettonWallet(canonical)
+          } catch {
+            setUsdtJettonWallet(w.address) // fallback to raw — surfaces a clearer SDK error than silence
+          }
         }
+        if (w?.balance) setUsdtWalletBalance(Number(BigInt(w.balance)) / 1e6)
+        else setUsdtWalletBalance(0)
       } catch { /* ignore */ }
     }
     fetchUsdtWalletInfo()
