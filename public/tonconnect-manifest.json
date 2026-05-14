@@ -1,7 +1,8 @@
 {
   "url": "https://outplay-nu.vercel.app",
   "name": "Outplay",
-  "iconUrl": "https://outplay-nu.vercel.app/vite.svg",
+  "iconUrl": "https://outplay-nu.vercel.app/app-icon.png?v=1",
   "termsOfUseUrl": "https://outplay-nu.vercel.app",
   "privacyPolicyUrl": "https://outplay-nu.vercel.app"
 }
+
