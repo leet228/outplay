@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-react'
 import useGameStore from '../store/useGameStore'
 import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
 import { createStarsInvoice, processDeposit, getUserBalance } from '../lib/supabase'
@@ -135,6 +136,26 @@ export default function DepositSheet() {
   const successAmountRef = useRef(0)
   const invoiceTxRef = useRef(null) // shared tx_id between webhook & client
 
+  // ── TON Connect ──
+  // useTonConnectUI gives us the imperative API (open modal, send tx).
+  // useTonWallet returns null until a wallet is connected; useTonAddress
+  // returns the user-friendly UQ... address once connected. We treat
+  // `tonWallet` as the source of truth for "is wallet connected" so the
+  // CTA at the bottom of the TON deposit view swaps between
+  // "Connect TON Wallet" and "Top Up via TON Wallet" automatically
+  // (including across sessions — TON Connect SDK persists state).
+  const [tonConnectUI] = useTonConnectUI()
+  const tonWallet = useTonWallet()
+  const tonAddrFriendly = useTonAddress(true)
+  const isTonWalletConnected = !!tonWallet
+  const [tonWalletBalance, setTonWalletBalance] = useState(null) // TON, native units
+  const [tonWalletAmount, setTonWalletAmount] = useState('')     // input for amount in TON
+  const [tonWalletSending, setTonWalletSending] = useState(false)
+  const [tonWalletError, setTonWalletError] = useState('')
+  // Minimum TON deposit — derived from MIN_RUB (200 ₽). Will be
+  // recomputed below once tonPrice resolves.
+  const MIN_TON_FALLBACK = 0.5
+
   // Lazy-fetch the TON price when the user lands on a coin
   // detail view. Cached for 5 min by the currency lib, so
   // re-opening the sheet during that window is a no-op.
@@ -162,6 +183,14 @@ export default function DepositSheet() {
     if (status !== 'idle') {
       setStatus('idle')
       setView('stars')
+    } else if (view === 'ton-wallet') {
+      // The TON-Connect deposit view is one level deeper than the
+      // TON detail screen. Back goes to the TON detail (which
+      // still hosts the "Top Up via TON Wallet" CTA so re-entering
+      // is one tap away).
+      setView('ton')
+      setTonWalletAmount('')
+      setTonWalletError('')
     } else {
       // Coin detail (ton / usdt) → back to main (which now has
       // the TON + USDT cards inline under "Криптовалюта").
@@ -181,9 +210,35 @@ export default function DepositSheet() {
         setStatus('idle')
         setCopiedField(null)
         invoiceTxRef.current = null
+        setTonWalletAmount('')
+        setTonWalletError('')
+        setTonWalletSending(false)
       }, 300)
     }
   }, [depositOpen])
+
+  // Fetch the connected wallet's TON balance whenever the user
+  // lands on the TON-Connect deposit view (and any time the
+  // connection changes). Re-uses TonCenter's public RPC — same
+  // endpoint AdminWallet uses for the hot-wallet balance read.
+  useEffect(() => {
+    if (view !== 'ton-wallet' || !tonAddrFriendly) {
+      return
+    }
+    let cancelled = false
+    const fetchWalletBalance = async () => {
+      try {
+        const r = await fetch(`https://toncenter.com/api/v2/getAddressBalance?address=${tonAddrFriendly}`)
+        if (!r.ok) return
+        const d = await r.json()
+        if (!cancelled && d?.ok) {
+          setTonWalletBalance(Number(BigInt(d.result)) / 1e9)
+        }
+      } catch { /* ignore — UI falls back to no-balance state */ }
+    }
+    fetchWalletBalance()
+    return () => { cancelled = true }
+  }, [view, tonAddrFriendly])
 
   // Telegram BackButton
   useEffect(() => {
@@ -311,6 +366,128 @@ export default function DepositSheet() {
       setCopiedField(field)
       setTimeout(() => setCopiedField(null), 2000)
     })
+  }
+
+  // ── TON Connect handlers ──
+  // Opens the standard TON-Connect modal (Wallet in Telegram +
+  // Tonkeeper / MyTonWallet / Tonhub / etc.). The SDK manages
+  // persistence + reconnection on its own; we just react to
+  // `tonWallet` via the hook.
+  async function handleConnectTonWallet() {
+    haptic('medium')
+    try {
+      await tonConnectUI.openModal()
+    } catch (err) {
+      console.error('TON Connect openModal error:', err)
+    }
+  }
+
+  async function handleDisconnectTonWallet() {
+    haptic('light')
+    try {
+      await tonConnectUI.disconnect()
+    } catch (err) {
+      console.error('TON Connect disconnect error:', err)
+    }
+    // Clear local form state but keep the user on the TON detail
+    // screen so the CTA gracefully reverts to "Connect TON Wallet".
+    setView('ton')
+    setTonWalletAmount('')
+    setTonWalletError('')
+    setTonWalletBalance(null)
+  }
+
+  // Build a comment cell payload (op = 0, then UTF-8 bytes of the
+  // memo) as a base64 BOC. The same shape `process-withdrawals`
+  // attaches to outgoing TON transfers — our crypto indexer reads
+  // the memo to attribute the deposit back to the right user_id.
+  function buildCommentPayloadBase64(text) {
+    // 11 bits: 0x10 unbounced internal-message tag is on the
+    // outer envelope; here we only need to build the body cell.
+    // A standard text-comment body is:
+    //   storeUint(0, 32) + UTF-8 bytes (one byte per char-cell).
+    const bytes = new TextEncoder().encode(text)
+    // Build the cell BOC manually. We can avoid bringing in
+    // @ton/core into the client bundle by leaning on the fact
+    // that TON Connect's `payload` field accepts any base64 BOC
+    // — but we DO need a valid serialisation. Using a tiny
+    // helper from @ton/core is the simplest correct path.
+    // Lazy-import keeps the bundle slim until the user actually
+    // taps Continue.
+    return import('@ton/core').then(({ beginCell }) => {
+      const b = beginCell().storeUint(0, 32)
+      for (const x of bytes) b.storeUint(x, 8)
+      const cell = b.endCell()
+      // toBoc returns a Uint8Array (or Buffer-like) — base64 it
+      // via the browser's btoa using a per-byte char copy. The
+      // mini-app only ever runs in a browser context so there's
+      // no Node fallback to worry about.
+      const boc = cell.toBoc()
+      const view = boc instanceof Uint8Array ? boc : new Uint8Array(boc)
+      let bin = ''
+      for (let i = 0; i < view.length; i++) bin += String.fromCharCode(view[i])
+      return window.btoa(bin)
+    })
+  }
+
+  async function handleTonWalletSend() {
+    setTonWalletError('')
+    const amount = Number(tonWalletAmount.replace(',', '.'))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setTonWalletError(t.depositTonWalletMin.replace('{min}', minTon ? minTon.toFixed(3) : MIN_TON_FALLBACK.toFixed(2)))
+      return
+    }
+    const effectiveMin = (minTon && minTon > 0) ? minTon : MIN_TON_FALLBACK
+    if (amount < effectiveMin) {
+      setTonWalletError(t.depositTonWalletMin.replace('{min}', effectiveMin.toFixed(3)))
+      return
+    }
+    if (tonWalletBalance != null && amount > tonWalletBalance) {
+      setTonWalletError(t.depositTonWalletInsuff)
+      return
+    }
+
+    setTonWalletSending(true)
+    haptic('medium')
+    try {
+      // Memo must be the bare numeric telegram_id — the crypto
+      // indexer (check-crypto-deposits) parseInts the comment as
+      // a telegram_id and only accepts strings that round-trip
+      // back to the same integer. Anything else (e.g. "uid:42")
+      // is silently dropped → deposit goes unattributed.
+      const memo = String(user?.telegram_id ?? '')
+      if (!memo || !/^\d+$/.test(memo)) {
+        setTonWalletError(t.depositTonWalletFailed)
+        setTonWalletSending(false)
+        return
+      }
+      const payload = await buildCommentPayloadBase64(memo)
+      const nanoAmount = BigInt(Math.round(amount * 1e9)).toString()
+
+      await tonConnectUI.sendTransaction({
+        validUntil: Math.floor(Date.now() / 1000) + 600, // 10 min
+        messages: [{
+          address: TON_ADDRESS,
+          amount:  nanoAmount,
+          payload,
+        }],
+      })
+
+      // Optimistic UX — the indexer + Realtime channel on
+      // `transactions` will bounce the balance once the tx
+      // confirms on-chain (usually 10-30 s). Until then we show
+      // a generic success state and close the sheet.
+      successAmountRef.current = 0 // hide "+N RUB" line (we don't know the RUB equivalent yet)
+      setStatus('success')
+      haptic('heavy')
+    } catch (err) {
+      console.error('sendTransaction error:', err)
+      const userCancelled = /reject|cancel|user/i.test(String(err?.message || ''))
+      setTonWalletError(userCancelled ? t.depositTonWalletCancelled : t.depositTonWalletFailed)
+      haptic('medium')
+    } finally {
+      setTonWalletSending(false)
+    }
   }
 
   const memoTag = user?.telegram_id || user?.id || 'dev'
@@ -597,6 +774,82 @@ export default function DepositSheet() {
               <p>{t.depositCryptoWarn1.replace('{coin}', 'TON').replace('{network}', 'Toncoin')}</p>
               <p>{t.depositCryptoWarn2}</p>
             </div>
+
+            {/* TON Connect CTA — sits at the bottom of the TON
+              * detail view so the user can either copy the address
+              * (top) OR pay in one tap via their connected wallet
+              * (bottom). Swaps copy + click target based on
+              * whether a TON wallet is currently bound to this
+              * Mini App. */}
+            <button
+              className="deposit-tonconnect-btn"
+              onClick={isTonWalletConnected
+                ? () => { haptic('medium'); setView('ton-wallet') }
+                : handleConnectTonWallet}
+            >
+              <SmallTonIcon size={22} />
+              <span>
+                {isTonWalletConnected ? t.depositTonTopUpViaWallet : t.depositTonConnect}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* ── TON Connect deposit (one-tap pay via connected wallet) ── */}
+        {status === 'idle' && view === 'ton-wallet' && (
+          <div className="deposit-crypto-detail deposit-tonwallet-view">
+            <span className="deposit-tonwallet-title">{t.depositTonWalletTitle}</span>
+
+            {/* Connected wallet card — TON icon + balance + Log Out.
+              * Mirrors the bottom-sheet design from the spec
+              * screenshot the user shared. */}
+            <div className="deposit-tonwallet-card">
+              <div className="deposit-tonwallet-card-left">
+                <SmallTonIcon size={36} />
+                <div className="deposit-tonwallet-card-text">
+                  <span className="deposit-tonwallet-card-label">{t.depositTonWalletBalance}</span>
+                  <span className="deposit-tonwallet-card-balance">
+                    {tonWalletBalance != null ? tonWalletBalance.toFixed(2) : '—'}
+                  </span>
+                </div>
+              </div>
+              <button
+                className="deposit-tonwallet-logout"
+                onClick={handleDisconnectTonWallet}
+              >
+                {t.depositTonWalletLogout}
+              </button>
+            </div>
+
+            <div className="deposit-tonwallet-amount-wrap">
+              <input
+                className="deposit-tonwallet-amount-input"
+                type="text"
+                inputMode="decimal"
+                placeholder={t.depositTonWalletAmount}
+                value={tonWalletAmount}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/[^\d.,]/g, '').replace(',', '.')
+                  setTonWalletAmount(v)
+                  if (tonWalletError) setTonWalletError('')
+                }}
+              />
+              <span className="deposit-tonwallet-amount-coin">TON</span>
+            </div>
+
+            {tonWalletError && (
+              <div className="deposit-tonwallet-error">{tonWalletError}</div>
+            )}
+
+            <button
+              className={`deposit-tonwallet-submit ${tonWalletSending ? 'loading' : ''}`}
+              onClick={handleTonWalletSend}
+              disabled={tonWalletSending || !tonWalletAmount}
+            >
+              {tonWalletSending
+                ? <div className="deposit-btn-spinner" />
+                : t.depositTonWalletContinue}
+            </button>
           </div>
         )}
 

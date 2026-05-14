@@ -899,3 +899,154 @@
 @keyframes deposit-spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── TON Connect bottom CTA ────────────────────────────────────
+ * Sits at the very bottom of the TON deposit-details view. The
+ * styling mirrors the spec screenshots: a wide rounded-rectangle
+ * blue pill with the TON glyph on the left and white text on the
+ * right. Same button covers "Connect TON Wallet" and "Top Up
+ * via TON Wallet" — only the copy + click target swap. */
+.deposit-tonconnect-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 14px;
+  background: #0098EA;
+  color: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.1s, background 0.15s, box-shadow 0.15s;
+  box-shadow: 0 8px 24px -12px rgba(0, 152, 234, 0.6);
+}
+.deposit-tonconnect-btn:hover  { background: #0086D1; }
+.deposit-tonconnect-btn:active { transform: scale(0.98); }
+
+/* ── TON Connect deposit (one-tap pay) view ───────────────────
+ * The screen you reach after tapping "Top Up via TON Wallet"
+ * when a wallet is connected. Stacked: title → balance card →
+ * amount input → CTA. */
+.deposit-tonwallet-view {
+  gap: 14px;
+}
+
+.deposit-tonwallet-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.deposit-tonwallet-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.deposit-tonwallet-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.deposit-tonwallet-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.deposit-tonwallet-card-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.deposit-tonwallet-card-balance {
+  font-size: 17px;
+  color: var(--text);
+  font-weight: 700;
+}
+.deposit-tonwallet-logout {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: color 0.15s;
+}
+.deposit-tonwallet-logout:hover { color: var(--text); }
+
+.deposit-tonwallet-amount-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  transition: border-color 0.15s;
+}
+.deposit-tonwallet-amount-wrap:focus-within {
+  border-color: #0098EA;
+}
+.deposit-tonwallet-amount-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 0;
+}
+.deposit-tonwallet-amount-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.deposit-tonwallet-amount-coin {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.deposit-tonwallet-error {
+  font-size: 13px;
+  color: #ef4444;
+  padding: 0 4px;
+}
+
+.deposit-tonwallet-submit {
+  width: 100%;
+  margin-top: 4px;
+  padding: 15px;
+  border: none;
+  border-radius: 14px;
+  background: #2563EB;
+  color: #fff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s, background 0.15s, opacity 0.15s;
+}
+.deposit-tonwallet-submit:hover  { background: #1D4ED8; }
+.deposit-tonwallet-submit:active { transform: scale(0.98); }
+.deposit-tonwallet-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}

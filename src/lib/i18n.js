@@ -498,6 +498,20 @@ export const translations = {
     depositCryptoWarn1Usdt: 'Отправляйте только USDT в сети Toncoin. Другие сети (TRC20, ERC20, BEP20) приведут к потере средств',
     depositCryptoWarn2: 'Обязательно укажите Memo / Tag, иначе средства не будут зачислены',
     depositCryptoWarn3: 'Баланс пополнится автоматически при поступлении средств',
+    // ── TON Connect wallet flow ──
+    depositTonConnect:        'Подключить TON-кошелёк',
+    depositTonTopUpViaWallet: 'Пополнить через TON-кошелёк',
+    depositTonWalletTitle:    'Пополнение TON',
+    depositTonWalletBalance:  'Ваш баланс',
+    depositTonWalletLogout:   'Отключить',
+    depositTonWalletAmount:   'Сумма',
+    depositTonWalletContinue: 'Продолжить',
+    depositTonWalletMin:      'Минимум {min} TON',
+    depositTonWalletInsuff:   'Недостаточно средств в кошельке',
+    depositTonWalletSending:  'Подтвердите в кошельке…',
+    depositTonWalletSent:     'Транзакция отправлена. Баланс пополнится после подтверждения в сети.',
+    depositTonWalletFailed:   'Не удалось отправить транзакцию',
+    depositTonWalletCancelled:'Подтверждение отменено',
 
     // Guilds
     guilds: 'Гильдии',
@@ -1106,6 +1120,20 @@ export const translations = {
     depositCryptoWarn1Usdt: 'Send only USDT on the Toncoin network. Other networks (TRC20, ERC20, BEP20) will result in lost funds',
     depositCryptoWarn2: 'You must include the Memo / Tag or funds will not be credited',
     depositCryptoWarn3: 'Balance will be credited automatically upon receipt',
+    // ── TON Connect wallet flow ──
+    depositTonConnect:        'Connect TON Wallet',
+    depositTonTopUpViaWallet: 'Top Up via TON Wallet',
+    depositTonWalletTitle:    'TON Deposit',
+    depositTonWalletBalance:  'Your balance',
+    depositTonWalletLogout:   'Log Out',
+    depositTonWalletAmount:   'Amount',
+    depositTonWalletContinue: 'Continue',
+    depositTonWalletMin:      'Minimum {min} TON',
+    depositTonWalletInsuff:   'Insufficient wallet balance',
+    depositTonWalletSending:  'Confirm in your wallet…',
+    depositTonWalletSent:     'Transaction sent. Your balance will update after on-chain confirmation.',
+    depositTonWalletFailed:   'Transaction failed',
+    depositTonWalletCancelled:'Confirmation cancelled',
 
     // Guilds
     guilds: 'Guilds',
