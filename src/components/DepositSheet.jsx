@@ -8,7 +8,7 @@ import { useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-rea
 import { beginCell as tonBeginCell, Address as TonAddress } from '@ton/core'
 import useGameStore from '../store/useGameStore'
 import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
-import { createStarsInvoice, processDeposit, getUserBalance } from '../lib/supabase'
+import { createStarsInvoice, processDeposit, getUserBalance, supabase } from '../lib/supabase'
 import { formatCurrency, convertFromRub, fetchTonPrice } from '../lib/currency'
 import { translations } from '../lib/i18n'
 import { TON_ADDRESS, USDT_ADDRESS, USDT_MASTER } from '../lib/addresses'
@@ -540,10 +540,18 @@ export default function DepositSheet() {
         }],
       })
 
-      // Optimistic UX — the indexer + Realtime channel on
-      // `transactions` will bounce the balance once the tx
-      // confirms on-chain (usually 10-30 s). Until then we show
-      // a generic success state and close the sheet.
+      // sendTransaction resolves the moment the user confirms in
+      // their wallet AND the wallet broadcasts the signed message
+      // — but the tx is not on-chain yet (~5-15 s) and we MUST
+      // NOT credit balance optimistically (a malicious wallet
+      // could ack without broadcasting). Instead, kick the
+      // indexer Edge Function right now: it polls TonCenter, sees
+      // the tx as soon as it's in a block, calls process_deposit,
+      // and the global Realtime channel on `transactions` updates
+      // the user's balance + bounces the header pill — usually
+      // within 10-15 s instead of waiting up to a full pg_cron tick.
+      supabase.functions.invoke('check-crypto-deposits').catch(() => {})
+
       successAmountRef.current = 0 // hide "+N RUB" line (we don't know the RUB equivalent yet)
       setStatus('success')
       haptic('heavy')
@@ -668,6 +676,13 @@ export default function DepositSheet() {
           payload,
         }],
       })
+
+      // Same logic as the TON path — ping the USDT indexer right
+      // away so the on-chain tx is picked up within ~10-15 s
+      // instead of after the next pg_cron tick. The indexer is
+      // idempotent (tx_hash dedup), so re-pinging it has no
+      // downside.
+      supabase.functions.invoke('check-usdt-deposits').catch(() => {})
 
       successAmountRef.current = 0
       setStatus('success')
