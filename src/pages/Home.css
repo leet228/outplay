@@ -3193,3 +3193,374 @@
   border-bottom-left-radius: inherit;
   border-bottom-right-radius: inherit;
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * STARDEW SPINS — slot card artwork.
+ * Compact "summer farm" tableau:
+ *   - sky strip at the top with sun + clouds + a mini seasonal
+ *     wheel in the corner
+ *   - wooden fence frame around a 6×5 dirt grid
+ *   - pixel crops (carrot / wheat / strawberry / pumpkin / leek)
+ *   - grass footer hugging the bottom edge
+ *
+ * Crops are pure CSS — concentric box-shadows form a chunky pixel
+ * silhouette so the card stays sharp at any size and ships with
+ * zero PNG payload.
+ * ───────────────────────────────────────────────────────────── */
+
+.stardew-slot-card-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg,
+      #87CEEB 0%,
+      #B8E0F5 24%,
+      #FFE9B5 26%,
+      #DCAA68 30%,
+      #7CB342 38%,
+      #558B2F 100%);
+  border-radius: inherit;
+}
+
+.stardew-slot-card-art--large {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+}
+
+/* ── Sky strip ── */
+.stardew-slot-art-sky {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 26%;
+  overflow: hidden;
+}
+
+/* Soft pixel-styled sun in the upper-left. Box-shadow rim creates
+ * an inset glow without an extra DOM node. */
+.stardew-slot-art-sun {
+  position: absolute;
+  top: 14%;
+  left: 14%;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #FFD54F;
+  box-shadow:
+    0 0 0 3px #FFC107,
+    0 0 14px 4px rgba(255, 193, 7, 0.5);
+}
+
+.stardew-slot-art-cloud {
+  position: absolute;
+  height: 12px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow:
+    0 -6px 0 -2px #fff,
+    14px -2px 0 -3px #fff;
+  opacity: 0.92;
+}
+.stardew-slot-art-cloud--one { top: 18%; left: 48%; width: 36px; }
+.stardew-slot-art-cloud--two { top: 38%; left: 30%; width: 24px; opacity: 0.78; }
+
+/* Mini seasonal wheel — pixel disc with 4 quadrants and a
+ * little needle pointing at summer (top-right). */
+.stardew-slot-art-season-wheel {
+  position: absolute;
+  top: 8%;
+  right: 8%;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #F5E6D3;
+  box-shadow:
+    0 0 0 2px #6B4423,
+    0 2px 0 0 rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.stardew-slot-art-season-q {
+  position: absolute;
+  width: 50%;
+  height: 50%;
+}
+.stardew-slot-art-season-q--spring { top: 0;  left: 0;  background: #AED581; } /* fresh green */
+.stardew-slot-art-season-q--summer { top: 0;  right: 0; background: #FFD54F; } /* sunny gold */
+.stardew-slot-art-season-q--fall   { bottom: 0; right: 0; background: #FF8A65; } /* harvest orange */
+.stardew-slot-art-season-q--winter { bottom: 0; left: 0;  background: #B3E5FC; } /* snow blue */
+/* Needle — a tiny brown wedge pointing into the summer quadrant. */
+.stardew-slot-art-season-needle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 9px;
+  background: #4A2F1A;
+  border-radius: 1px;
+  transform-origin: 50% 100%;
+  transform: translate(-50%, -100%) rotate(45deg);
+}
+
+/* ── Wooden frame ── */
+.stardew-slot-art-frame {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 30%;
+  bottom: 16%;
+  background:
+    repeating-linear-gradient(90deg, #6B4423 0 8%, #8B5A3C 8% 12%);
+  border: 3px solid #4A2F1A;
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 2px #6B4423,
+    0 2px 0 #2C1A0E,
+    0 6px 14px rgba(0, 0, 0, 0.25);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Decorative sunflower poking out of the left side of the frame. */
+.stardew-slot-art-sunflower {
+  position: absolute;
+  top: 12%;
+  left: -10%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4A2F1A;
+  box-shadow:
+    0 -10px 0 -2px #FFC107,
+    0 10px 0 -2px #FFC107,
+   -10px 0 0 -2px #FFC107,
+    10px 0 0 -2px #FFC107,
+   -7px -7px 0 -3px #FFC107,
+    7px -7px 0 -3px #FFC107,
+   -7px  7px 0 -3px #FFC107,
+    7px  7px 0 -3px #FFC107,
+    /* short stem dropping into the grass */
+    0 18px 0 -4px #2E7D32,
+    0 30px 0 -4px #2E7D32;
+}
+
+/* ── 6×5 grid of tilled dirt ── */
+.stardew-slot-art-grid {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  gap: 2px;
+  padding: 2px;
+  background: #4A2F1A;
+  border-radius: 2px;
+}
+
+.stardew-slot-art-cell {
+  position: relative;
+  background:
+    repeating-linear-gradient(45deg,
+      rgba(255, 255, 255, 0.05) 0 2px,
+      transparent 2px 4px),
+    linear-gradient(180deg, #8B5A3C 0%, #6B4423 100%);
+  border-radius: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* ── Crops (pure CSS pixel sprites) ──
+ * Each crop uses ::before for the main body and ::after for the
+ * accent (leaves / stem / cap), absolutely centred inside the
+ * cell. Scale is driven by the cell size — the card stays crisp
+ * at large/preview sizes too. */
+.stardew-slot-art-cell--has-crop::before,
+.stardew-slot-art-cell--has-crop::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 1px;
+}
+
+/* CARROT — orange diamond + green leaf cap. */
+.stardew-slot-art-cell--carrot::before {
+  width: 30%;
+  height: 55%;
+  background: #FB8C00;
+  transform: translate(-50%, -35%);
+  border-radius: 2px 2px 50% 50%;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+}
+.stardew-slot-art-cell--carrot::after {
+  width: 50%;
+  height: 22%;
+  background: #2E7D32;
+  transform: translate(-50%, -160%);
+  border-radius: 2px;
+  box-shadow: 0 -3px 0 -1px #388E3C, 0 -6px 0 -2px #43A047;
+}
+
+/* WHEAT — gold stalk + diagonal grain marks. */
+.stardew-slot-art-cell--wheat::before {
+  width: 22%;
+  height: 65%;
+  background: #FBC02D;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.2),
+   -5px -3px 0 -2px #FBC02D,
+    5px -3px 0 -2px #FBC02D,
+   -5px  1px 0 -2px #FBC02D,
+    5px  1px 0 -2px #FBC02D;
+}
+.stardew-slot-art-cell--wheat::after {
+  width: 30%;
+  height: 18%;
+  background: #6B4423;
+  transform: translate(-50%, 110%);
+  border-radius: 1px;
+}
+
+/* STRAWBERRY — red puff + green leaf top. */
+.stardew-slot-art-cell--strawberry::before {
+  width: 50%;
+  height: 50%;
+  background: #E53935;
+  transform: translate(-50%, -30%);
+  border-radius: 50% 50% 50% 50% / 35% 35% 65% 65%;
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.2),
+   -4px -3px 0 -3px #fff,
+    3px  2px 0 -3px #fff;
+}
+.stardew-slot-art-cell--strawberry::after {
+  width: 50%;
+  height: 18%;
+  background: #2E7D32;
+  transform: translate(-50%, -160%);
+  border-radius: 2px;
+  box-shadow: 0 -3px 0 -1px #388E3C;
+}
+
+/* PUMPKIN — orange round + green stem. */
+.stardew-slot-art-cell--pumpkin::before {
+  width: 60%;
+  height: 50%;
+  background: #F57C00;
+  transform: translate(-50%, -25%);
+  border-radius: 50%;
+  box-shadow:
+    inset -2px 0 0 rgba(0, 0, 0, 0.18),
+    inset 2px 0 0 rgba(255, 255, 255, 0.12);
+}
+.stardew-slot-art-cell--pumpkin::after {
+  width: 18%;
+  height: 22%;
+  background: #2E7D32;
+  transform: translate(-50%, -185%);
+  border-radius: 1px;
+}
+
+/* LEEK — green stalk + lighter highlight. */
+.stardew-slot-art-cell--leek::before {
+  width: 22%;
+  height: 70%;
+  background: #66BB6A;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.2),
+    inset 0 2px 0 rgba(255, 255, 255, 0.25);
+}
+.stardew-slot-art-cell--leek::after {
+  width: 32%;
+  height: 18%;
+  background: #fff;
+  opacity: 0.85;
+  transform: translate(-50%, 90%);
+  border-radius: 1px;
+  background: linear-gradient(180deg, #F5F5F5 0%, #E0E0E0 100%);
+}
+
+/* Winning combo highlight — only present in the animated card. */
+.stardew-slot-art-cell--winning {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 213, 79, 0.6) 0%, transparent 70%),
+    linear-gradient(180deg, #8B5A3C 0%, #6B4423 100%);
+  box-shadow:
+    inset 0 0 0 1px #FFD54F,
+    0 0 8px rgba(255, 213, 79, 0.45);
+}
+.stardew-slot-card-art--animated .stardew-slot-art-cell--winning {
+  animation: stardew-cell-flash 1.4s ease-in-out infinite;
+}
+@keyframes stardew-cell-flash {
+  0%, 100% { transform: translateY(0);    filter: brightness(1); }
+  50%      { transform: translateY(-1px); filter: brightness(1.18); }
+}
+
+/* +mult chip — celebratory chip over the winning combo. */
+.stardew-slot-art-mult-chip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) translateY(-30%);
+  background: #FFC107;
+  color: #4A2F1A;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 2px #6B4423,
+    0 4px 0 #B8860B,
+    0 8px 16px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.4px;
+  animation: stardew-chip-float 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes stardew-chip-float {
+  0%, 100% { transform: translate(-50%, -50%) translateY(-30%); }
+  50%      { transform: translate(-50%, -50%) translateY(-45%); }
+}
+
+/* ── Grass footer ── */
+.stardew-slot-art-grass {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16%;
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(0, 0, 0, 0.0) 0 6px,
+      rgba(85, 139, 47, 0.55) 6px 9px),
+    linear-gradient(180deg, #7CB342 0%, #558B2F 100%);
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+}
+
+/* Large variant (preview overlay) scales everything up a touch
+ * and lets the +mult chip read at a more confident size. */
+.stardew-slot-card-art--large .stardew-slot-art-sun {
+  width: 30px;
+  height: 30px;
+  top: 16%;
+  left: 16%;
+}
+.stardew-slot-card-art--large .stardew-slot-art-cloud--one { width: 48px; height: 14px; }
+.stardew-slot-card-art--large .stardew-slot-art-cloud--two { width: 30px; height: 12px; }
+.stardew-slot-card-art--large .stardew-slot-art-season-wheel {
+  width: 36px;
+  height: 36px;
+}
+.stardew-slot-card-art--large .stardew-slot-art-mult-chip {
+  font-size: 18px;
+  padding: 6px 14px;
+}

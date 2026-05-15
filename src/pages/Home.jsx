@@ -1507,6 +1507,17 @@ const SLOTS = [
     accent: '#a78bfa',
     shadow: '#4c1d95',
   },
+  {
+    id: 'stardew-spins',
+    category: 'popular',
+    titleKey: 'slotStardewTitle',
+    subKey: 'slotStardewSub',
+    route: '/slots/stardew-spins',
+    // Stardew Valley palette — sunlit pasture green over an
+    // earthy tilled-soil brown for the shadow.
+    accent: '#7CB342',
+    shadow: '#4A2F1A',
+  },
 ]
 
 function TowerSlotArtwork({ large = false, animated = false }) {
@@ -2247,6 +2258,100 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
   )
 }
 
+// ─────────────────────────────────────────────────────────────
+// STARDEW SPINS — card artwork.
+//
+// 6×5 grid of tilled dirt cells inside a wooden fence frame.
+// Sky strip on top with a sun + a couple of clouds (the sky tints
+// per season once we wire the live game; the home card freezes
+// it on Summer so the card always reads as the "warm farm" mood).
+// A handful of pixel crops are scattered across the field so the
+// card immediately communicates the slot's symbol set without
+// shipping any PNG sprites. Animated variant pulses one row of
+// crops (the "winning line") and floats a +mult chip above it,
+// hinting at the Pay-Anywhere → tumble loop.
+// ─────────────────────────────────────────────────────────────
+function StardewSlotArtwork({ large = false, animated = false }) {
+  // 6 columns × 5 rows of dirt cells. Each entry is either null
+  // (empty plot) or a crop kind that maps to a colored pixel
+  // glyph in CSS. Layout chosen so:
+  //   - top two rows form a near-complete row of carrots (the
+  //     "winning combo" the animated variant highlights)
+  //   - bottom rows mix wheat / strawberry / pumpkin / leek so
+  //     all 5 main symbols show up on the card at once.
+  const cells = [
+    // row 0 (top): mostly carrots → the "8+ anywhere" combo cue
+    'carrot', 'carrot', 'wheat',     'carrot', 'carrot', 'strawberry',
+    // row 1
+    'wheat',  'carrot', 'pumpkin',   'carrot', 'leek',   'carrot',
+    // row 2 — middle scatter
+    'strawberry', null, 'carrot',    'wheat',  'pumpkin', 'wheat',
+    // row 3
+    'leek',   'pumpkin', 'wheat',    'strawberry', 'carrot', 'leek',
+    // row 4 (bottom)
+    'wheat',  'leek',   'strawberry','wheat',   'pumpkin', 'wheat',
+  ]
+
+  // Indices that are part of the celebrated "carrot row" — they
+  // flash + lift when the animated variant is hovered.
+  const winning = new Set([0, 1, 3, 4, 7, 9, 11, 14])
+
+  return (
+    <div
+      className={
+        'stardew-slot-card-art' +
+        (large    ? ' stardew-slot-card-art--large'    : '') +
+        (animated ? ' stardew-slot-card-art--animated' : '')
+      }
+      aria-hidden="true"
+    >
+      {/* Seasonal sky strip — fixed on Summer for the card. */}
+      <div className="stardew-slot-art-sky">
+        <span className="stardew-slot-art-sun" />
+        <span className="stardew-slot-art-cloud stardew-slot-art-cloud--one" />
+        <span className="stardew-slot-art-cloud stardew-slot-art-cloud--two" />
+        {/* Tiny seasonal-wheel cue in the top-right corner — a
+          * pixel disc divided into 4 quadrants (spring / summer
+          * / fall / winter) with the indicator dot on summer. */}
+        <span className="stardew-slot-art-season-wheel">
+          <span className="stardew-slot-art-season-q stardew-slot-art-season-q--spring" />
+          <span className="stardew-slot-art-season-q stardew-slot-art-season-q--summer" />
+          <span className="stardew-slot-art-season-q stardew-slot-art-season-q--fall" />
+          <span className="stardew-slot-art-season-q stardew-slot-art-season-q--winter" />
+          <span className="stardew-slot-art-season-needle" />
+        </span>
+      </div>
+
+      {/* Wooden frame around the grid + sunflower decoration. */}
+      <div className="stardew-slot-art-frame">
+        <span className="stardew-slot-art-sunflower" />
+
+        <div className="stardew-slot-art-grid">
+          {cells.map((crop, i) => (
+            <span
+              key={i}
+              className={
+                'stardew-slot-art-cell' +
+                (crop ? ` stardew-slot-art-cell--has-crop stardew-slot-art-cell--${crop}` : '') +
+                (animated && winning.has(i) ? ' stardew-slot-art-cell--winning' : '')
+              }
+            />
+          ))}
+        </div>
+
+        {/* Floating +mult chip — only shown in the animated
+          * variant; pretends to celebrate the carrot combo. */}
+        {animated && (
+          <span className="stardew-slot-art-mult-chip">×24</span>
+        )}
+      </div>
+
+      {/* Grass tuft footer to anchor the frame in the field. */}
+      <span className="stardew-slot-art-grass" />
+    </div>
+  )
+}
+
 function renderSlotArtwork(slot, opts = {}) {
   if (slot.id === 'tetris-cascade') return <TetrisSlotArtwork {...opts} />
   if (slot.id === 'rocket')         return <RocketSlotArtwork {...opts} />
@@ -2254,6 +2359,7 @@ function renderSlotArtwork(slot, opts = {}) {
   if (slot.id === 'pixel-mine')     return <PixelMineSlotArtwork {...opts} />
   if (slot.id === 'dice')           return <DiceSlotArtwork {...opts} />
   if (slot.id === 'magnetic')       return <MagneticSlotArtwork {...opts} />
+  if (slot.id === 'stardew-spins')  return <StardewSlotArtwork {...opts} />
   return <TowerSlotArtwork {...opts} />
 }
 
@@ -2264,6 +2370,7 @@ function slotKickerKey(id) {
   if (id === 'pixel-mine')     return 'slotPixelMineKicker'
   if (id === 'dice')           return 'slotDiceKicker'
   if (id === 'magnetic')       return 'slotMagneticKicker'
+  if (id === 'stardew-spins')  return 'slotStardewKicker'
   return 'slotTowerKicker'
 }
 
@@ -2274,6 +2381,7 @@ function slotPreviewKey(id) {
   if (id === 'pixel-mine')     return 'slotPixelMinePreview'
   if (id === 'dice')           return 'slotDicePreview'
   if (id === 'magnetic')       return 'slotMagneticPreview'
+  if (id === 'stardew-spins')  return 'slotStardewPreview'
   return 'slotTowerPreview'
 }
 
