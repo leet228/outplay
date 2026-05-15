@@ -23,6 +23,18 @@ import './DepositSheet.css'
 const PRESETS = [100, 500, 1000]
 const MIN_STARS = 100
 
+// Minimum TON balance the connected wallet must keep AFTER the
+// transaction is paid out, so Tonkeeper's pre-flight emulator
+// doesn't refuse to sign (it returns the "couldn't emulate"
+// warning when the wallet doesn't have enough TON for gas).
+//   – TON deposits: stake + 0.05 TON reserve (covers the on-
+//     chain transfer fee + storage delta on the recipient).
+//   – USDT deposits: ~0.06 TON is consumed by the jetton-wallet
+//     hop + recipient notification (0.05 attached as `value`
+//     plus 0.01 `forward_ton_amount`). 0.07 leaves a tiny buffer.
+const TON_GAS_RESERVE_FOR_TON_TX  = 0.05
+const TON_GAS_RESERVE_FOR_USDT_TX = 0.07
+
 // TON / USDT coin icons are user-supplied SVG assets in
 // src/assets/crypto/. Rendered as <img> so the SVG is treated
 // as a static image (no inline DOM bloat, lighter render).
@@ -255,11 +267,14 @@ export default function DepositSheet() {
   }, [depositOpen])
 
   // Fetch the connected wallet's TON balance whenever the user
-  // lands on the TON-Connect deposit view (and any time the
-  // connection changes). Re-uses TonCenter's public RPC — same
-  // endpoint AdminWallet uses for the hot-wallet balance read.
+  // lands on EITHER wallet-deposit view. We need it on the TON
+  // view to gate the spin against `amount + gas`, and we need it
+  // on the USDT view too because the user's TON balance is what
+  // pays for the jetton-transfer gas — if it's empty, Tonkeeper's
+  // emulator refuses and shows its scary "couldn't emulate"
+  // warning. Re-uses TonCenter's public RPC.
   useEffect(() => {
-    if (view !== 'ton-wallet' || !tonAddrFriendly) {
+    if ((view !== 'ton-wallet' && view !== 'usdt-wallet') || !tonAddrFriendly) {
       return
     }
     let cancelled = false
@@ -547,8 +562,12 @@ export default function DepositSheet() {
       setTonWalletError(t.depositTonWalletMin.replace('{min}', effectiveMin.toFixed(3)))
       return
     }
-    if (tonWalletBalance != null && amount > tonWalletBalance) {
-      setTonWalletError(t.depositTonWalletInsuff)
+    if (tonWalletBalance != null && (amount + TON_GAS_RESERVE_FOR_TON_TX) > tonWalletBalance) {
+      // Stop here BEFORE we open Tonkeeper — otherwise the
+      // emulator there refuses and shows its scary "couldn't
+      // emulate" warning. We tell the user up front the wallet
+      // doesn't have enough TON to cover the value + gas.
+      setTonWalletError(t.depositTonWalletNoGas)
       return
     }
 
@@ -672,6 +691,14 @@ export default function DepositSheet() {
     }
     if (usdtWalletBalance != null && amount > usdtWalletBalance) {
       setUsdtWalletError(t.depositTonWalletInsuff)
+      return
+    }
+    if (tonWalletBalance != null && tonWalletBalance < TON_GAS_RESERVE_FOR_USDT_TX) {
+      // The jetton-transfer hop pays ~0.06 TON in gas. If the
+      // user's wallet doesn't even have that, Tonkeeper's
+      // emulator refuses and shows its scary "couldn't emulate"
+      // warning. Bail out BEFORE we open the wallet sheet.
+      setUsdtWalletError(t.depositTonWalletNoGas)
       return
     }
     if (!usdtJettonWallet) {

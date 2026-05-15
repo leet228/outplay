@@ -5,7 +5,25 @@ import useGameStore from '../store/useGameStore'
 import { translations } from '../lib/i18n'
 import { formatCurrency } from '../lib/currency'
 import { haptic } from '../lib/telegram'
+// Stage backdrops — painted photo of the farm, one per season.
+// Vite resolves each import to a hashed URL; the CSS pulls in
+// the active one via the `--stardew-bg` custom property below.
+//
+//   Note on naming: the user-facing asset uses "autumn" while
+//   the internal season id is "fall" (matches the game-design
+//   convention). The map below bridges the two.
+import bgSpring from '../assets/stardew/bg/spring.png'
+import bgSummer from '../assets/stardew/bg/summer.png'
+import bgAutumn from '../assets/stardew/bg/autumn.png'
+import bgWinter from '../assets/stardew/bg/winter.png'
 import './StardewSpinsSlot.css'
+
+const SEASON_BG = {
+  spring: bgSpring,
+  summer: bgSummer,
+  fall:   bgAutumn,
+  winter: bgWinter,
+}
 
 // ─────────────────────────────────────────────────────────────
 // STARDEW SPINS — dev v1
@@ -31,13 +49,20 @@ const ROWS = 5
 const COLS = 6
 const CELL_COUNT = ROWS * COLS
 
-// Stake ladder mirrors Magnetic / Pixel Mine — same coin
-// denominations so the player's muscle memory doesn't reset
-// between slots.
-const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000]
+// Stake ladder mirrors Magnetic / Pixel Mine / Dice / Plinko —
+// same coin denominations so the player's muscle memory doesn't
+// reset between slots.
+const BETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000]
 
 // Pay-Anywhere min cluster. Sweet-Bonanza-style "8+ anywhere".
 const MIN_MATCH = 8
+
+// Dev kill-switch: when true, every spin is forced to be a
+// loss (no clusters ever fire, no tumble cascades, no payouts).
+// Use this to rapidly cycle through the seasonal-wheel rotation
+// without the cascades stalling the loop. Flip back to `false`
+// to restore the real payout engine.
+const DEV_FORCE_NO_WINS = true
 
 // ── Symbols ──
 // Five harvest crops. Higher payout = rarer drop weight, so the
@@ -94,6 +119,9 @@ function genGrid() {
 // Count occurrences of each symbol on a flat grid. Returns
 // `{ [symId]: [cellIdx, ...] }` for symbols that hit MIN_MATCH+.
 function findWins(grid) {
+  // Dev kill-switch — every spin is a clean loss while this is
+  // on, so the season wheel can rotate without cascades dragging.
+  if (DEV_FORCE_NO_WINS) return {}
   const buckets = {}
   for (let i = 0; i < grid.length; i++) {
     const s = grid[i]
@@ -187,11 +215,26 @@ export default function StardewSpinsSlot() {
   const [spinning, setSpinning] = useState(false)
   const [autoSpin, setAutoSpin] = useState(false)
   const [lastWin, setLastWin] = useState(0)
-  const [season, setSeason] = useState('summer')
+  // Monotonic step counter — increments by 1 each season rotation
+  // and never wraps. Drives both the displayed season name (via
+  // SEASONS[step % 4]) AND the needle angle (-45 + step * 90).
+  // Keeping the angle monotonically increasing means CSS transition
+  // always rotates clockwise — never short-cuts back through the
+  // sky quadrants when wrapping from winter → spring.
+  // Initial step = 1 → SEASONS[1] = 'summer'.
+  const [seasonStep, setSeasonStep] = useState(1)
+  const season = SEASONS[seasonStep % SEASONS.length]
   const [seasonCountdown, setSeasonCountdown] = useState(SEASON_SPINS)
   // Cells that are currently mid "fall in" — drives a CSS animation
   // class that only plays once after each grid swap.
   const [fallingIn, setFallingIn] = useState(() => new Set())
+
+  // Buy-Bonus confirmation modal. Tapping the round FAB at the
+  // bottom-left of the wooden frame opens this; the actual
+  // purchase RPC is wired up later — for now the green "Купить"
+  // button just closes the modal so the visual flow reads end-
+  // to-end (round button → modal → close).
+  const [buyBonusConfirm, setBuyBonusConfirm] = useState(false)
 
   // ── Refs (avoid stale-closure inside the spin loop / auto loop)
   const spinningRef  = useRef(false)
@@ -338,10 +381,13 @@ export default function StardewSpinsSlot() {
       try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success') } catch { /* haptic optional */ }
     }
 
-    // 5) Seasonal countdown.
+    // 5) Seasonal countdown. The step counter is monotonic — never
+    // resets — so the needle's CSS transition always rotates the
+    // long way around (clockwise) instead of short-cutting back
+    // through the sky quadrants when wrapping winter → spring.
     setSeasonCountdown(c => {
       if (c <= 1) {
-        setSeason(s => SEASONS[(SEASONS.indexOf(s) + 1) % SEASONS.length])
+        setSeasonStep(s => s + 1)
         return SEASON_SPINS
       }
       return c - 1
@@ -382,75 +428,89 @@ export default function StardewSpinsSlot() {
 
   const winLabel = lastWin > 0 ? `+${formatCurrency(lastWin, currency, rates)}` : null
 
-  // Needle rotation — 4 quadrants × 90° each, summer = 45°, spring
-  // = -45°, fall = 135°, winter = 225° (rotates clockwise through
-  // the year).
-  const seasonAngle = (() => {
-    switch (season) {
-      case 'spring': return -45
-      case 'summer': return 45
-      case 'fall':   return 135
-      case 'winter': return -135 // = 225, but rotate visually
-      default:       return 45
-    }
-  })()
+  // Needle rotation — 4 quadrants × 90° each. Step 0 is spring
+  // (TL → -45°), then +90° per season, indefinitely:
+  //   step 0 (spring) = -45°
+  //   step 1 (summer) =  45°
+  //   step 2 (fall)   = 135°
+  //   step 3 (winter) = 225°
+  //   step 4 (spring) = 315°
+  // The CSS transition lerps between successive values, so the
+  // needle always sweeps clockwise the full 90° without ever
+  // jumping backwards on the winter → spring boundary.
+  const seasonAngle = -45 + seasonStep * 90
 
   return (
     <div className={`stardew-slot-page stardew-slot-page--${season}`}>
       <div className="stardew-game-window">
-        <main className={'stardew-stage' + (spinning ? ' is-spinning' : '')} aria-label="Stardew Spins">
-          {/* ── Sky strip ── */}
-          <div className="stardew-sky">
-            <span className="stardew-sun" />
-            <span className="stardew-cloud stardew-cloud--one" />
-            <span className="stardew-cloud stardew-cloud--two" />
-            <span className="stardew-cloud stardew-cloud--three" />
-            {season === 'winter' && (
-              <>
-                <span className="stardew-snow stardew-snow--one" />
-                <span className="stardew-snow stardew-snow--two" />
-                <span className="stardew-snow stardew-snow--three" />
-              </>
-            )}
+        <main
+          className={'stardew-stage' + (spinning ? ' is-spinning' : '')}
+          aria-label="Stardew Spins"
+          style={{ '--stardew-bg': `url("${SEASON_BG[season] || bgSummer}")` }}
+        >
+          {/* The summer.png backdrop paints sky / grass / fence /
+            * scarecrow / sun / well already — the only thing we
+            * keep animated on top are drifting clouds. Some live
+            * up in the sky area, others spawn lower and pass
+            * behind the wooden grid (clouds sit at z-index 1,
+            * grid at 2) so the whole window feels alive. */}
+          <span className="stardew-cloud stardew-cloud--one" />
+          <span className="stardew-cloud stardew-cloud--two" />
+          <span className="stardew-cloud stardew-cloud--three" />
+          <span className="stardew-cloud stardew-cloud--four" />
+          <span className="stardew-cloud stardew-cloud--five" />
+          <span className="stardew-cloud stardew-cloud--six" />
 
-            {/* Seasonal wheel — quadrants + rotating needle. */}
-            <div className="stardew-wheel">
-              <div className="stardew-wheel-disc">
-                <span className="stardew-wheel-q stardew-wheel-q--spring" />
-                <span className="stardew-wheel-q stardew-wheel-q--summer" />
-                <span className="stardew-wheel-q stardew-wheel-q--fall" />
-                <span className="stardew-wheel-q stardew-wheel-q--winter" />
-                <span className="stardew-wheel-needle" style={{ transform: `translate(-50%, -100%) rotate(${seasonAngle}deg)` }} />
-                <span className="stardew-wheel-hub" />
-              </div>
-              <span className="stardew-wheel-label">
-                {seasonLabel(lang, season)}
-              </span>
-              <span className="stardew-wheel-counter">
-                {(lang === 'ru' ? 'До смены: ' : 'Next: ') + seasonCountdown}
-              </span>
+          {/* Snowfall — only when the seasonal wheel is on winter.
+            * A small flake field with staggered start times so the
+            * sky always has snow in motion, not synchronized
+            * "raindrop" pulses. */}
+          {season === 'winter' && (
+            <>
+              <span className="stardew-snow stardew-snow--a" />
+              <span className="stardew-snow stardew-snow--b" />
+              <span className="stardew-snow stardew-snow--c" />
+              <span className="stardew-snow stardew-snow--d" />
+              <span className="stardew-snow stardew-snow--e" />
+              <span className="stardew-snow stardew-snow--f" />
+              <span className="stardew-snow stardew-snow--g" />
+              <span className="stardew-snow stardew-snow--h" />
+              <span className="stardew-snow stardew-snow--i" />
+              <span className="stardew-snow stardew-snow--j" />
+              <span className="stardew-snow stardew-snow--k" />
+              <span className="stardew-snow stardew-snow--l" />
+            </>
+          )}
+
+          {/* Seasonal wheel — pinned to the top of the stage. */}
+          <div className="stardew-wheel">
+            <div className="stardew-wheel-disc">
+              <span className="stardew-wheel-q stardew-wheel-q--spring" />
+              <span className="stardew-wheel-q stardew-wheel-q--summer" />
+              <span className="stardew-wheel-q stardew-wheel-q--fall" />
+              <span className="stardew-wheel-q stardew-wheel-q--winter" />
+              <span className="stardew-wheel-needle" style={{ transform: `translate(-50%, -100%) rotate(${seasonAngle}deg)` }} />
+              <span className="stardew-wheel-hub" />
             </div>
+            <span className="stardew-wheel-label">
+              {seasonLabel(t, season)}
+            </span>
+            <span className="stardew-wheel-counter">
+              {(t.stardewSeasonNext || 'Next:') + ' ' + seasonCountdown}
+            </span>
           </div>
 
-          {/* ── Field area (left fence / grid / right well) ── */}
+          {/* ── Field area — just the wooden grid floats over the
+              farm backdrop now; fence / sunflowers / well /
+              scarecrow are all baked into summer.png. ── */}
           <div className="stardew-field-area">
-            {/* LEFT side — fence + sunflowers */}
-            <div className="stardew-side stardew-side--left" aria-hidden="true">
-              <span className="stardew-fence-rail stardew-fence-rail--top" />
-              <span className="stardew-fence-rail stardew-fence-rail--mid" />
-              <span className="stardew-fence-post stardew-fence-post--a" />
-              <span className="stardew-fence-post stardew-fence-post--b" />
-              <span className="stardew-fence-post stardew-fence-post--c" />
-              <span className="stardew-sunflower stardew-sunflower--tall" />
-              <span className="stardew-sunflower stardew-sunflower--short" />
-            </div>
-
             {/* CENTER — wooden grid frame with crops */}
             <div className="stardew-grid-frame">
               <span className="stardew-nail stardew-nail--tl" />
               <span className="stardew-nail stardew-nail--tr" />
               <span className="stardew-nail stardew-nail--bl" />
               <span className="stardew-nail stardew-nail--br" />
+
 
               <div className="stardew-grid">
                 {grid.map((sym, i) => {
@@ -478,40 +538,90 @@ export default function StardewSpinsSlot() {
                 })}
               </div>
 
-              {/* Win banner — drops down from the top of the frame
-                * once a cascade settles. Lives inside the frame so
-                * the controls stay clean. */}
-              {winLabel && !spinning && (
-                <div className="stardew-win-banner">
-                  <span className="stardew-win-banner-label">
-                    {lang === 'ru' ? 'УРОЖАЙ' : 'HARVEST'}
-                  </span>
-                  <strong>{winLabel}</strong>
-                </div>
-              )}
-            </div>
-
-            {/* RIGHT side — well + scarecrow */}
-            <div className="stardew-side stardew-side--right" aria-hidden="true">
-              <div className="stardew-well">
-                <span className="stardew-well-roof" />
-                <span className="stardew-well-roof-tile" />
-                <span className="stardew-well-pole stardew-well-pole--l" />
-                <span className="stardew-well-pole stardew-well-pole--r" />
-                <span className="stardew-well-body">
-                  <span className="stardew-well-water" />
-                </span>
-                <span className="stardew-well-bucket" />
-              </div>
-              <div className="stardew-scarecrow">
-                <span className="stardew-scarecrow-hat" />
-                <span className="stardew-scarecrow-face" />
-                <span className="stardew-scarecrow-body" />
-                <span className="stardew-scarecrow-stick" />
-              </div>
             </div>
           </div>
+
+          {/* Buy-Bonus FAB — round gold coin pinned to the
+            * bottom-LEFT corner of the stage (matches Pixel Mine's
+            * placement). Tapping opens the confirmation modal;
+            * actual purchase RPC is wired in a follow-up. */}
+          <button
+            type="button"
+            className="stardew-buy-bonus-fab"
+            onClick={() => {
+              if (spinning || autoSpin) return
+              haptic('medium')
+              setBuyBonusConfirm(true)
+            }}
+            disabled={spinning || autoSpin || balance < stake * 100}
+            aria-label="Buy Bonus"
+          >
+            <span className="stardew-buy-bonus-fab-buy">BUY</span>
+          </button>
+
+          {/* ── Buy-Bonus confirmation modal ──
+            * Mirrors the Pixel Mine modal's structure (title, cost
+            * chip, Cancel/Buy row) but recoloured to the parchment
+            * + wooden-plank Stardew palette. The "Купить" button is
+            * a visual stub for now — clicks just dismiss the modal
+            * until the purchase RPC is wired in. */}
+          {buyBonusConfirm && (
+            <div
+              className="stardew-buy-modal-backdrop"
+              onClick={() => setBuyBonusConfirm(false)}
+            >
+              <div
+                className="stardew-buy-modal-card"
+                onClick={e => e.stopPropagation()}
+              >
+                <h3 className="stardew-buy-modal-title">BUY BONUS</h3>
+                <div className="stardew-buy-modal-cost">
+                  <span>{lang === 'ru' ? 'Стоимость' : 'Cost'}</span>
+                  <strong>{formatCurrency(stake * 100, currency, rates)}</strong>
+                </div>
+                <div className="stardew-buy-modal-actions">
+                  <button
+                    type="button"
+                    className="stardew-buy-modal-cancel"
+                    onClick={() => { haptic('light'); setBuyBonusConfirm(false) }}
+                  >
+                    {lang === 'ru' ? 'Отмена' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    className="stardew-buy-modal-buy"
+                    onClick={() => {
+                      haptic('medium')
+                      // TODO: wire the actual buy-bonus purchase
+                      // here. For now we just dismiss so the
+                      // user sees the round-trip visually.
+                      setBuyBonusConfirm(false)
+                    }}
+                  >
+                    {lang === 'ru' ? 'Купить' : 'Buy'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
+
+        {/* ── Winbar — sits between stage and controls, same slot
+          * as Magnetic's winbar. Always rendered so the controls
+          * tray stays at a stable height; lights up when a win
+          * lands. */}
+        <div className={'stardew-winbar-row'}>
+          <div className={'stardew-winbar' + (lastWin > 0 ? ' is-win' : '')}>
+            <span className="stardew-winbar-label">
+              {t.slotPotential || 'Win'}
+            </span>
+            <strong className="stardew-winbar-value">
+              {lastWin > 0
+                ? `+${formatCurrency(lastWin, currency, rates)}`
+                : formatCurrency(0, currency, rates)}
+            </strong>
+          </div>
+        </div>
 
         {/* ── Controls ── */}
         <section className="stardew-controls">
@@ -545,11 +655,19 @@ export default function StardewSpinsSlot() {
               onClick={onAutoClick}
               disabled={!autoSpin && (!canAfford || spinning)}
             >
-              {autoSpin ? (lang === 'ru' ? 'СТОП' : 'STOP') : (lang === 'ru' ? 'АВТО' : 'AUTO')}
+              {autoSpin
+                ? (t.slotPlinkoStop || 'Stop')
+                : (t.slotPlinkoAuto || 'Auto')}
             </button>
           </div>
 
           <div className="stardew-stake-block">
+            {/* Label sits ABOVE the row (mirrors the balance card)
+              * so the −/+ row gets the full column width for the
+              * value — important once the stake climbs to 8 000 ₽
+              * and the formatted number wouldn't fit beside an
+              * inline label. */}
+            <span className="stardew-stake-label">{t.slotBet || 'Ставка'}</span>
             <div className="stardew-stake-row">
               <button
                 type="button"
@@ -558,10 +676,9 @@ export default function StardewSpinsSlot() {
                 disabled={stakeDownDisabled}
                 aria-label="stake down"
               >−</button>
-              <div className="stardew-stake">
-                <span>{t.slotBet || 'Ставка'}</span>
-                <strong>{formatCurrency(stake, currency, rates)}</strong>
-              </div>
+              <strong className="stardew-stake-value">
+                {formatCurrency(stake, currency, rates)}
+              </strong>
               <button
                 type="button"
                 className="stardew-stake-step"
@@ -579,8 +696,15 @@ export default function StardewSpinsSlot() {
 
 // ── Helpers ──
 
-function seasonLabel(lang, season) {
-  const RU = { spring: 'Весна', summer: 'Лето', fall: 'Осень', winter: 'Зима' }
-  const EN = { spring: 'Spring', summer: 'Summer', fall: 'Fall', winter: 'Winter' }
-  return (lang === 'ru' ? RU : EN)[season] || season
+// Pull the localised season label straight from the active i18n
+// bundle. Keys are added in src/lib/i18n.js (stardewSeasonSpring
+// etc.) for every supported language — the EN fallback inside
+// the helper only kicks in if a translation file ever forgets
+// one of the four seasons.
+function seasonLabel(t, season) {
+  if (season === 'spring') return t.stardewSeasonSpring || 'Spring'
+  if (season === 'summer') return t.stardewSeasonSummer || 'Summer'
+  if (season === 'fall')   return t.stardewSeasonFall   || 'Fall'
+  if (season === 'winter') return t.stardewSeasonWinter || 'Winter'
+  return season
 }

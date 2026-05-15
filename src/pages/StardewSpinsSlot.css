@@ -66,56 +66,40 @@
   isolation: isolate;
 }
 
-/* ── Stage: vertical stack of sky / field with parchment frame ── */
+/* ── Stage: photographic farm backdrop ──
+ * The full sky / grass / fence / scarecrow / well / sun scene
+ * is baked into summer.png and pulled in via the `--stardew-bg`
+ * custom property set by the JSX. The only animated overlay is
+ * the drifting cloud row; the wooden grid frame floats over the
+ * dirt patch in the centre. */
 .stardew-stage {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
   border-radius: 14px;
-  background: linear-gradient(180deg, #faf2dc 0%, #efdcbb 100%);
   border: 2px solid #6B4423;
   box-shadow: inset 0 0 0 1px rgba(107, 68, 35, 0.4);
-  padding: 12px 10px 14px;
+  padding: 12px;
   overflow: hidden;
+  background-image: var(--stardew-bg);
+  /* Stretch the photo to fill BOTH stage dimensions exactly so
+   * the framed window reads as a single farm scene with no
+   * letterbox bars. The image is a stylized pixel-art photo so
+   * a small non-uniform stretch is invisible to the eye. */
+  background-size: 100% 100%;
+  background-position: center center;
+  background-repeat: no-repeat;
 }
 
 /* ═════════════════════════════════════════════════════════════
- *  SKY STRIP — seasonal background, sun, clouds, wheel, snow
+ *  STAGE OVERLAYS — drifting clouds + seasonal wheel chip.
+ *  (Everything else — sky, grass, fence, scarecrow, well, sun —
+ *   is baked into the summer.png stage background.)
  * ═════════════════════════════════════════════════════════════ */
-
-.stardew-sky {
-  position: relative;
-  height: 84px;
-  border-radius: 10px;
-  border: 2px solid #6B4423;
-  overflow: hidden;
-  background: linear-gradient(180deg, #87CEEB 0%, #B8E0F5 100%);
-  transition: background 0.9s ease, filter 0.9s ease;
-}
-
-.stardew-slot-page--spring .stardew-sky { background: linear-gradient(180deg, #b9d8ec 0%, #d0e7f0 100%); }
-.stardew-slot-page--summer .stardew-sky { background: linear-gradient(180deg, #6cb8e8 0%, #a9d6ef 100%); }
-.stardew-slot-page--fall   .stardew-sky { background: linear-gradient(180deg, #ff9266 0%, #f4c6a0 100%); }
-.stardew-slot-page--winter .stardew-sky { background: linear-gradient(180deg, #6e7ea5 0%, #b5c5d8 100%); }
-
-/* Sun — boxed pixel sun with a soft halo. */
-.stardew-sun {
-  position: absolute;
-  top: 12px;
-  left: 18px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #FFD54F;
-  box-shadow:
-    0 0 0 3px #FFC107,
-    0 0 14px 4px rgba(255, 193, 7, 0.55);
-}
-.stardew-slot-page--fall   .stardew-sun { background: #FFB74D; box-shadow: 0 0 0 3px #F57C00, 0 0 14px 4px rgba(245, 124, 0, 0.55); }
-.stardew-slot-page--winter .stardew-sun { background: #ECEFF1; box-shadow: 0 0 0 3px #B0BEC5, 0 0 12px 4px rgba(176, 190, 197, 0.5); }
 
 /* Clouds — drifting box-shadow puffs. */
 .stardew-cloud {
@@ -128,58 +112,108 @@
     14px -2px 0 -2px #fff,
    -8px -1px 0 -3px #fff;
   opacity: 0.92;
+  z-index: 1;
+  /* Each cloud rolls right via a per-instance offset; the keyframe
+   * delta is large enough that even tall clouds clear the window
+   * before looping back. */
+  animation-name: stardew-drift-r;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
-.stardew-cloud--one   { top: 14px; left:  35%; width: 36px; animation: stardew-drift-r 28s linear infinite; }
-.stardew-cloud--two   { top: 34px; left:  60%; width: 28px; opacity: 0.78; animation: stardew-drift-r 38s linear infinite; }
-.stardew-cloud--three { top: 22px; left:  78%; width: 22px; opacity: 0.6;  animation: stardew-drift-r 50s linear infinite; }
+/* Upper sky tier — drift right faster, more prominent. */
+.stardew-cloud--one   { top:  22px; left:  10%; width: 36px; animation-duration: 28s; }
+.stardew-cloud--two   { top:  56px; left:  62%; width: 28px; opacity: 0.78; animation-duration: 38s; animation-delay: -12s; }
+.stardew-cloud--three { top:  38px; left:  72%; width: 22px; opacity: 0.6;  animation-duration: 50s; animation-delay: -28s; }
+/* Mid-low tier — pass BEHIND the wooden grid (z-index 1 < grid 2).
+ * Bigger + softer puffs so they read as further-away clouds even
+ * when they slide across the field. */
+.stardew-cloud--four  { top: 38%; left: -8%; width: 44px; height: 12px; opacity: 0.55; animation-duration: 44s; animation-delay:  -6s; }
+.stardew-cloud--five  { top: 56%; left: 30%; width: 32px; height: 11px; opacity: 0.45; animation-duration: 58s; animation-delay: -22s; }
+.stardew-cloud--six   { top: 72%; left: 70%; width: 26px; height: 10px; opacity: 0.40; animation-duration: 66s; animation-delay: -40s; }
+/* Cloud keyframe travels far enough to clear any reasonable
+ * window width (extends well past the right edge before wrapping). */
 @keyframes stardew-drift-r {
-  0%   { transform: translateX(-30px); }
-  100% { transform: translateX(150px); }
+  0%   { transform: translateX(-60px); }
+  100% { transform: translateX(360px); }
 }
 
-/* Winter snow — three tiny flakes drifting down. */
+/* ── Winter snowfall ──
+ * 12 flakes scattered across the stage with staggered durations
+ * + negative delays so the field always reads as "actively
+ * snowing" from the moment we transition into winter.
+ *
+ * Flakes sit at z-index 1 (same plane as background clouds) so
+ * they pass BEHIND the wooden grid frame — feels like snow is
+ * outside the field, not landing in it. */
 .stardew-snow {
   position: absolute;
-  width: 3px;
-  height: 3px;
+  top: -10px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: #fff;
-  opacity: 0.85;
+  background: #ffffff;
+  opacity: 0.92;
   filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.7));
-}
-.stardew-snow--one   { left: 22%; animation: stardew-snowfall 4.2s linear infinite; animation-delay: 0s; }
-.stardew-snow--two   { left: 55%; animation: stardew-snowfall 5.8s linear infinite; animation-delay: 1.2s; }
-.stardew-snow--three { left: 82%; animation: stardew-snowfall 5.0s linear infinite; animation-delay: 2.4s; }
-@keyframes stardew-snowfall {
-  0%   { top: -6px;  opacity: 0; }
-  10%  { opacity: 0.9; }
-  100% { top: 90px;  opacity: 0.3; }
+  z-index: 1;
+  pointer-events: none;
+  animation-name: stardew-snowfall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 
-/* ── Seasonal wheel — centred on the sky strip ── */
+/* Per-flake placement / pace. Mix of speeds (4-9s) so the
+ * field never looks like a uniform curtain. Negative delays
+ * pre-roll the animation so flakes are already mid-air on mount. */
+.stardew-snow--a { left:  4%; animation-duration: 5.4s; animation-delay:  -0.8s; }
+.stardew-snow--b { left: 12%; animation-duration: 7.2s; animation-delay:  -3.1s; opacity: 0.75; }
+.stardew-snow--c { left: 22%; animation-duration: 4.6s; animation-delay:  -1.7s; }
+.stardew-snow--d { left: 30%; animation-duration: 6.8s; animation-delay:  -4.4s; opacity: 0.85; }
+.stardew-snow--e { left: 38%; animation-duration: 5.1s; animation-delay:  -0.3s; }
+.stardew-snow--f { left: 47%; animation-duration: 8.4s; animation-delay:  -5.9s; opacity: 0.6;  }
+.stardew-snow--g { left: 55%; animation-duration: 4.9s; animation-delay:  -2.5s; }
+.stardew-snow--h { left: 63%; animation-duration: 7.1s; animation-delay:  -6.0s; opacity: 0.7;  }
+.stardew-snow--i { left: 71%; animation-duration: 5.8s; animation-delay:  -1.2s; }
+.stardew-snow--j { left: 80%; animation-duration: 6.4s; animation-delay:  -3.8s; opacity: 0.8;  }
+.stardew-snow--k { left: 88%; animation-duration: 4.7s; animation-delay:  -2.0s; }
+.stardew-snow--l { left: 95%; animation-duration: 8.0s; animation-delay:  -5.2s; opacity: 0.65; }
+
+/* Vertical fall: animate `top` from -10px → 100% (parent height
+ * = stage height), with a small horizontal drift via translateX.
+ * 110% end keeps the flake off-screen at the bottom so the loop
+ * restart isn't visible. */
+@keyframes stardew-snowfall {
+  0%   { top: -10px; transform: translateX(0);    opacity: 0;    }
+  8%   {             transform: translateX(-1px); opacity: 0.92; }
+  50%  {             transform: translateX(-4px);                }
+  100% { top: 110%;  transform: translateX( 2px); opacity: 0.5;  }
+}
+
+/* ── Seasonal wheel — compact parchment chip anchored near the
+ *    top of the stage. ── */
 .stardew-wheel {
   position: absolute;
-  top: 50%;
+  top: 14px;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   display: grid;
   grid-template-columns: auto 1fr;
   grid-template-rows: auto auto;
   column-gap: 8px;
   row-gap: 1px;
   align-items: center;
-  padding: 4px 8px 4px 4px;
-  background: rgba(245, 230, 211, 0.92);
+  padding: 5px 12px 5px 5px;
+  background: rgba(245, 230, 211, 0.94);
   border: 2px solid #6B4423;
   border-radius: 999px;
-  box-shadow: 0 2px 0 #4A2F1A;
+  box-shadow: 0 2px 0 #4A2F1A, 0 4px 10px rgba(0, 0, 0, 0.18);
+  z-index: 3;
 }
 
 .stardew-wheel-disc {
   position: relative;
   grid-row: span 2;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: #F5E6D3;
   box-shadow: inset 0 0 0 2px #6B4423;
@@ -200,7 +234,7 @@
   top: 50%;
   left: 50%;
   width: 2.5px;
-  height: 14px;
+  height: 15px;
   background: #4A2F1A;
   border-radius: 1.5px;
   transform-origin: 50% 100%;
@@ -233,235 +267,24 @@
 }
 
 /* ═════════════════════════════════════════════════════════════
- *  FIELD AREA — left fence | wooden grid | right well
+ *  FIELD AREA — just the wooden grid floating on the backdrop
  * ═════════════════════════════════════════════════════════════ */
 
+/* Field area — compact, centred horizontally; the photographic
+ * backdrop on .stardew-stage paints sky/grass behind it. */
 .stardew-field-area {
   position: relative;
-  display: grid;
-  grid-template-columns: 44px 1fr 44px;
-  gap: 4px;
-  align-items: stretch;
-  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* Wheel chip is ~50px tall starting at top 14px → bottom ~64px.
+   * Field starts at 68px to leave a thin breathing gap, putting
+   * the wooden grid noticeably higher in the stage. */
+  margin: 68px auto 0;
+  width: 100%;
+  max-width: 320px;
+  z-index: 2;
 }
-
-/* ── Left side — fence with sunflowers ── */
-.stardew-side {
-  position: relative;
-}
-.stardew-side--left {
-  background:
-    linear-gradient(180deg, transparent 0%, transparent 60%, #7CB342 60%, #558B2F 100%);
-}
-.stardew-side--right {
-  background:
-    linear-gradient(180deg, transparent 0%, transparent 60%, #7CB342 60%, #558B2F 100%);
-}
-
-/* Two horizontal rails + three vertical posts = chunky pixel
- * fence. Positioned in the lower half of the side column so the
- * grass meets them at the right height. */
-.stardew-fence-rail {
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  height: 4px;
-  background: #8B5A3C;
-  box-shadow: 0 1px 0 #4A2F1A;
-}
-.stardew-fence-rail--top { top: 64%; }
-.stardew-fence-rail--mid { top: 78%; }
-
-.stardew-fence-post {
-  position: absolute;
-  bottom: 0;
-  width: 5px;
-  height: 40%;
-  background: linear-gradient(180deg, #8B5A3C 0%, #6B4423 100%);
-  box-shadow: 0 1px 0 #4A2F1A, inset -1px 0 0 rgba(0, 0, 0, 0.18);
-}
-.stardew-fence-post--a { left: 2px;  }
-.stardew-fence-post--b { left: 14px; }
-.stardew-fence-post--c { left: 26px; }
-
-/* Sunflowers — petal ring + dark centre + green stem. */
-.stardew-sunflower {
-  position: absolute;
-  border-radius: 50%;
-  background: #4A2F1A;
-}
-.stardew-sunflower::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  /* petals: 8 box-shadow dots around the centre */
-  box-shadow:
-     0 -8px 0 -1px #FFC107,
-     0  8px 0 -1px #FFC107,
-    -8px  0 0 -1px #FFC107,
-     8px  0 0 -1px #FFC107,
-    -6px -6px 0 -2px #FFC107,
-     6px -6px 0 -2px #FFC107,
-    -6px  6px 0 -2px #FFC107,
-     6px  6px 0 -2px #FFC107;
-}
-.stardew-sunflower::after {
-  /* stem dropping into the grass */
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 100%;
-  width: 2px;
-  height: 22px;
-  background: #2E7D32;
-  transform: translateX(-50%);
-  border-radius: 1px;
-}
-.stardew-sunflower--tall  { top: 30%; left: 6px; width: 14px; height: 14px; }
-.stardew-sunflower--short { top: 50%; left: 18px; width: 10px; height: 10px; animation: stardew-bob 3.2s ease-in-out infinite; }
-@keyframes stardew-bob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-2px); }
-}
-
-/* ── Right side — well + scarecrow ── */
-.stardew-well {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 36px;
-  height: 62px;
-}
-.stardew-well-roof {
-  position: absolute;
-  top: 0;
-  left: -3px;
-  right: -3px;
-  height: 12px;
-  background: #8B3A2E;
-  clip-path: polygon(8% 100%, 50% 0%, 92% 100%);
-  box-shadow: 0 1px 0 #4A1A0E;
-}
-.stardew-well-roof-tile {
-  /* shingle stripe across the roof for texture */
-  position: absolute;
-  top: 5px;
-  left: 6px;
-  right: 6px;
-  height: 1.5px;
-  background: #4A1A0E;
-}
-.stardew-well-pole {
-  position: absolute;
-  top: 10px;
-  width: 2.5px;
-  height: 20px;
-  background: #6B4423;
-}
-.stardew-well-pole--l { left: 5px;  }
-.stardew-well-pole--r { right: 5px; }
-.stardew-well-body {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 32px;
-  background:
-    repeating-linear-gradient(0deg, #8B5A3C 0 4px, #6B4423 4px 5px);
-  border-radius: 2px;
-  border: 1px solid #4A2F1A;
-  overflow: hidden;
-}
-.stardew-well-water {
-  position: absolute;
-  top: 4px;
-  left: 3px;
-  right: 3px;
-  height: 5px;
-  background: #1976D2;
-  border-radius: 1px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
-}
-.stardew-well-bucket {
-  position: absolute;
-  top: 28px;
-  left: 50%;
-  width: 8px;
-  height: 7px;
-  background: #6B4423;
-  transform: translateX(-50%);
-  border-radius: 1px;
-  box-shadow: 0 -1px 0 #4A2F1A;
-  animation: stardew-bucket-swing 2.4s ease-in-out infinite;
-  transform-origin: 50% 0;
-}
-@keyframes stardew-bucket-swing {
-  0%, 100% { transform: translateX(-50%) rotate(-6deg); }
-  50%      { transform: translateX(-50%) rotate(6deg); }
-}
-
-/* Scarecrow — sits on the grass below the well. */
-.stardew-scarecrow {
-  position: absolute;
-  bottom: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 22px;
-  height: 36px;
-}
-.stardew-scarecrow-stick {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  width: 2.5px;
-  height: 24px;
-  background: #6B4423;
-  transform: translateX(-50%);
-}
-.stardew-scarecrow-body {
-  position: absolute;
-  bottom: 8px;
-  left: 50%;
-  width: 18px;
-  height: 11px;
-  background: #C5A672;
-  border: 1.5px solid #6B4423;
-  border-radius: 1px;
-  transform: translateX(-50%);
-  /* tied "arms" sticking out */
-  box-shadow:
-    -5px 0 0 -1px #6B4423,
-     5px 0 0 -1px #6B4423;
-}
-.stardew-scarecrow-face {
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  width: 13px;
-  height: 11px;
-  background: #FBE6BF;
-  border: 1.5px solid #6B4423;
-  border-radius: 2px;
-  transform: translateX(-50%);
-  /* eyes */
-  box-shadow:
-    inset 2.5px -2.5px 0 0 #4A2F1A,
-    inset -2.5px -2.5px 0 0 #4A2F1A;
-}
-.stardew-scarecrow-hat {
-  position: absolute;
-  bottom: 28px;
-  left: 50%;
-  width: 18px;
-  height: 7px;
-  background: #6B4423;
-  border-radius: 50% 50% 0 0 / 80% 80% 0 0;
-  transform: translateX(-50%);
-  box-shadow: 0 1px 0 #4A2F1A;
-}
-
 /* ═════════════════════════════════════════════════════════════
  *  WOODEN GRID FRAME — 6×5 tilled dirt
  * ═════════════════════════════════════════════════════════════ */
@@ -475,15 +298,13 @@
   box-shadow:
     inset 0 0 0 2px #6B4423,
     0 3px 0 #2C1A0E,
-    0 6px 14px rgba(0, 0, 0, 0.18);
-  padding: 8px;
-  /* No overflow:hidden — the win banner pins half outside the
-   * bottom edge and would otherwise get clipped. Per-cell
-   * overflow is owned by .stardew-cell so individual crops still
-   * stay inside their tile. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
+    0 6px 14px rgba(0, 0, 0, 0.25);
+  /* Tight padding so the wooden frame hugs the grid; the grid
+   * inside (aspect-ratio 6/5) dictates the frame's height. */
+  padding: 7px;
+  width: 100%;
+  /* Per-cell overflow is owned by .stardew-cell so individual
+   * crops still stay inside their tile. */
 }
 
 /* Nails in the four corners — black dot with a tiny shine. */
@@ -511,11 +332,11 @@
   padding: 3px;
   background: #4A2F1A;
   border-radius: 4px;
-  /* Fill the wooden frame — cells stretch to whatever room the
-   * field area leaves. The crops are absolute-positioned inside
-   * each cell so a slight non-square aspect doesn't bother them. */
+  /* Square cells — fix the whole grid to 6:5 so each tile reads
+   * as a perfect dirt square regardless of the surrounding frame
+   * height. The wooden frame then sizes itself to the grid. */
+  aspect-ratio: 6 / 5;
   width: 100%;
-  height: 100%;
 }
 
 /* ── Single dirt cell with furrow texture ── */
@@ -558,6 +379,219 @@
   0%   { transform: translateY(-180%) scale(0.6); opacity: 0; }
   60%  { transform: translateY(8%) scale(1.08);   opacity: 1; }
   100% { transform: translateY(0)   scale(1);     opacity: 1; }
+}
+
+/* ═════════════════════════════════════════════════════════════
+ *  BUY BONUS FAB — round gold coin button, bottom-left of frame
+ *
+ *  Mirrors PixelMineSlot's `.pixel-mine-buy-bonus-fab` geometry
+ *  (56×56 disc anchored to the playing-field corner) but recoloured
+ *  to Stardew's gold-coin palette: warm yellow gradient ringed with
+ *  the same #4A2F1A wood-brown that frames the dirt grid. Sits
+ *  outside the grid by ~10 px so it doesn't eat a tile.
+ * ═════════════════════════════════════════════════════════════ */
+
+.stardew-buy-bonus-fab {
+  position: absolute;
+  z-index: 4;
+  /* Pinned to the bottom-LEFT of the stage. Slightly inset from
+   * the rounded corner so the disc doesn't get clipped by the
+   * stage's `overflow: hidden` + 14 px border-radius. */
+  left: 8px;
+  bottom: 8px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid #4A2F1A;
+  background:
+    radial-gradient(circle at 35% 28%, #FFE082 0%, #FFC107 48%, #B8860B 100%);
+  color: #4A2F1A;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.55),
+    inset -2px -2px 0 rgba(74, 47, 26, 0.30),
+    0 4px 10px rgba(0, 0, 0, 0.35),
+    0 0 14px rgba(255, 193, 7, 0.45);
+  transition: transform 0.10s ease, filter 0.15s ease;
+}
+.stardew-buy-bonus-fab:hover:not(:disabled)  { filter: brightness(1.10); }
+.stardew-buy-bonus-fab:active:not(:disabled) { transform: scale(0.94); }
+.stardew-buy-bonus-fab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.55);
+}
+
+/* "BUY" text — centred inside the gold disc, brown text with a
+ * subtle warm highlight so it reads against the gradient core. */
+.stardew-buy-bonus-fab-buy {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-shadow: 0 1px 0 rgba(255, 224, 130, 0.7);
+}
+
+/* ═════════════════════════════════════════════════════════════
+ *  BUY BONUS modal — Stardew farm-note overlay
+ *
+ *  Card looks like a parchment notice tacked to a wooden frame —
+ *  cream-paper surface, thick #6B4423 plank border, dark-brown
+ *  hand-lettered title (no Minecraft white stroke), gold-coin
+ *  cost chip, two big chunky farm buttons (rustic brown cancel,
+ *  fresh-grass green buy). All colours pulled straight from the
+ *  rest of the slot's UI tokens so the modal feels native to the
+ *  parchment HUD instead of dropped in from another game.
+ *
+ *  Backdrop is position:absolute on the stage so the controls
+ *  below stay reachable for Esc / back-button dismissal flows.
+ * ═════════════════════════════════════════════════════════════ */
+
+.stardew-buy-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  /* Warm dusk tint instead of a flat dark wash — feels like the
+   * sun has just slipped behind the wheat when the modal pops. */
+  background: rgba(74, 47, 26, 0.58);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  animation: stardew-buy-modal-fade 0.2s ease both;
+}
+@keyframes stardew-buy-modal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.stardew-buy-modal-card {
+  position: relative;
+  width: min(100%, 300px);
+  text-align: center;
+  padding: 18px 18px 16px;
+  /* Parchment cream — same #F5E6D3 → #E6D0AC the controls tray
+   * uses so the modal slots into the existing HUD palette. */
+  background: linear-gradient(180deg, #F5E6D3 0%, #E6D0AC 100%);
+  border: 4px solid #6B4423;
+  border-radius: 14px;
+  box-shadow:
+    /* inner double-bevel like the controls tray */
+    inset 0 0 0 2px #8B5A3C,
+    inset 2px 2px 0 rgba(255, 255, 255, 0.35),
+    inset -2px -2px 0 rgba(74, 47, 26, 0.18),
+    /* sit-on-table drop shadow */
+    0 6px 0 #2C1A0E,
+    0 16px 36px rgba(0, 0, 0, 0.55);
+  animation: stardew-buy-modal-pop 0.36s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@keyframes stardew-buy-modal-pop {
+  from { transform: scale(0.85) translateY(8px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);   opacity: 1; }
+}
+
+.stardew-buy-modal-title {
+  margin: 0 0 12px;
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  color: #4A2F1A;
+  text-transform: uppercase;
+  /* Subtle warm parchment shadow — no harsh black stroke; this
+   * reads as ink on paper rather than Minecraft Impact font. */
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 0 rgba(139, 90, 60, 0.35);
+}
+
+/* Gold cost chip — same coin palette as the FAB that triggered
+ * the modal. Brown border, parchment-shadow underneath. */
+.stardew-buy-modal-cost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 18px;
+  margin: 0 auto 16px;
+  background:
+    radial-gradient(circle at 35% 28%, #FFE082 0%, #FFC107 60%, #B8860B 100%);
+  border: 3px solid #4A2F1A;
+  border-radius: 10px;
+  color: #4A2F1A;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.55),
+    inset -1px -1px 0 rgba(74, 47, 26, 0.30),
+    0 3px 0 #6B4423;
+  width: fit-content;
+  min-width: 60%;
+}
+.stardew-buy-modal-cost span {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: #6B4423;
+  letter-spacing: 0.08em;
+}
+.stardew-buy-modal-cost strong {
+  font-size: 20px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.stardew-buy-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stardew-buy-modal-cancel,
+.stardew-buy-modal-buy {
+  padding: 10px 0;
+  border: 3px solid #4A2F1A;
+  border-radius: 10px;
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+  cursor: pointer;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.30),
+    inset -2px -2px 0 rgba(74, 47, 26, 0.30),
+    0 3px 0 #2C1A0E;
+  transition: transform 0.08s ease, filter 0.15s;
+}
+/* Rustic-wood cancel — warm earth tones, no Minecraft-red. */
+.stardew-buy-modal-cancel {
+  background: linear-gradient(180deg, #A86E48 0%, #6B4423 100%);
+}
+/* Fresh-grass buy — same #7CB342 / #558B2F pasture greens that
+ * the page background uses for grass. */
+.stardew-buy-modal-buy {
+  background: linear-gradient(180deg, #8BC34A 0%, #558B2F 100%);
+}
+.stardew-buy-modal-cancel:hover:not(:disabled),
+.stardew-buy-modal-buy:hover:not(:disabled)  { filter: brightness(1.08); }
+.stardew-buy-modal-cancel:active,
+.stardew-buy-modal-buy:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+    inset -2px -2px 0 rgba(74, 47, 26, 0.3),
+    0 1px 0 #2C1A0E;
 }
 
 /* ═════════════════════════════════════════════════════════════
@@ -721,42 +755,48 @@
 }
 
 /* ═════════════════════════════════════════════════════════════
- *  WIN BANNER — small parchment chip pinned at the field bottom
+ *  WINBAR — row above the controls, lights up on a win
+ *  (Same layout slot as Magnetic's winbar, recoloured to the
+ *  Stardew parchment + gold palette.)
  * ═════════════════════════════════════════════════════════════ */
 
-.stardew-win-banner {
-  position: absolute;
-  left: 50%;
-  bottom: -2px;
-  transform: translate(-50%, 50%);
+.stardew-winbar-row {
+  margin-top: 10px;
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: #FFC107;
-  color: #4A2F1A;
-  font-family: inherit;
+}
+.stardew-winbar {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 14px;
+  border-radius: 12px;
+  background: #FBEFD7;
   border: 2px solid #6B4423;
+  color: #4A2F1A;
+  box-shadow: inset 0 0 0 1px rgba(107, 68, 35, 0.25);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.stardew-winbar.is-win {
+  background: linear-gradient(180deg, #FFE082 0%, #FFC107 100%);
+  border-color: #4A2F1A;
   box-shadow:
-    0 3px 0 #4A2F1A,
-    0 8px 18px rgba(0, 0, 0, 0.3);
-  z-index: 5;
-  animation: stardew-banner-pop 0.42s cubic-bezier(.34, 1.4, .5, 1) both;
+    inset 0 0 0 1px rgba(184, 134, 11, 0.6),
+    0 3px 0 #6B4423;
 }
-@keyframes stardew-banner-pop {
-  from { transform: translate(-50%, 80%) scale(0.7); opacity: 0; }
-  to   { transform: translate(-50%, 50%) scale(1);   opacity: 1; }
-}
-.stardew-win-banner-label {
-  font-size: 10px;
-  font-weight: 800;
+.stardew-winbar-label {
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
+  color: #8B5A3C;
+  font-weight: 800;
 }
-.stardew-win-banner strong {
-  font-size: 15px;
+.stardew-winbar.is-win .stardew-winbar-label { color: #4A2F1A; }
+.stardew-winbar-value {
+  font-size: 18px;
   font-weight: 900;
+  color: #4A2F1A;
   font-variant-numeric: tabular-nums;
 }
 
@@ -767,8 +807,13 @@
 .stardew-controls {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 10px;
+  /* Equal 1fr sides keep the spin button visually centred in
+   * the tray; both balance and stake-row are tuned (smaller font
+   * + tight chrome) to fit "100 000 ₽" / "8 000 ₽" in that
+   * same width. minmax(0,…) lets each column shrink past its
+   * intrinsic content width on narrow viewports. */
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
   /* Parchment plank tray under the controls. */
   padding: 10px;
@@ -785,23 +830,31 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  padding: 6px 10px;
+  padding: 5px 8px;
   border-radius: 10px;
   background: #FBEFD7;
   border: 1px solid #6B4423;
+  min-width: 0;
 }
 .stardew-balance span {
-  font-size: 10px;
+  font-size: 9px;
   color: #8B5A3C;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   font-weight: 800;
+  line-height: 1;
 }
 .stardew-balance strong {
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 900;
   color: #4A2F1A;
   font-variant-numeric: tabular-nums;
+  /* Keep the value on a single line — column width is tight when
+   * the stake side claims 1.15fr. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .stardew-center {
@@ -860,59 +913,65 @@
 }
 .stardew-auto-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Stake card — parchment block that mirrors the balance card's
+ * outer geometry. Label sits above the −/value/+ row so the row
+ * can use the full column width for the formatted amount. */
 .stardew-stake-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   align-items: stretch;
+  gap: 3px;
+  padding: 4px 5px;
+  border-radius: 10px;
+  background: #FBEFD7;
+  border: 1px solid #6B4423;
   min-width: 0;
+}
+.stardew-stake-label {
+  font-size: 9px;
+  color: #8B5A3C;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 800;
+  line-height: 1;
 }
 .stardew-stake-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: #FBEFD7;
-  border: 1px solid #6B4423;
-  border-radius: 10px;
-  padding: 3px;
+  justify-content: space-between;
+  gap: 3px;
+  min-width: 0;
 }
 .stardew-stake-step {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
   border: 1px solid #6B4423;
   background: #F5E6D3;
   color: #4A2F1A;
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 900;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  padding: 0;
 }
 .stardew-stake-step:hover:not(:disabled) { background: #EBDAB3; }
 .stardew-stake-step:disabled { opacity: 0.4; cursor: not-allowed; }
-.stardew-stake {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
-  padding-right: 4px;
-}
-.stardew-stake span {
-  font-size: 10px;
-  color: #8B5A3C;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-weight: 800;
-}
-.stardew-stake strong {
-  font-size: 14px;
+.stardew-stake-value {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px;
   font-weight: 900;
   color: #4A2F1A;
   font-variant-numeric: tabular-nums;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ═════════════════════════════════════════════════════════════
