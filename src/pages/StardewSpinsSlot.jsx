@@ -586,6 +586,11 @@ export default function StardewSpinsSlot() {
   // Buy-Bonus confirmation modal.
   const [buyBonusConfirm, setBuyBonusConfirm] = useState(false)
 
+  // Exit guard — leaving mid-spin / mid-bonus / mid-auto pops a
+  // confirm just like every other slot, so a round in flight
+  // (and its server finish) isn't abandoned by an accidental back.
+  const [exitConfirm, setExitConfirm] = useState(false)
+
   // ── Bonus state ──
   //   mode      'base' | 'bonus'   — which engine is on screen
   //   bonusBoard Array(25) of null | { crop, stage }
@@ -680,13 +685,18 @@ export default function StardewSpinsSlot() {
   useEffect(() => () => { cancelRef.current = true }, [])
 
   // ── Telegram BackButton + browser back to home ──
+  // A spin / bonus / auto in flight wraps a live server round
+  // (finish_stardew_round still pending) — bailing now would
+  // orphan the win, so warn first exactly like the other slots.
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     const back = () => {
       haptic('light')
-      cancelRef.current = true
-      setAutoSpin(false); autoRef.current = false
-      navigate('/home')
+      if (spinning || autoSpin || mode === 'bonus') {
+        setExitConfirm(true)
+      } else {
+        navigate('/home')
+      }
     }
     if (tg) {
       tg.BackButton.show()
@@ -695,7 +705,15 @@ export default function StardewSpinsSlot() {
     return () => {
       if (tg) { tg.BackButton.offClick(back); tg.BackButton.hide() }
     }
-  }, [navigate])
+  }, [navigate, spinning, autoSpin, mode])
+
+  function confirmExit() {
+    haptic('medium')
+    cancelRef.current = true
+    setAutoSpin(false); autoRef.current = false
+    setExitConfirm(false)
+    navigate('/home')
+  }
 
   // ── Derived values for the control bar ──
   const stakeIndex = BETS.indexOf(stake)
@@ -1442,6 +1460,47 @@ export default function StardewSpinsSlot() {
                     }}
                   >
                     {lang === 'ru' ? 'Купить' : 'Buy'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Exit confirmation ──
+            * Shown when the player tries to leave while a spin /
+            * bonus / auto is running. Reuses the buy-modal
+            * parchment styling so it matches the slot's look. */}
+          {exitConfirm && (
+            <div
+              className="stardew-buy-modal-backdrop"
+              onClick={() => { haptic('light'); setExitConfirm(false) }}
+            >
+              <div
+                className="stardew-buy-modal-card"
+                onClick={e => e.stopPropagation()}
+              >
+                <h3 className="stardew-buy-modal-title">
+                  {t.slotExitTitle || (lang === 'ru' ? 'Выйти из игры?' : 'Leave the game?')}
+                </h3>
+                <p className="stardew-buy-modal-text">
+                  {t.slotExitText || (lang === 'ru'
+                    ? 'Если автоспин активен — он остановится.'
+                    : 'If auto-spin is on, it will stop.')}
+                </p>
+                <div className="stardew-buy-modal-actions">
+                  <button
+                    type="button"
+                    className="stardew-buy-modal-cancel"
+                    onClick={() => { haptic('light'); setExitConfirm(false) }}
+                  >
+                    {t.slotExitStay || (lang === 'ru' ? 'Остаться' : 'Stay')}
+                  </button>
+                  <button
+                    type="button"
+                    className="stardew-buy-modal-buy"
+                    onClick={confirmExit}
+                  >
+                    {t.slotExitLeave || (lang === 'ru' ? 'Выйти' : 'Leave')}
                   </button>
                 </div>
               </div>

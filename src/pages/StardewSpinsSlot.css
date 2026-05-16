@@ -629,6 +629,17 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Exit-confirm body copy — reuses the parchment modal shell. */
+.stardew-buy-modal-text {
+  margin: 0 auto 16px;
+  max-width: 86%;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: #6B4423;
+}
+
 .stardew-buy-modal-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
