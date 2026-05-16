@@ -278,7 +278,7 @@ BEGIN
   ELSIF NEW.slot_id = 'pixel-mine'     THEN v_label := 'Pixel Mine';
   ELSIF NEW.slot_id = 'dice'           THEN v_label := 'Dice';
   ELSIF NEW.slot_id = 'magnetic'       THEN v_label := 'Magnetic';
-  ELSIF NEW.slot_id = 'stardew-spins'  THEN v_label := 'Stardew Spins';
+  ELSIF NEW.slot_id = 'stardew-spins'  THEN v_label := 'Stardew';
   ELSE
     RETURN NEW;
   END IF;
@@ -311,7 +311,7 @@ RETURNS VOID LANGUAGE plpgsql VOLATILE
 AS $$
 DECLARE
   v_game_ids    TEXT[]    := ARRAY['tower-stack', 'tetris-cascade', 'rocket', 'plinko', 'pixel-mine', 'dice', 'magnetic', 'stardew-spins'];
-  v_game_labels TEXT[]    := ARRAY['Tower Stack', 'Block Blast', 'Rocket', 'Plinko', 'Pixel Mine', 'Dice', 'Magnetic', 'Stardew Spins'];
+  v_game_labels TEXT[]    := ARRAY['Tower Stack', 'Block Blast', 'Rocket', 'Plinko', 'Pixel Mine', 'Dice', 'Magnetic', 'Stardew'];
   v_bets        INTEGER[] := ARRAY[10, 25, 50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 25000];
   v_game_idx    INTEGER;
   v_amount      INTEGER;

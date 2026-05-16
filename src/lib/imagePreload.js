@@ -30,10 +30,31 @@ const liveFeedIconRaw = import.meta.glob(
    '../assets/games/block_blast.png',
    '../assets/games/rocket.png',
    '../assets/games/plinko.png',
-   '../assets/games/pixel_mine.png'],
+   '../assets/games/pixel_mine.png',
+   '../assets/games/dice.png',
+   '../assets/games/magnetic.png',
+   '../assets/games/stardew.png'],
   { eager: true, query: '?url', import: 'default' }
 )
 const LIVE_FEED_ICON_URLS = Object.values(liveFeedIconRaw)
+
+// Stardew card / preview crop sprites — the same tiny pixel PNGs
+// the Home card and the slot-preview overlay render. Warmed with
+// the rest of the deferred assets so the card never flashes a
+// missing crop on first paint.
+const stardewCardSpriteRaw = import.meta.glob(
+  ['../assets/stardew/symbols/potatoe.png',
+   '../assets/stardew/symbols/carrot.png',
+   '../assets/stardew/symbols/corn.png',
+   '../assets/stardew/symbols/eggplant.png',
+   '../assets/stardew/symbols/tomatoe.png',
+   '../assets/stardew/symbols/grape.png',
+   '../assets/stardew/symbols/pumpkin.png',
+   '../assets/stardew/symbols/watermelon.png',
+   '../assets/stardew/symbols/lime.png'],
+  { eager: true, query: '?url', import: 'default' }
+)
+const STARDEW_CARD_SPRITE_URLS = Object.values(stardewCardSpriteRaw)
 
 // Pixel Mine textures — reels, blocks, damage frames, chests. ~30
 // PNGs the slot needs once the player taps in. We warm them after
@@ -154,7 +175,8 @@ export function preloadStoreImages(state) {
 
 /**
  * Lazy-warm everything that isn't required for first paint:
- *   - Live feed slot thumbnails (5 PNGs)
+ *   - Live feed slot thumbnails (one PNG per slot)
+ *   - Stardew card / preview crop sprites (9 PNGs)
  *   - Pixel Mine textures (reels / blocks / damage frames / chests)
  *
  * Caller schedules this after the splash dismisses so the launch
@@ -164,6 +186,8 @@ export function preloadStoreImages(state) {
 export function preloadDeferredAssets() {
   const total = preloadImages(LIVE_FEED_ICON_URLS, {
     idle: true, limit: LIVE_FEED_ICON_URLS.length,
+  }) + preloadImages(STARDEW_CARD_SPRITE_URLS, {
+    idle: true, limit: STARDEW_CARD_SPRITE_URLS.length,
   }) + preloadImages(PIXEL_MINE_TEXTURE_URLS, {
     idle: true, limit: PIXEL_MINE_TEXTURE_URLS.length,
   })

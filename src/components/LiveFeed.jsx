@@ -12,6 +12,7 @@ import iconPlinko     from '../assets/games/plinko.png'
 import iconPixelMine  from '../assets/games/pixel_mine.png'
 import iconDice       from '../assets/games/dice.png'
 import iconMagnetic   from '../assets/games/magnetic.png'
+import iconStardew    from '../assets/games/stardew.png'
 
 import './LiveFeed.css'
 
@@ -20,6 +21,11 @@ const VISIBLE_ROWS = 5
 // fade-out to play before they unmount.
 const STATE_BUFFER = VISIBLE_ROWS + 4
 
+// Every slot that can appear in the feed needs an icon AND a
+// display name here. The DB label is only a fallback — naming is
+// driven client-side so a slot is always shown consistently
+// (e.g. "Stardew", never the old "Stardew Spins" from cached /
+// pre-migration rows).
 const SLOT_ICONS = {
   'tower-stack':    iconTowerStack,
   'tetris-cascade': iconBlockBlast,
@@ -28,6 +34,18 @@ const SLOT_ICONS = {
   'pixel-mine':     iconPixelMine,
   'dice':           iconDice,
   'magnetic':       iconMagnetic,
+  'stardew-spins':  iconStardew,
+}
+
+const SLOT_LABELS = {
+  'tower-stack':    'Tower Stack',
+  'tetris-cascade': 'Block Blast',
+  'rocket':         'Rocket',
+  'plinko':         'Plinko',
+  'pixel-mine':     'Pixel Mine',
+  'dice':           'Dice',
+  'magnetic':       'Magnetic',
+  'stardew-spins':  'Stardew',
 }
 
 /**
@@ -103,9 +121,15 @@ export default function LiveFeed() {
               className={'live-feed-row' + (win ? ' is-win' : ' is-loss')}
             >
               <span className="live-feed-icon">
-                <img src={SLOT_ICONS[row.game_id]} alt="" loading="lazy" />
+                <img
+                  src={SLOT_ICONS[row.game_id] || iconStardew}
+                  alt=""
+                  loading="lazy"
+                />
               </span>
-              <span className="live-feed-game">{row.game_label}</span>
+              <span className="live-feed-game">
+                {SLOT_LABELS[row.game_id] || row.game_label}
+              </span>
               <span className="live-feed-amount">
                 <span className="live-feed-money-icon">$</span>
                 <span className="live-feed-amount-value">
