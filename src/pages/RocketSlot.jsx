@@ -142,6 +142,16 @@ export default function RocketSlot() {
   // sync with the rocket and the multiplier readout.
   const [renderTick, setRenderTick] = useState(0)
 
+  // ── Boot gate ──
+  // Server mode mounts as a pure reader: until the engine's first
+  // round + the clock-sync land, the stage would otherwise show a
+  // rocket idling/flaming with no real round behind it ("она
+  // всегда летает"). Hold a connecting screen until we actually
+  // have a round, with a short floor so it doesn't blink when the
+  // round is cached. Dev mode is local → never boots.
+  const [booting, setBooting] = useState(!isDev)
+  const bootStartRef = useRef(Date.now())
+
   // ── Refs (avoid stale closures inside the long-lived loop) ──
   const phaseRef = useRef(phase)
   const betRef = useRef(bet)
@@ -189,6 +199,19 @@ export default function RocketSlot() {
   }, [navigate, bet, cashedAt])
 
   useEffect(() => () => { cancelRef.current = true }, [])
+
+  // Drop the connecting screen once the first round is in. A ~700ms
+  // floor keeps it from flashing when the round comes back instantly.
+  useEffect(() => {
+    if (!booting || !hasRound) return
+    const MIN_DISPLAY_MS = 700
+    const elapsed = Date.now() - bootStartRef.current
+    const id = setTimeout(
+      () => setBooting(false),
+      Math.max(0, MIN_DISPLAY_MS - elapsed)
+    )
+    return () => clearTimeout(id)
+  }, [booting, hasRound])
 
   // Auto-clamp stake when balance drops mid-cycle (between rounds).
   useEffect(() => {
@@ -522,6 +545,51 @@ export default function RocketSlot() {
     const el = historyRef.current
     if (el) el.scrollLeft = el.scrollWidth
   }, [history.length])
+
+  // ── Connecting screen ──
+  // Held until the server engine's first round reaches us so the
+  // player never sees a rocket "flying" with nothing behind it.
+  if (booting) {
+    return (
+      <div className="rocket-slot-page rocket-slot-page--betting">
+        <div className="rocket-game-window rocket-loading-window">
+          <div className="rocket-loading-sky" aria-hidden="true">
+            <span className="rocket-star rocket-star--a" />
+            <span className="rocket-star rocket-star--c" />
+            <span className="rocket-star rocket-star--e" />
+            <span className="rocket-star rocket-star--g" />
+          </div>
+          <div className="rocket-loading-card">
+            <span className="rocket-loading-rocket" aria-hidden="true">
+              <span className="rocket-loading-flame" />
+              <svg viewBox="0 0 28 40" width="48" height="68">
+                <defs>
+                  <linearGradient id="rkt-load-body" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#fef3c7" />
+                    <stop offset="100%" stopColor="#fb7185" />
+                  </linearGradient>
+                </defs>
+                <path d="M14 1.5 C20 7 22 14 22 22 L22 30 L6 30 L6 22 C6 14 8 7 14 1.5 Z"
+                      fill="url(#rkt-load-body)" stroke="#9f1239" strokeWidth="1.1" />
+                <circle cx="14" cy="15" r="3.4" fill="#0ea5e9" stroke="#082f49" strokeWidth="1" />
+                <circle cx="13" cy="14" r="1" fill="#bae6fd" opacity="0.9" />
+                <path d="M6 25 L1 33 L6 31 Z" fill="#fb7185" stroke="#9f1239" strokeWidth="0.8" />
+                <path d="M22 25 L27 33 L22 31 Z" fill="#fb7185" stroke="#9f1239" strokeWidth="0.8" />
+                <rect x="6" y="28" width="16" height="2.4" fill="#9f1239" />
+              </svg>
+            </span>
+            <h2 className="rocket-loading-title">{t.slotRocketTitle || 'Rocket'}</h2>
+            <p className="rocket-loading-sub">
+              {lang === 'ru' ? 'Подключаемся к движку…' : 'Connecting to the engine…'}
+            </p>
+            <div className="rocket-loading-bar" aria-label="Loading">
+              <span className="rocket-loading-bar-fill" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`rocket-slot-page rocket-slot-page--${phase}`}>
