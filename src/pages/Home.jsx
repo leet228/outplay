@@ -32,6 +32,18 @@ import mgTexCompass from '../assets/games/magnetic/compas.png'
 import mgTexOrb     from '../assets/games/magnetic/plazm_orb.png'
 import mgTexGem     from '../assets/games/magnetic/scatter.png'
 import mgTexMagnet  from '../assets/games/magnetic/magnet.png'
+// Stardew Spins — the SAME crop sprites the live slot renders, so
+// the home card reads as an actual spin of the game (tiny ~400 B
+// pixel PNGs, negligible bundle cost).
+import sdPotatoe    from '../assets/stardew/symbols/potatoe.png'
+import sdCarrot     from '../assets/stardew/symbols/carrot.png'
+import sdCorn       from '../assets/stardew/symbols/corn.png'
+import sdEggplant   from '../assets/stardew/symbols/eggplant.png'
+import sdTomatoe    from '../assets/stardew/symbols/tomatoe.png'
+import sdGrape      from '../assets/stardew/symbols/grape.png'
+import sdPumpkin    from '../assets/stardew/symbols/pumpkin.png'
+import sdWatermelon from '../assets/stardew/symbols/watermelon.png'
+import sdLime       from '../assets/stardew/symbols/lime.png'
 import './Home.css'
 // Imported here so the home-page rocket card art styles ship with Home,
 // not just when the player opens the slot itself.
@@ -2271,30 +2283,43 @@ function MagneticSlotArtwork({ large = false, animated = false }) {
 // crops (the "winning line") and floats a +mult chip above it,
 // hinting at the Pay-Anywhere → tumble loop.
 // ─────────────────────────────────────────────────────────────
+// Card crop id → real slot sprite. Same PNGs the live game grid
+// uses, so the card IS a frozen spin of Stardew Spins.
+const SD_CARD_SPRITE = {
+  potatoe:    sdPotatoe,
+  carrot:     sdCarrot,
+  corn:       sdCorn,
+  eggplant:   sdEggplant,
+  tomatoe:    sdTomatoe,
+  grape:      sdGrape,
+  pumpkin:    sdPumpkin,
+  watermelon: sdWatermelon,
+  lime:       sdLime,
+}
+
 function StardewSlotArtwork({ large = false, animated = false }) {
-  // 6 columns × 5 rows of dirt cells. Each entry is either null
-  // (empty plot) or a crop kind that maps to a colored pixel
-  // glyph in CSS. Layout chosen so:
-  //   - top two rows form a near-complete row of carrots (the
-  //     "winning combo" the animated variant highlights)
-  //   - bottom rows mix wheat / strawberry / pumpkin / leek so
-  //     all 5 main symbols show up on the card at once.
+  // 6 columns × 5 rows — a real-looking Pay-Anywhere spin. A fat
+  // pumpkin cluster (10 of them, scattered anywhere) is the "8+
+  // anywhere" win the animated variant flashes; a couple of lime
+  // scatters dot the field like a near-bonus tease, and the rest
+  // is a healthy mix so every crop tier shows up on the card.
   const cells = [
-    // row 0 (top): mostly carrots → the "8+ anywhere" combo cue
-    'carrot', 'carrot', 'wheat',     'carrot', 'carrot', 'strawberry',
+    // row 0
+    'pumpkin', 'pumpkin', 'grape',    'pumpkin',  'watermelon', 'corn',
     // row 1
-    'wheat',  'carrot', 'pumpkin',   'carrot', 'leek',   'carrot',
-    // row 2 — middle scatter
-    'strawberry', null, 'carrot',    'wheat',  'pumpkin', 'wheat',
+    'tomatoe', 'pumpkin', 'pumpkin',  'eggplant', 'pumpkin',    'grape',
+    // row 2
+    'carrot',  'lime',    'potatoe',  'pumpkin',  'corn',       'pumpkin',
     // row 3
-    'leek',   'pumpkin', 'wheat',    'strawberry', 'carrot', 'leek',
-    // row 4 (bottom)
-    'wheat',  'leek',   'strawberry','wheat',   'pumpkin', 'wheat',
+    'grape',   'watermelon', 'tomatoe','pumpkin', 'lime',       'eggplant',
+    // row 4
+    'corn',    'potatoe', 'grape',    'carrot',   'pumpkin',    'tomatoe',
   ]
 
-  // Indices that are part of the celebrated "carrot row" — they
-  // flash + lift when the animated variant is hovered.
-  const winning = new Set([0, 1, 3, 4, 7, 9, 11, 14])
+  // The Pay-Anywhere winning symbol — every pumpkin lights up.
+  const winning = new Set(
+    cells.flatMap((c, i) => (c === 'pumpkin' ? [i] : []))
+  )
 
   return (
     <div
@@ -2332,10 +2357,18 @@ function StardewSlotArtwork({ large = false, animated = false }) {
               key={i}
               className={
                 'stardew-slot-art-cell' +
-                (crop ? ` stardew-slot-art-cell--has-crop stardew-slot-art-cell--${crop}` : '') +
+                (crop ? ' stardew-slot-art-cell--has-crop' : '') +
+                (crop === 'lime' ? ' stardew-slot-art-cell--scatter' : '') +
                 (animated && winning.has(i) ? ' stardew-slot-art-cell--winning' : '')
               }
-            />
+            >
+              {crop && SD_CARD_SPRITE[crop] && (
+                <span
+                  className="stardew-slot-art-crop"
+                  style={{ backgroundImage: `url("${SD_CARD_SPRITE[crop]}")` }}
+                />
+              )}
+            </span>
           ))}
         </div>
 

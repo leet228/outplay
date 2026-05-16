@@ -3372,119 +3372,40 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-/* ── Crops (pure CSS pixel sprites) ──
- * Each crop uses ::before for the main body and ::after for the
- * accent (leaves / stem / cap), absolutely centred inside the
- * cell. Scale is driven by the cell size — the card stays crisp
- * at large/preview sizes too. */
-.stardew-slot-art-cell--has-crop::before,
-.stardew-slot-art-cell--has-crop::after {
-  content: '';
+/* ── Crops (real slot sprites) ──
+ * Each occupied plot renders the SAME pixel-art PNG the live
+ * Stardew Spins grid uses, so the card is a true frozen spin.
+ * The sprite sits inset inside the dirt cell, pixel-crisp at
+ * every card size (small / large / preview). */
+.stardew-slot-art-crop {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  border-radius: 1px;
+  inset: 9%;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  background-size: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
 }
 
-/* CARROT — orange diamond + green leaf cap. */
-.stardew-slot-art-cell--carrot::before {
-  width: 30%;
-  height: 55%;
-  background: #FB8C00;
-  transform: translate(-50%, -35%);
-  border-radius: 2px 2px 50% 50%;
-  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
-}
-.stardew-slot-art-cell--carrot::after {
-  width: 50%;
-  height: 22%;
-  background: #2E7D32;
-  transform: translate(-50%, -160%);
-  border-radius: 2px;
-  box-shadow: 0 -3px 0 -1px #388E3C, 0 -6px 0 -2px #43A047;
-}
-
-/* WHEAT — gold stalk + diagonal grain marks. */
-.stardew-slot-art-cell--wheat::before {
-  width: 22%;
-  height: 65%;
-  background: #FBC02D;
-  transform: translate(-50%, -50%);
-  border-radius: 2px;
+/* Lime scatter — a soft lime-green halo so it reads as the
+ * special "bonus" symbol, same as it pops in the live grid. */
+.stardew-slot-art-cell--scatter {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(174, 234, 0, 0.45) 0%, transparent 68%),
+    repeating-linear-gradient(45deg,
+      rgba(255, 255, 255, 0.05) 0 2px,
+      transparent 2px 4px),
+    linear-gradient(180deg, #8B5A3C 0%, #6B4423 100%);
   box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.2),
-   -5px -3px 0 -2px #FBC02D,
-    5px -3px 0 -2px #FBC02D,
-   -5px  1px 0 -2px #FBC02D,
-    5px  1px 0 -2px #FBC02D;
+    inset 0 0 0 1px rgba(174, 234, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
-.stardew-slot-art-cell--wheat::after {
-  width: 30%;
-  height: 18%;
-  background: #6B4423;
-  transform: translate(-50%, 110%);
-  border-radius: 1px;
+.stardew-slot-card-art--animated .stardew-slot-art-cell--scatter .stardew-slot-art-crop {
+  animation: stardew-scatter-bob 1.8s ease-in-out infinite;
 }
-
-/* STRAWBERRY — red puff + green leaf top. */
-.stardew-slot-art-cell--strawberry::before {
-  width: 50%;
-  height: 50%;
-  background: #E53935;
-  transform: translate(-50%, -30%);
-  border-radius: 50% 50% 50% 50% / 35% 35% 65% 65%;
-  box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.2),
-   -4px -3px 0 -3px #fff,
-    3px  2px 0 -3px #fff;
-}
-.stardew-slot-art-cell--strawberry::after {
-  width: 50%;
-  height: 18%;
-  background: #2E7D32;
-  transform: translate(-50%, -160%);
-  border-radius: 2px;
-  box-shadow: 0 -3px 0 -1px #388E3C;
-}
-
-/* PUMPKIN — orange round + green stem. */
-.stardew-slot-art-cell--pumpkin::before {
-  width: 60%;
-  height: 50%;
-  background: #F57C00;
-  transform: translate(-50%, -25%);
-  border-radius: 50%;
-  box-shadow:
-    inset -2px 0 0 rgba(0, 0, 0, 0.18),
-    inset 2px 0 0 rgba(255, 255, 255, 0.12);
-}
-.stardew-slot-art-cell--pumpkin::after {
-  width: 18%;
-  height: 22%;
-  background: #2E7D32;
-  transform: translate(-50%, -185%);
-  border-radius: 1px;
-}
-
-/* LEEK — green stalk + lighter highlight. */
-.stardew-slot-art-cell--leek::before {
-  width: 22%;
-  height: 70%;
-  background: #66BB6A;
-  transform: translate(-50%, -50%);
-  border-radius: 2px;
-  box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.2),
-    inset 0 2px 0 rgba(255, 255, 255, 0.25);
-}
-.stardew-slot-art-cell--leek::after {
-  width: 32%;
-  height: 18%;
-  background: #fff;
-  opacity: 0.85;
-  transform: translate(-50%, 90%);
-  border-radius: 1px;
-  background: linear-gradient(180deg, #F5F5F5 0%, #E0E0E0 100%);
+@keyframes stardew-scatter-bob {
+  0%, 100% { transform: translateY(0)     scale(1);    }
+  50%      { transform: translateY(-1.5px) scale(1.06); }
 }
 
 /* Winning combo highlight — only present in the animated card. */
@@ -3502,6 +3423,14 @@
 @keyframes stardew-cell-flash {
   0%, 100% { transform: translateY(0);    filter: brightness(1); }
   50%      { transform: translateY(-1px); filter: brightness(1.18); }
+}
+/* The winning pumpkins themselves pop + glow on the beat. */
+.stardew-slot-card-art--animated .stardew-slot-art-cell--winning .stardew-slot-art-crop {
+  animation: stardew-crop-pop 1.4s ease-in-out infinite;
+}
+@keyframes stardew-crop-pop {
+  0%, 100% { transform: scale(1);     filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35)); }
+  50%      { transform: scale(1.12);  filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.85)); }
 }
 
 /* +mult chip — celebratory chip over the winning combo. */
