@@ -325,60 +325,140 @@
 .stardew-nail--br { bottom: 4px; right: 4px; }
 
 .stardew-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   grid-template-rows: repeat(5, 1fr);
-  gap: 3px;
+  /* Column dividers only — vertical gap between columns stays
+   * (the #4A2F1A grid background shows through), rows touch with
+   * zero gap so each column reads as one continuous strip of
+   * dirt during the spin. */
+  column-gap: 3px;
+  row-gap: 0;
   padding: 3px;
-  background: #4A2F1A;
+  background: #4A2F1A;            /* shows through the column-gaps */
   border-radius: 4px;
   /* Square cells — fix the whole grid to 6:5 so each tile reads
    * as a perfect dirt square regardless of the surrounding frame
    * height. The wooden frame then sizes itself to the grid. */
   aspect-ratio: 6 / 5;
   width: 100%;
-}
-
-/* ── Single dirt cell with furrow texture ── */
-.stardew-cell {
-  position: relative;
-  background:
-    repeating-linear-gradient(45deg,
-      rgba(255, 255, 255, 0.04) 0 2px,
-      transparent 2px 5px),
-    linear-gradient(180deg, #8B5A3C 0%, #6B4423 100%);
-  border-radius: 2px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Clip symbols once they translate past the grid bounds during
+   * the spin-out / spin-in pass — the wooden frame stays clean. */
   overflow: hidden;
 }
 
-/* Win cluster — golden glow + lift. */
-.stardew-cell.is-win {
-  background:
-    radial-gradient(circle at 50% 50%, rgba(255, 213, 79, 0.7) 0%, transparent 70%),
-    linear-gradient(180deg, #B8860B 0%, #8B5A3C 100%);
-  box-shadow:
-    inset 0 0 0 1px #FFD54F,
-    0 0 14px rgba(255, 213, 79, 0.5);
-  animation: stardew-win-pulse 0.45s ease-in-out infinite alternate;
-  z-index: 3;
-}
-@keyframes stardew-win-pulse {
-  from { transform: translateY(0); }
-  to   { transform: translateY(-2px); filter: brightness(1.15); }
+
+/* ── Column-strip background ──
+ * One per column, rendered as a JSX sibling that spans all 5 grid
+ * rows (`grid-row: 1 / -1`). This paints the dirt colour as ONE
+ * continuous band per column — cells themselves stay transparent
+ * on top, which is what allows a sliding crop to travel down the
+ * whole column without being painted over by the dirt of the
+ * cells underneath it. */
+.stardew-col-bg {
+  background: #7a4f33;
+  pointer-events: none;
+  z-index: 0;
 }
 
-/* Falling-in animation — runs once on every grid swap. */
-.stardew-cell.is-falling .stardew-crop {
-  animation: stardew-drop-in 0.42s cubic-bezier(.34, .2, .25, 1.15) both;
+/* ── Single dirt cell ──
+ * Fully transparent — the dirt colour belongs to .stardew-col-bg
+ * underneath. The cell only exists to anchor the absolute-
+ * positioned crop / multiplier coin and to receive `is-win` /
+ * `is-falling` state classes. No overflow:hidden, no border-radius:
+ * sliding symbols need to traverse other cells in their column
+ * during the spin pass, clipping happens at .stardew-grid. */
+.stardew-cell {
+  position: relative;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
 }
-@keyframes stardew-drop-in {
-  0%   { transform: translateY(-180%) scale(0.6); opacity: 0; }
-  60%  { transform: translateY(8%) scale(1.08);   opacity: 1; }
-  100% { transform: translateY(0)   scale(1);     opacity: 1; }
+
+/* Win cluster — golden glow under the symbol while it pulses /
+ * bursts. The glow lives on the cell, the motion on the crop. */
+.stardew-cell.is-win {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 213, 79, 0.55) 0%, transparent 70%);
+  z-index: 3;
+}
+
+/* 2a) PULSE — winning symbol grows then shrinks back, one beat. */
+.stardew-cell.is-pulse .stardew-crop {
+  animation: stardew-win-pulse 0.46s ease-in-out 1 both;
+}
+@keyframes stardew-win-pulse {
+  0%   { transform: scale(1);    }
+  45%  { transform: scale(1.28); filter: brightness(1.18); }
+  100% { transform: scale(1);    }
+}
+
+/* 2b) BURST — winning symbol pops (overshoot) then collapses to
+ * nothing with a quick spin, like a snapped Terraria block. */
+.stardew-cell.is-burst .stardew-crop {
+  animation: stardew-win-burst 0.34s ease-in 1 forwards;
+}
+@keyframes stardew-win-burst {
+  0%   { transform: scale(1)    rotate(0deg);   opacity: 1; }
+  35%  { transform: scale(1.4)  rotate(6deg);   opacity: 1; filter: brightness(1.4); }
+  100% { transform: scale(0.15) rotate(-16deg); opacity: 0; }
+}
+
+/* 2c) DROP — gravity tumble. Every surviving / fresh symbol
+ * starts `--drop` rows above its slot and falls into place. The
+ * column-staggered delay (var(--col)) makes the columns cascade
+ * left → right, but the per-column duration is long enough that
+ * the next column starts before the previous lands (overlap).
+ * `--drop` is a row count; one row ≈ 118 % of the crop's own
+ * height (cell height minus the 8 % inset top+bottom). The
+ * landing point is always translateY(0), so any approximation
+ * in the start offset is invisible. */
+.stardew-grid.is-tumble .stardew-crop {
+  animation: stardew-tumble-drop 0.46s cubic-bezier(.3, .2, .28, 1.05) backwards;
+  animation-delay: calc(var(--col, 0) * 80ms);
+}
+@keyframes stardew-tumble-drop {
+  0%   { transform: translateY(calc(var(--drop, 0) * -118%)); }
+  100% { transform: translateY(0); }
+}
+
+/* ── Spin animation ──────────────────────────────────────────
+ *
+ *   spin-out:  symbols slide DOWN out of the grid (cells stay).
+ *   spin-in:   symbols slide DOWN from above into place.
+ *
+ * Only the .stardew-crop sprite animates — the dirt cells under
+ * them keep their positions and column-gap dividers stay visible
+ * the entire time. Each crop pulls its column index from the
+ * `--col` CSS variable set on the parent cell (inherited via the
+ * descendant rule), and uses it as an animation-delay so col 0
+ * moves first and col 5 last. translateY 600% covers all 5 rows
+ * + a bit of cushion so even the topmost row's sprite fully
+ * clears the wooden frame's bottom edge before the new pass
+ * starts. .stardew-grid's `overflow: hidden` clips at the bounds.
+ * ─────────────────────────────────────────────────────────── */
+.stardew-grid.is-spin-out .stardew-crop {
+  animation: stardew-spin-out 0.7s cubic-bezier(.55, 0, .85, .35) forwards;
+  animation-delay: calc(var(--col, 0) * 100ms);
+}
+.stardew-grid.is-spin-in .stardew-crop {
+  animation: stardew-spin-in 0.7s cubic-bezier(.18, .8, .32, 1) backwards;
+  animation-delay: calc(var(--col, 0) * 100ms);
+}
+
+@keyframes stardew-spin-out {
+  0%   { transform: translateY(0);    opacity: 1; }
+  85%  {                              opacity: 1; }
+  100% { transform: translateY(600%); opacity: 0; }
+}
+
+@keyframes stardew-spin-in {
+  0%   { transform: translateY(-600%); opacity: 0; }
+  15%  {                                opacity: 1; }
+  100% { transform: translateY(0);     opacity: 1; }
 }
 
 /* ═════════════════════════════════════════════════════════════
@@ -595,163 +675,27 @@
 }
 
 /* ═════════════════════════════════════════════════════════════
- *  CROPS — pure-CSS pixel sprites
+ *  CROPS — PNG sprites painted as the cell background
+ *
+ *  The JSX wires `style.backgroundImage = url(<sprite.png>)` on
+ *  every <.stardew-crop> via the SYMBOL_IMG map (potatoe / carrot
+ *  / corn / eggplant / tomatoe / grape / pumpkin / watermelon /
+ *  lime). This rule sets the painted-canvas defaults — size,
+ *  centring, pixel-art crispness — so the JS side just hands a
+ *  URL and a class is enough to render the sprite.
  * ═════════════════════════════════════════════════════════════ */
 
 .stardew-crop {
   position: absolute;
-  inset: 0;
+  inset: 8%;                     /* breathing room inside the dirt cell */
   display: block;
-}
-.stardew-crop::before,
-.stardew-crop::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  border-radius: 1px;
-}
-
-/* CARROT — orange tapered body + green tuft. */
-.stardew-crop--carrot::before {
-  width: 30%;
-  height: 55%;
-  background: #FB8C00;
-  transform: translate(-50%, -35%);
-  border-radius: 2px 2px 50% 50%;
-  box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.22),
-    inset 2px 0 0 rgba(255, 255, 255, 0.18);
-}
-.stardew-crop--carrot::after {
-  width: 55%;
-  height: 22%;
-  background: #2E7D32;
-  transform: translate(-50%, -160%);
-  border-radius: 2px;
-  box-shadow:
-    0 -3px 0 -1px #388E3C,
-    0 -6px 0 -2px #43A047;
-}
-
-/* WHEAT — gold stalk + diagonal grain dots. */
-.stardew-crop--wheat::before {
-  width: 22%;
-  height: 65%;
-  background: #FBC02D;
-  transform: translate(-50%, -50%);
-  border-radius: 2px;
-  box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.22),
-   -6px -3px 0 -3px #FBC02D,
-    6px -3px 0 -3px #FBC02D,
-   -6px  1px 0 -3px #FBC02D,
-    6px  1px 0 -3px #FBC02D,
-   -6px  5px 0 -3px #FBC02D,
-    6px  5px 0 -3px #FBC02D;
-}
-.stardew-crop--wheat::after {
-  width: 30%;
-  height: 16%;
-  background: #6B4423;
-  transform: translate(-50%, 120%);
-  border-radius: 1px;
-}
-
-/* STRAWBERRY — red puff + green leaf + tiny seed dots. */
-.stardew-crop--strawberry::before {
-  width: 55%;
-  height: 55%;
-  background: #E53935;
-  transform: translate(-50%, -25%);
-  border-radius: 50% 50% 50% 50% / 35% 35% 65% 65%;
-  box-shadow:
-    inset 0 -2px 0 rgba(0, 0, 0, 0.22),
-   -5px -3px 0 -3px #fff,
-    4px  2px 0 -3px #fff,
-   -3px  3px 0 -3px #fff;
-}
-.stardew-crop--strawberry::after {
-  width: 50%;
-  height: 16%;
-  background: #2E7D32;
-  transform: translate(-50%, -180%);
-  border-radius: 2px;
-  box-shadow: 0 -3px 0 -1px #388E3C;
-}
-
-/* PUMPKIN — round orange + green stem. */
-.stardew-crop--pumpkin::before {
-  width: 65%;
-  height: 55%;
-  background: #F57C00;
-  transform: translate(-50%, -20%);
-  border-radius: 50%;
-  box-shadow:
-    inset -2px 0 0 rgba(0, 0, 0, 0.20),
-    inset  2px 0 0 rgba(255, 255, 255, 0.14),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.18);
-}
-.stardew-crop--pumpkin::after {
-  width: 16%;
-  height: 22%;
-  background: #2E7D32;
-  transform: translate(-50%, -210%);
-  border-radius: 1px;
-}
-
-/* LEEK — green stalk + lighter white base. */
-.stardew-crop--leek::before {
-  width: 24%;
-  height: 70%;
-  background: linear-gradient(180deg, #66BB6A 0%, #43A047 100%);
-  transform: translate(-50%, -55%);
-  border-radius: 2px 2px 1px 1px;
-  box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.25),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.20);
-}
-.stardew-crop--leek::after {
-  width: 32%;
-  height: 22%;
-  background: linear-gradient(180deg, #F5F5F5 0%, #E0E0E0 100%);
-  transform: translate(-50%, 80%);
-  border-radius: 1px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-/* ═════════════════════════════════════════════════════════════
- *  MULTIPLIER COIN — gold disc with number floating over a cell
- * ═════════════════════════════════════════════════════════════ */
-
-.stardew-mult-coin {
-  position: absolute;
-  top: 6%;
-  right: 6%;
-  z-index: 4;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #FFD54F 0%, #FFC107 100%);
-  color: #4A2F1A;
-  font-family: inherit;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #B8860B;
-  box-shadow:
-    0 1px 0 #6B4423,
-    0 2px 4px rgba(0, 0, 0, 0.35);
-  animation: stardew-coin-bob 1.6s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes stardew-coin-bob {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-2px); }
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* Keeps the pixel-art sprite crisp instead of bilinear-blurring
+   * when the cell is resized to a non-native ratio. */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 /* ═════════════════════════════════════════════════════════════
@@ -975,6 +919,315 @@
 }
 
 /* ═════════════════════════════════════════════════════════════
+ *  BONUS — "Year of Harvest" 5×5 farm + season banner + overlays
+ * ═════════════════════════════════════════════════════════════ */
+
+/* The bonus board reuses .stardew-grid's wooden frame + column
+ * dividers, just retemplated to 5×5 and a square aspect. */
+.stardew-grid--bonus {
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+  aspect-ratio: 1 / 1;
+}
+
+/* Plant plot — same transparent cell as the base game; the
+ * .stardew-col-bg strips behind paint the soil. */
+.stardew-cell--bonus {
+  overflow: visible;
+}
+
+/* The plant sprite. Stage 1/2 sit a touch smaller than a ripe
+ * crop so growth reads as "getting bigger". */
+.stardew-plant {
+  transform: scale(0.82);
+  transition: transform 0.3s ease;
+}
+.stardew-plant.is-ripe {
+  transform: scale(1);
+  filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.55));
+}
+
+/* SOW — a fresh sprout pops up out of the soil. */
+.stardew-cell--bonus.is-sown .stardew-plant {
+  animation: stardew-sow-pop 0.36s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+@keyframes stardew-sow-pop {
+  0%   { transform: translateY(40%) scale(0.2); opacity: 0; }
+  70%  { transform: translateY(-6%) scale(0.95); opacity: 1; }
+  100% { transform: translateY(0)   scale(0.82); opacity: 1; }
+}
+
+/* GROW — a quick squash-and-stretch as the plant levels up. */
+.stardew-cell--bonus.is-grown .stardew-plant {
+  animation: stardew-grow-beat 0.44s ease-in-out both;
+}
+@keyframes stardew-grow-beat {
+  0%   { transform: scale(0.82); }
+  45%  { transform: scale(1.12) translateY(-6%); filter: brightness(1.2); }
+  100% { transform: scale(0.9); }
+}
+
+/* HARVEST — ripe fruit yanked up & out with a golden flash. */
+.stardew-cell--bonus.is-harvested {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 213, 79, 0.75) 0%, transparent 70%);
+  z-index: 3;
+}
+.stardew-cell--bonus.is-harvested .stardew-plant {
+  animation: stardew-harvest-yoink 0.55s ease-in 1 forwards;
+}
+@keyframes stardew-harvest-yoink {
+  0%   { transform: scale(1)   translateY(0);    opacity: 1; }
+  35%  { transform: scale(1.3) translateY(-8%);  opacity: 1; filter: brightness(1.5); }
+  100% { transform: scale(0.2) translateY(-70%); opacity: 0; }
+}
+
+/* ── ×N harvest badge ──
+ * Ripe fruit shows its crop multiplier; a lightning-boosted
+ * plant shows ×100 at ANY growth stage. Plain sprouts: nothing. */
+.stardew-x-badge {
+  position: absolute;
+  bottom: 4%;
+  right: 4%;
+  z-index: 5;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #FFD54F 0%, #FFC107 100%);
+  color: #4A2F1A;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #6B4423;
+  box-shadow: 0 1px 0 #6B4423, 0 2px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+/* Boosted ×100 — purple (the multiplier accent) so it screams. */
+.stardew-x-badge.is-boosted {
+  background: linear-gradient(180deg, #CE93D8 0%, #9C27B0 100%);
+  color: #fff;
+  border-color: #4A148C;
+  box-shadow:
+    0 1px 0 #4A148C,
+    0 0 8px rgba(156, 39, 176, 0.75);
+  animation: stardew-badge-throb 0.9s ease-in-out infinite;
+}
+@keyframes stardew-badge-throb {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+/* Lightning-boosted plant gets a violet aura at every stage. */
+.stardew-plant.is-boosted {
+  filter: drop-shadow(0 0 7px rgba(156, 39, 176, 0.85));
+}
+
+/* ═════════════════════════════════════════════════════════════
+ *  LIGHTNING SEQUENCE
+ *
+ *  When .stardew-grid--bonus has .is-lightning, every plot is
+ *  dimmed by a dark overlay EXCEPT the cell flagged .is-lit
+ *  (cell A while the bolt forms, cell B while it strikes). The
+ *  lightning sprite grows + sparks over A; a jagged strike bolt
+ *  slams into B.
+ * ═════════════════════════════════════════════════════════════ */
+.stardew-grid--bonus.is-lightning::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: rgba(8, 4, 16, 0.78);
+  pointer-events: none;
+  animation: stardew-buy-modal-fade 0.25s ease both;
+  border-radius: 4px;
+}
+/* The lit cell pops above the dark overlay and gets a glow. */
+.stardew-grid--bonus.is-lightning .stardew-cell--bonus.is-lit {
+  z-index: 8;
+}
+.stardew-grid--bonus.is-lightning .stardew-cell--bonus.is-lit::before {
+  content: '';
+  position: absolute;
+  inset: -14%;
+  z-index: 7;
+  border-radius: 6px;
+  background:
+    radial-gradient(circle at 50% 45%,
+      rgba(206, 147, 216, 0.55) 0%,
+      rgba(156, 39, 176, 0.30) 45%,
+      transparent 72%);
+  pointer-events: none;
+}
+
+/* Lightning sprite forming over cell A — grows with a crackle. */
+.stardew-lightning-sprite {
+  position: absolute;
+  inset: 2%;
+  z-index: 9;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 10px rgba(206, 147, 216, 0.95));
+  animation: stardew-bolt-charge 0.95s ease-in-out both;
+}
+@keyframes stardew-bolt-charge {
+  0%   { transform: scale(0.3)  rotate(-8deg); opacity: 0; }
+  25%  { transform: scale(1.05) rotate(4deg);  opacity: 1; }
+  45%  { transform: scale(0.92) rotate(-5deg); }
+  65%  { transform: scale(1.12) rotate(6deg);  filter: drop-shadow(0 0 16px #fff); }
+  85%  { transform: scale(1)    rotate(-3deg); opacity: 1; }
+  100% { transform: scale(1.25) rotate(0deg);  opacity: 0; }
+}
+
+/* Strike bolt slamming into cell B — a hard white jag + flash. */
+.stardew-strike-bolt {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+.stardew-strike-bolt::before {
+  /* the jagged bolt — a thin tilted white wedge from the top */
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -120%;
+  width: 14%;
+  height: 230%;
+  background: linear-gradient(180deg, #fff 0%, #E1BEE7 55%, #9C27B0 100%);
+  clip-path: polygon(45% 0, 70% 38%, 52% 42%, 78% 72%, 50% 100%, 40% 66%, 58% 60%, 30% 30%);
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 8px #fff);
+  animation: stardew-strike-jag 0.5s steps(2, end) 1 both;
+}
+.stardew-strike-bolt::after {
+  /* impact flash blooming at the cell */
+  content: '';
+  position: absolute;
+  inset: -22%;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 45%,
+      rgba(255, 255, 255, 0.98) 0%,
+      rgba(206, 147, 216, 0.6) 40%,
+      transparent 75%);
+  animation: stardew-strike-flash 0.6s ease-out 1 both;
+}
+@keyframes stardew-strike-jag {
+  0%   { opacity: 0; transform: translateX(-50%) scaleY(0.2); }
+  20%  { opacity: 1; transform: translateX(-50%) scaleY(1); }
+  60%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) scaleY(1.05); }
+}
+@keyframes stardew-strike-flash {
+  0%   { opacity: 0; transform: scale(0.5); }
+  25%  { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0; transform: scale(1.25); }
+}
+
+/* ── Season banner — pinned just under the wheel, above the
+ *    bonus farm. Parchment chip recoloured per season. ── */
+.stardew-bonus-banner {
+  position: absolute;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 5px 16px;
+  border-radius: 999px;
+  background: rgba(245, 230, 211, 0.96);
+  border: 2px solid #6B4423;
+  box-shadow: 0 2px 0 #4A2F1A, 0 4px 10px rgba(0, 0, 0, 0.22);
+}
+.stardew-bonus-banner-season {
+  font-size: 14px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+.stardew-bonus-banner-spin {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6B4423;
+  line-height: 1.1;
+}
+.stardew-bonus-banner--spring .stardew-bonus-banner-season { color: #2E7D32; }
+.stardew-bonus-banner--summer .stardew-bonus-banner-season { color: #B8860B; }
+.stardew-bonus-banner--fall   .stardew-bonus-banner-season { color: #D2691E; }
+.stardew-bonus-banner--winter .stardew-bonus-banner-season { color: #4A7DA5; }
+
+/* ── Overlays — full-stage takeover cards (intro / end) ── */
+.stardew-bonus-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(74, 47, 26, 0.7);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  animation: stardew-buy-modal-fade 0.25s ease both;
+}
+.stardew-bonus-overlay-card {
+  width: min(100%, 320px);
+  text-align: center;
+  padding: 26px 22px;
+  background: linear-gradient(180deg, #F5E6D3 0%, #E6D0AC 100%);
+  border: 4px solid #6B4423;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 2px #8B5A3C,
+    0 6px 0 #2C1A0E,
+    0 18px 40px rgba(0, 0, 0, 0.55);
+  animation: stardew-buy-modal-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+.stardew-bonus-overlay-title {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #4A2F1A;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 0 rgba(139, 90, 60, 0.35);
+}
+.stardew-bonus-overlay-big {
+  font-size: 64px;
+  font-weight: 900;
+  line-height: 1.05;
+  color: #FFC107;
+  text-shadow: 0 2px 0 #6B4423, 0 4px 8px rgba(0, 0, 0, 0.3);
+  margin: 6px 0 2px;
+}
+.stardew-bonus-overlay-sub {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6B4423;
+}
+.stardew-bonus-overlay-total {
+  margin-top: 10px;
+  font-size: 34px;
+  font-weight: 900;
+  color: #2E7D32;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* ═════════════════════════════════════════════════════════════
  *  Placeholder-page tokens (kept so the old route stub keeps
  *  rendering during transition — overridden by the slot above).
  * ═════════════════════════════════════════════════════════════ */
@@ -983,3 +1236,121 @@
 .stardew-game-window-sub,
 .stardew-game-window-soon,
 .stardew-game-window-back { display: none; }
+
+/* ═════════════════════════════════════════════════════════════
+ *  LOADING SCREEN — parchment card with a wooden progress bar
+ *
+ *  Shown while the four seasonal backdrop PNGs decode in memory.
+ *  Sits inside the same .stardew-game-window so the framed window
+ *  geometry already matches what the real slot will paint when
+ *  loading finishes. No backdrop image — the page-level summer
+ *  gradient under .stardew-slot-page--summer paints behind.
+ * ═════════════════════════════════════════════════════════════ */
+
+.stardew-loading-window {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* No internal stage / controls during load — let the card own
+   * the whole window area. */
+  padding: 18px;
+}
+
+.stardew-loading-card {
+  width: 100%;
+  max-width: 320px;
+  text-align: center;
+  padding: 22px 22px 20px;
+  background: linear-gradient(180deg, #F5E6D3 0%, #E6D0AC 100%);
+  border: 4px solid #6B4423;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 0 0 2px #8B5A3C,
+    inset 2px 2px 0 rgba(255, 255, 255, 0.35),
+    inset -2px -2px 0 rgba(74, 47, 26, 0.18),
+    0 6px 0 #2C1A0E,
+    0 16px 36px rgba(0, 0, 0, 0.45);
+  /* Subtle bob so the card feels alive while we wait. */
+  animation: stardew-loading-bob 2.6s ease-in-out infinite;
+}
+@keyframes stardew-loading-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+.stardew-loading-title {
+  margin: 0 0 6px;
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 22px;
+  letter-spacing: 0.06em;
+  color: #4A2F1A;
+  text-transform: uppercase;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 0 rgba(139, 90, 60, 0.35);
+}
+
+.stardew-loading-sub {
+  margin: 0 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8B5A3C;
+  letter-spacing: 0.02em;
+}
+
+/* Wooden plank bar — outer brown border, inner sunken trough,
+ * gold fill that grows left → right. */
+.stardew-loading-bar {
+  position: relative;
+  width: 100%;
+  height: 16px;
+  border: 3px solid #4A2F1A;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, #6B4423 0%, #8B5A3C 100%);
+  box-shadow:
+    inset 0 2px 0 rgba(0, 0, 0, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.20);
+  overflow: hidden;
+}
+
+.stardew-loading-bar-fill {
+  display: block;
+  height: 100%;
+  background:
+    linear-gradient(180deg, #FFE082 0%, #FFC107 60%, #B8860B 100%);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(74, 47, 26, 0.30),
+    0 0 8px rgba(255, 193, 7, 0.55);
+  /* Smooth lerp between % steps so the bar slides as each PNG
+   * lands instead of snapping. */
+  transition: width 0.35s cubic-bezier(.4, 0, .2, 1);
+  /* Animated diagonal sheen across the gold to read "in motion". */
+  background-image:
+    linear-gradient(180deg, #FFE082 0%, #FFC107 60%, #B8860B 100%),
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.22) 0 8px,
+      transparent 8px 16px
+    );
+  background-blend-mode: normal, overlay;
+  background-size: 100% 100%, 32px 32px;
+  animation: stardew-loading-stripes 1.6s linear infinite;
+}
+@keyframes stardew-loading-stripes {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 0, 32px 0; }
+}
+
+.stardew-loading-percent {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #4A2F1A;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}

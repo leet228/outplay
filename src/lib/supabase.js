@@ -1221,6 +1221,33 @@ export async function finishMagneticRound(roundId, payoutRub) {
   return data
 }
 
+/* ── Stardew Spins ─────────────────────────────────────────────── */
+// Opens a Stardew Spins round and atomically debits the stake (or
+// stake × 100 for a buy-bonus). Returns { ok, round_id, balance,
+// deficit_active, is_buy_bonus, debited_rub } or { error }.
+export async function startStardewRound(userId, stakeRub, isBuyBonus = false) {
+  const { data, error } = await supabase.rpc('start_stardew_round', {
+    p_user_id: userId,
+    p_stake_rub: stakeRub,
+    p_is_buy_bonus: !!isBuyBonus,
+  })
+  if (error) { console.error('startStardewRound error:', error); return { error: error.message } }
+  return data
+}
+
+// Closes a Stardew Spins round with the client's total payout
+// (base cascade + the full "Year of Harvest" bonus, summed). The
+// server applies the deficit breaker and credits the balance once.
+// Returns { ok, balance, payout, pnl, deficit_active } or { error }.
+export async function finishStardewRound(roundId, payoutRub) {
+  const { data, error } = await supabase.rpc('finish_stardew_round', {
+    p_round_id: roundId,
+    p_payout_rub: Math.max(0, Math.round(payoutRub || 0)),
+  })
+  if (error) { console.error('finishStardewRound error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Admin: slot stats ───────────────────────
 export async function adminGetSlotStats() {
   const { data, error } = await supabase.rpc('admin_get_slot_stats')

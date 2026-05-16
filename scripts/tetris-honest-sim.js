@@ -485,3 +485,120 @@ console.log('\n── 1 000 000 spins ──')
   const r = simulate(1_000_000)
   console.log(`  RTP = ${fmtPct(r.rtp)}   bonus rate = ${fmtPct(r.bonusRate)}   maxWin = ${r.maxWinX.toFixed(0)}× stake`)
 }
+
+// ──────────────────────────────────────────────────────
+// BONUS-ONLY analysis. Two flavours:
+//   * triggered  — natural ≥5 coins on grid after the spin's cascades
+//   * bought     — player paid stake × 100, plays only the bonus round
+// For each: payout distribution, recoup rate, loss rate, max, mean.
+// ──────────────────────────────────────────────────────
+function bonusHistogram(label, payoutsX, costX) {
+  const buckets = [
+    { lab: '0× stake               (полный 0)',          lo: 0,    hi: 0    },
+    { lab: '<1× stake              (хуже ставки)',       lo: 0.01, hi: 0.99 },
+    { lab: '1×-5× stake            (мелочь)',           lo: 1,    hi: 4.99 },
+    { lab: '5×-10× stake           (мини-окуп)',        lo: 5,    hi: 9.99 },
+    { lab: '10×-25× stake          (приличный)',        lo: 10,   hi: 24.99 },
+    { lab: '25×-50× stake          (крутой)',           lo: 25,   hi: 49.99 },
+    { lab: '50×-100× stake         (топ)',              lo: 50,   hi: 99.99 },
+    { lab: '100×-200× stake        (мегатоп)',          lo: 100,  hi: 199.99 },
+    { lab: '200×+ stake            (jackpot tier)',     lo: 200,  hi: Infinity },
+  ]
+  const counts = buckets.map(() => 0)
+  let recoup = 0   // payouts >= costX
+  let profit = 0   // payouts > costX
+  let zero   = 0
+  let sum    = 0
+  let max    = 0
+  for (const x of payoutsX) {
+    sum += x
+    if (x > max) max = x
+    if (x === 0) zero++
+    if (x >= costX) recoup++
+    if (x >  costX) profit++
+    for (const b of buckets) {
+      if (x >= b.lo && x <= b.hi) { counts[buckets.indexOf(b)]++; break }
+    }
+  }
+  const N = payoutsX.length
+  console.log(`\n── ${label} (${N} bonuses, cost = ${costX}× stake) ──`)
+  for (let i = 0; i < buckets.length; i++) {
+    const pct = (counts[i] / N) * 100
+    console.log(`  ${buckets[i].lab.padEnd(38)} ${pct.toFixed(2).padStart(6)}%   (${counts[i]})`)
+  }
+  console.log(`  ────`)
+  console.log(`  средний выигрыш          : ${(sum / N).toFixed(2)}× stake`)
+  console.log(`  максимум                 : ${max.toFixed(0)}× stake`)
+  console.log(`  полный 0                 : ${(zero / N * 100).toFixed(2)}%`)
+  console.log(`  окуп (≥ ${costX}× stake)        : ${(recoup / N * 100).toFixed(2)}%`)
+  console.log(`  чистый профит (> ${costX}×)     : ${(profit / N * 100).toFixed(2)}%`)
+  console.log(`  RTP против стоимости     : ${(sum / (N * costX) * 100).toFixed(2)}%`)
+}
+
+// Triggered bonuses — the "free" ones that drop on regular play.
+{
+  const stake = 1
+  const payouts = []
+  const NEED = 10_000
+  let scanned = 0
+  while (payouts.length < NEED) {
+    const r = runRegularSpin(stake, null)
+    scanned++
+    if (r.triggeredBonus) {
+      const w = r.win + runBonusRound(stake)
+      payouts.push(w / stake)
+    }
+  }
+  console.log(`(scanned ${scanned} regular spins to collect ${NEED} triggered bonuses)`)
+  // Triggered bonus "costs" 1× stake — the spin's stake. User got the
+  // regular spin's natural matches included for free.
+  bonusHistogram('Выпадающий бонус (5+ монеток на доске)', payouts, 1)
+}
+
+// Bought bonuses — player pays stake × 100 to skip straight to bonus.
+{
+  const stake = 1
+  const payouts = []
+  for (let i = 0; i < 10_000; i++) {
+    const w = runBonusRound(stake)
+    payouts.push(w / stake)
+  }
+  bonusHistogram('Купленный бонус (cost = 100× stake)', payouts, 100)
+}
+
+// Win-size histogram on stake = 50 ₽ (so 1× stake = 50 ₽). User-facing.
+console.log('\n── Win histogram @ stake = 50 ₽ (100 000 spins) ──')
+{
+  const stake = 50
+  const buckets = [
+    { label: '0 ₽         (loss)',       lo: 0,   hi: 0   },
+    { label: '1-25 ₽      (<½ stake)',  lo: 1,   hi: 25  },
+    { label: '26-50 ₽     (≤ stake)',   lo: 26,  hi: 50  },
+    { label: '51-100 ₽    (1-2× stake)', lo: 51,  hi: 100 },
+    { label: '101-150 ₽   (2-3× stake)', lo: 101, hi: 150 },
+    { label: '151-300 ₽   (3-6× stake)', lo: 151, hi: 300 },
+    { label: '301-500 ₽   (6-10× stake)', lo: 301, hi: 500 },
+    { label: '501-1000 ₽  (10-20× stake)', lo: 501, hi: 1000 },
+    { label: '1001-5000 ₽ (20-100× stake)', lo: 1001, hi: 5000 },
+    { label: '5001+ ₽     (100×+ stake)', lo: 5001, hi: Infinity },
+  ]
+  const counts = buckets.map(() => 0)
+  let totalSpins = 0
+  for (let i = 0; i < 100_000; i++) {
+    totalSpins++
+    const r = runRegularSpin(stake, null)
+    let win = r.win
+    if (r.triggeredBonus) win += runBonusRound(stake)
+    win = Math.round(win)
+    for (let b = 0; b < buckets.length; b++) {
+      if (win >= buckets[b].lo && win <= buckets[b].hi) {
+        counts[b]++
+        break
+      }
+    }
+  }
+  for (let b = 0; b < buckets.length; b++) {
+    const pct = (counts[b] / totalSpins) * 100
+    console.log(`  ${buckets[b].label.padEnd(34)} ${pct.toFixed(2).padStart(6)}%   (${counts[b]} of ${totalSpins})`)
+  }
+}

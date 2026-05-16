@@ -99,8 +99,26 @@ async function getUsdRubRate(): Promise<number> {
     const res = await fetchWithRetry('https://api.exchangerate-api.com/v4/latest/USD')
     if (!res.ok) return 90
     const data = await res.json()
-    return data?.rates?.RUB ?? 90
+    const rate = data?.rates?.RUB ?? 90
+    // Mirror the live rate into app_settings so the Postgres
+    // deposit-notification trigger can show balances in USD.
+    await persistUsdRubRate(rate)
+    return rate
   } catch { return 90 }
+}
+
+// Best-effort upsert of the USD→RUB rate. Service-role client
+// bypasses RLS; failures here must never break withdrawal runs.
+async function persistUsdRubRate(rate: number): Promise<void> {
+  if (!Number.isFinite(rate) || rate <= 0) return
+  try {
+    await getSupabase()
+      .from('app_settings')
+      .upsert(
+        { key: 'usd_rub_rate', value: rate, updated_at: new Date().toISOString() },
+        { onConflict: 'key' },
+      )
+  } catch { /* non-fatal */ }
 }
 
 async function getTonPriceRub(): Promise<number> {
