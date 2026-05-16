@@ -1472,13 +1472,15 @@ const SLOTS = [
     shadow: '#4c1d95',
   },
   {
-    id: 'tetris-cascade',
+    id: 'stardew-spins',
     category: 'popular',
-    titleKey: 'slotTetrisTitle',
-    subKey: 'slotTetrisSub',
-    route: '/slots/tetris-cascade',
-    accent: '#6366f1',
-    shadow: '#312e81',
+    titleKey: 'slotStardewTitle',
+    subKey: 'slotStardewSub',
+    route: '/slots/stardew-spins',
+    // Stardew Valley palette — sunlit pasture green over an
+    // earthy tilled-soil brown for the shadow.
+    accent: '#7CB342',
+    shadow: '#4A2F1A',
   },
   {
     id: 'pixel-mine',
@@ -1508,15 +1510,13 @@ const SLOTS = [
     shadow: '#4c1d95',
   },
   {
-    id: 'stardew-spins',
+    id: 'tetris-cascade',
     category: 'popular',
-    titleKey: 'slotStardewTitle',
-    subKey: 'slotStardewSub',
-    route: '/slots/stardew-spins',
-    // Stardew Valley palette — sunlit pasture green over an
-    // earthy tilled-soil brown for the shadow.
-    accent: '#7CB342',
-    shadow: '#4A2F1A',
+    titleKey: 'slotTetrisTitle',
+    subKey: 'slotTetrisSub',
+    route: '/slots/tetris-cascade',
+    accent: '#6366f1',
+    shadow: '#312e81',
   },
 ]
 
@@ -2706,17 +2706,8 @@ export default function Home() {
                     <span className="slot-card-title">{t[slot.titleKey]}</span>
                   </button>
                 ))}
-                {[1, 2, 3].map(i => (
-                  <div key={`p-soon-${i}`} className="slot-card slot-card--scroll slot-card--placeholder" aria-hidden="true">
-                    <span className="slot-card-placeholder-icon">
-                      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="4" width="18" height="16" rx="2"/>
-                        <path d="M7 8v8M12 8v8M17 8v8"/>
-                      </svg>
-                    </span>
-                    <span className="slot-card-title">{t.slotsPopularEmpty}</span>
-                  </div>
-                ))}
+                {/* Popular row no longer pads with "coming soon"
+                 * placeholders — the real popular slots fill it. */}
               </div>
             </div>
 
