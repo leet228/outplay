@@ -2335,22 +2335,22 @@ function StardewSlotArtwork({ large = false, animated = false }) {
         <span className="stardew-slot-art-sun" />
         <span className="stardew-slot-art-cloud stardew-slot-art-cloud--one" />
         <span className="stardew-slot-art-cloud stardew-slot-art-cloud--two" />
-        {/* Tiny seasonal-wheel cue in the top-right corner — a
-          * pixel disc divided into 4 quadrants (spring / summer
-          * / fall / winter) with the indicator dot on summer. */}
-        <span className="stardew-slot-art-season-wheel">
-          <span className="stardew-slot-art-season-q stardew-slot-art-season-q--spring" />
-          <span className="stardew-slot-art-season-q stardew-slot-art-season-q--summer" />
-          <span className="stardew-slot-art-season-q stardew-slot-art-season-q--fall" />
-          <span className="stardew-slot-art-season-q stardew-slot-art-season-q--winter" />
-          <span className="stardew-slot-art-season-needle" />
-        </span>
       </div>
 
-      {/* Wooden frame around the grid + sunflower decoration. */}
-      <div className="stardew-slot-art-frame">
-        <span className="stardew-slot-art-sunflower" />
+      {/* Seasonal wheel — same 4-quadrant disc + needle + hub the
+        * live slot pins above its grid, no text. Centred over the
+        * field; needle frozen on Summer (top-right). */}
+      <span className="stardew-slot-art-season-wheel">
+        <span className="stardew-slot-art-season-q stardew-slot-art-season-q--spring" />
+        <span className="stardew-slot-art-season-q stardew-slot-art-season-q--summer" />
+        <span className="stardew-slot-art-season-q stardew-slot-art-season-q--fall" />
+        <span className="stardew-slot-art-season-q stardew-slot-art-season-q--winter" />
+        <span className="stardew-slot-art-season-needle" />
+        <span className="stardew-slot-art-season-hub" />
+      </span>
 
+      {/* Wooden frame around the grid. */}
+      <div className="stardew-slot-art-frame">
         <div className="stardew-slot-art-grid">
           {cells.map((crop, i) => (
             <span
@@ -2371,12 +2371,6 @@ function StardewSlotArtwork({ large = false, animated = false }) {
             </span>
           ))}
         </div>
-
-        {/* Floating +mult chip — only shown in the animated
-          * variant; pretends to celebrate the carrot combo. */}
-        {animated && (
-          <span className="stardew-slot-art-mult-chip">×24</span>
-        )}
       </div>
 
       {/* Grass tuft footer to anchor the frame in the field. */}

@@ -3256,30 +3256,34 @@
 
 .stardew-slot-art-cloud {
   position: absolute;
-  height: 12px;
+  height: 7px;
   background: #fff;
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow:
-    0 -6px 0 -2px #fff,
-    14px -2px 0 -3px #fff;
-  opacity: 0.92;
+    0 -4px 0 -2px #fff,
+    9px -1px 0 -3px #fff;
+  opacity: 0.9;
 }
-.stardew-slot-art-cloud--one { top: 18%; left: 48%; width: 36px; }
-.stardew-slot-art-cloud--two { top: 38%; left: 30%; width: 24px; opacity: 0.78; }
+.stardew-slot-art-cloud--one { top: 16%; left: 14%; width: 22px; }
+.stardew-slot-art-cloud--two { top: 40%; left: 70%; width: 15px; opacity: 0.72; }
 
-/* Mini seasonal wheel — pixel disc with 4 quadrants and a
- * little needle pointing at summer (top-right). */
+/* Seasonal wheel — the SAME disc the live slot pins above its
+ * grid (4 quadrants + brown needle + hub), no text. Centred
+ * horizontally and sat just above the wooden frame. */
 .stardew-slot-art-season-wheel {
   position: absolute;
-  top: 8%;
-  right: 8%;
-  width: 28px;
-  height: 28px;
+  top: 17%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: #F5E6D3;
   box-shadow:
-    0 0 0 2px #6B4423,
-    0 2px 0 0 rgba(0, 0, 0, 0.25);
+    inset 0 0 0 2px #6B4423,
+    0 2px 0 #4A2F1A,
+    0 4px 9px rgba(0, 0, 0, 0.22);
   overflow: hidden;
 }
 .stardew-slot-art-season-q {
@@ -3291,17 +3295,27 @@
 .stardew-slot-art-season-q--summer { top: 0;  right: 0; background: #FFD54F; } /* sunny gold */
 .stardew-slot-art-season-q--fall   { bottom: 0; right: 0; background: #FF8A65; } /* harvest orange */
 .stardew-slot-art-season-q--winter { bottom: 0; left: 0;  background: #B3E5FC; } /* snow blue */
-/* Needle — a tiny brown wedge pointing into the summer quadrant. */
+/* Needle — brown wedge pointing into the summer quadrant. */
 .stardew-slot-art-season-needle {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 2px;
-  height: 9px;
+  width: 2.5px;
+  height: 11px;
   background: #4A2F1A;
-  border-radius: 1px;
+  border-radius: 1.5px;
   transform-origin: 50% 100%;
   transform: translate(-50%, -100%) rotate(45deg);
+}
+.stardew-slot-art-season-hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #6B4423;
+  transform: translate(-50%, -50%);
 }
 
 /* ── Wooden frame ── */
@@ -3323,29 +3337,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Decorative sunflower poking out of the left side of the frame. */
-.stardew-slot-art-sunflower {
-  position: absolute;
-  top: 12%;
-  left: -10%;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #4A2F1A;
-  box-shadow:
-    0 -10px 0 -2px #FFC107,
-    0 10px 0 -2px #FFC107,
-   -10px 0 0 -2px #FFC107,
-    10px 0 0 -2px #FFC107,
-   -7px -7px 0 -3px #FFC107,
-    7px -7px 0 -3px #FFC107,
-   -7px  7px 0 -3px #FFC107,
-    7px  7px 0 -3px #FFC107,
-    /* short stem dropping into the grass */
-    0 18px 0 -4px #2E7D32,
-    0 30px 0 -4px #2E7D32;
 }
 
 /* ── 6×5 grid of tilled dirt ── */
@@ -3433,32 +3424,6 @@
   50%      { transform: scale(1.12);  filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.85)); }
 }
 
-/* +mult chip — celebratory chip over the winning combo. */
-.stardew-slot-art-mult-chip {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) translateY(-30%);
-  background: #FFC107;
-  color: #4A2F1A;
-  font-family: inherit;
-  font-weight: 800;
-  font-size: 14px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  box-shadow:
-    0 0 0 2px #6B4423,
-    0 4px 0 #B8860B,
-    0 8px 16px rgba(0, 0, 0, 0.3);
-  letter-spacing: 0.4px;
-  animation: stardew-chip-float 1.6s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes stardew-chip-float {
-  0%, 100% { transform: translate(-50%, -50%) translateY(-30%); }
-  50%      { transform: translate(-50%, -50%) translateY(-45%); }
-}
-
 /* ── Grass footer ── */
 .stardew-slot-art-grass {
   position: absolute;
@@ -3475,21 +3440,18 @@
   border-bottom-right-radius: inherit;
 }
 
-/* Large variant (preview overlay) scales everything up a touch
- * and lets the +mult chip read at a more confident size. */
+/* Large variant (preview overlay) scales everything up a touch. */
 .stardew-slot-card-art--large .stardew-slot-art-sun {
   width: 30px;
   height: 30px;
   top: 16%;
   left: 16%;
 }
-.stardew-slot-card-art--large .stardew-slot-art-cloud--one { width: 48px; height: 14px; }
-.stardew-slot-card-art--large .stardew-slot-art-cloud--two { width: 30px; height: 12px; }
+.stardew-slot-card-art--large .stardew-slot-art-cloud--one { width: 30px; height: 9px; }
+.stardew-slot-card-art--large .stardew-slot-art-cloud--two { width: 20px; height: 8px; }
 .stardew-slot-card-art--large .stardew-slot-art-season-wheel {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
 }
-.stardew-slot-card-art--large .stardew-slot-art-mult-chip {
-  font-size: 18px;
-  padding: 6px 14px;
-}
+.stardew-slot-card-art--large .stardew-slot-art-season-needle { height: 15px; }
+.stardew-slot-card-art--large .stardew-slot-art-season-hub { width: 6px; height: 6px; }
