@@ -9,7 +9,7 @@ import { beginCell as tonBeginCell, Address as TonAddress } from '@ton/core'
 import useGameStore from '../store/useGameStore'
 import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
 import { createStarsInvoice, processDeposit, getUserBalance, supabase } from '../lib/supabase'
-import { formatCurrency, convertFromRub, fetchTonPrice } from '../lib/currency'
+import { formatCurrency, convertFromRub, fetchTonPrice, fetchCoinPriceUsd } from '../lib/currency'
 import { translations } from '../lib/i18n'
 import { TON_ADDRESS, USDT_ADDRESS, USDT_MASTER } from '../lib/addresses'
 import tgStarSrc      from '../assets/star/tgstar.png'
@@ -49,16 +49,20 @@ const SOON_COINS = [
   // backend yet) — a fixed, realistic-looking address per network
   // so the detail screen is fully functional (copy works) without
   // memo. `warnNet` is the clean network name for the warning copy.
-  { id: 'usdt-trc20', name: 'USDT',     net: '(TRC 20)',         warnNet: 'Tron (TRC20)',            art: usdtIconSrc, hero: smallUsdtSrc, badge: trxBadgeSrc, addr: 'TQ5nP8mK2vJrW7xYbCf3dHs9LtA4eR6uZn' },
-  { id: 'usdt-bep20', name: 'USDT',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', art: usdtIconSrc, hero: smallUsdtSrc, badge: bnbBadgeSrc, addr: '0x7D3aF1c8E2b9046A5fC1d7E83b2A6c904D1e5B72' },
-  { id: 'trx',        name: 'TRX',      net: '(Tron)',           warnNet: 'Tron',                    art: trxIconSrc,  hero: smallTrxSrc,  badge: null,        addr: 'TXh9Rb2KpL4mN6vQ8sY1cD3fG5jW7uZ0aE' },
-  { id: 'eth',        name: 'ETH',      net: '(Ethereum)',       warnNet: 'Ethereum (ERC20)',        art: ethIconSrc,  hero: smallEthSrc,  badge: null,        addr: '0x9F4c8A1b2E7d6C3f0A5B8e1D2c3F4a5B6c7D8E9F' },
-  { id: 'btc',        name: 'BTC',      net: '(Bitcoin)',        warnNet: 'Bitcoin',                 art: btcIconSrc,  hero: smallBtcSrc,  badge: null,        addr: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq' },
-  { id: 'usdt-erc20', name: 'USDT',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        art: usdtIconSrc, hero: smallUsdtSrc, badge: ethBadgeSrc, addr: '0x2B6d9E0a4C1f7385bD2e9A0c6F1b8D3e5A7c4F90' },
-  { id: 'usdc-erc20', name: 'USDC',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        art: usdcIconSrc, hero: smallUsdcSrc, badge: ethBadgeSrc, addr: '0x5C1a8F3b9D2e7064aE0c1B7f4D8e3A2c6B9d0E15' },
-  { id: 'bnb',        name: 'BNB',      net: '(Binance\nchain)', warnNet: 'BNB Smart Chain (BEP20)', art: bnbIconSrc,  hero: smallBnbSrc,  badge: null,        addr: '0x3A1f5D8c9B2e7A4d6C0b1F8e2D3c4A5b6C7d8E90' },
-  { id: 'ltc',        name: 'Litecoin', net: '',                 warnNet: 'Litecoin',                art: ltcIconSrc,  hero: smallLtcSrc,  badge: null,        addr: 'ltc1qhxtthnq8e7fjz0mn0z6q9qg3z4k5l6m7n8p9q0' },
-  { id: 'usdc-bep20', name: 'USDC',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', art: usdcIconSrc, hero: smallUsdcSrc, badge: bnbBadgeSrc, addr: '0x8E0c4A7d1B3f9265aC2e0B8f5D1e7A3c4B6d9F02' },
+  // `sym` is the ticker shown after the ≈ min amount. Stablecoins
+  // are USD-pegged (`pegged: true`, no fetch — same as USDT(TON)).
+  // Other coins carry a CoinLore `priceId` and get a live USD
+  // price exactly like TON (fetchCoinPriceUsd, same 5-min cache).
+  { id: 'usdt-trc20', name: 'USDT',     net: '(TRC 20)',         warnNet: 'Tron (TRC20)',            sym: 'USDT', pegged: true, priceId: null,  art: usdtIconSrc, hero: smallUsdtSrc, badge: trxBadgeSrc, addr: 'TQ5nP8mK2vJrW7xYbCf3dHs9LtA4eR6uZn' },
+  { id: 'usdt-bep20', name: 'USDT',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', sym: 'USDT', pegged: true, priceId: null,  art: usdtIconSrc, hero: smallUsdtSrc, badge: bnbBadgeSrc, addr: '0x7D3aF1c8E2b9046A5fC1d7E83b2A6c904D1e5B72' },
+  { id: 'trx',        name: 'TRX',      net: '(Tron)',           warnNet: 'Tron',                    sym: 'TRX',  pegged: false, priceId: 2713, art: trxIconSrc,  hero: smallTrxSrc,  badge: null,        addr: 'TXh9Rb2KpL4mN6vQ8sY1cD3fG5jW7uZ0aE' },
+  { id: 'eth',        name: 'ETH',      net: '(Ethereum)',       warnNet: 'Ethereum (ERC20)',        sym: 'ETH',  pegged: false, priceId: 80,   art: ethIconSrc,  hero: smallEthSrc,  badge: null,        addr: '0x9F4c8A1b2E7d6C3f0A5B8e1D2c3F4a5B6c7D8E9F' },
+  { id: 'btc',        name: 'BTC',      net: '(Bitcoin)',        warnNet: 'Bitcoin',                 sym: 'BTC',  pegged: false, priceId: 90,   art: btcIconSrc,  hero: smallBtcSrc,  badge: null,        addr: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq' },
+  { id: 'usdt-erc20', name: 'USDT',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        sym: 'USDT', pegged: true, priceId: null,  art: usdtIconSrc, hero: smallUsdtSrc, badge: ethBadgeSrc, addr: '0x2B6d9E0a4C1f7385bD2e9A0c6F1b8D3e5A7c4F90' },
+  { id: 'usdc-erc20', name: 'USDC',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        sym: 'USDC', pegged: true, priceId: null,  art: usdcIconSrc, hero: smallUsdcSrc, badge: ethBadgeSrc, addr: '0x5C1a8F3b9D2e7064aE0c1B7f4D8e3A2c6B9d0E15' },
+  { id: 'bnb',        name: 'BNB',      net: '(Binance\nchain)', warnNet: 'BNB Smart Chain (BEP20)', sym: 'BNB',  pegged: false, priceId: 2710, art: bnbIconSrc,  hero: smallBnbSrc,  badge: null,        addr: '0x3A1f5D8c9B2e7A4d6C0b1F8e2D3c4A5b6C7d8E90' },
+  { id: 'ltc',        name: 'Litecoin', net: '',                 warnNet: 'Litecoin',                sym: 'LTC',  pegged: false, priceId: 1,    art: ltcIconSrc,  hero: smallLtcSrc,  badge: null,        addr: 'ltc1qhxtthnq8e7fjz0mn0z6q9qg3z4k5l6m7n8p9q0' },
+  { id: 'usdc-bep20', name: 'USDC',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', sym: 'USDC', pegged: true, priceId: null,  art: usdcIconSrc, hero: smallUsdcSrc, badge: bnbBadgeSrc, addr: '0x8E0c4A7d1B3f9265aC2e0B8f5D1e7A3c4B6d9F02' },
 ]
 
 const PRESETS = [100, 500, 1000]
@@ -194,6 +198,9 @@ export default function DepositSheet() {
   const [status, setStatus] = useState('idle')
   const [copiedField, setCopiedField] = useState(null) // 'address' | 'memo'
   const [tonPrice, setTonPrice] = useState(null)       // USD per 1 TON
+  // USD per 1 unit of the currently-open extra-chain coin (live,
+  // CoinLore). null until resolved / for pegged stablecoins.
+  const [coinPrice, setCoinPrice] = useState(null)
   const successAmountRef = useRef(0)
   const invoiceTxRef = useRef(null) // shared tx_id between webhook & client
 
@@ -252,6 +259,21 @@ export default function DepositSheet() {
     }
   }, [view])
 
+  // Live USD price for the open extra-chain coin — same source /
+  // cache as TON. Stablecoins are pegged so they skip the fetch
+  // (handled in the minCoin math below). Resets while loading so
+  // the "≈ X COIN" line stays hidden until a real number lands.
+  useEffect(() => {
+    if (view !== 'soon' || !soonCoin) return
+    setCoinPrice(null)
+    if (soonCoin.pegged || !soonCoin.priceId) return
+    let cancelled = false
+    fetchCoinPriceUsd(soonCoin.priceId).then(p => {
+      if (!cancelled && p > 0) setCoinPrice(p)
+    })
+    return () => { cancelled = true }
+  }, [view, soonCoin])
+
   const activeAmount = custom !== '' ? Number(custom) : selected
   const isCustomValid = custom === '' || Number(custom) >= MIN_STARS
   const canBuy = activeAmount >= MIN_STARS && isCustomValid && !loading
@@ -293,6 +315,7 @@ export default function DepositSheet() {
       setTimeout(() => {
         setView('main')
         setSoonCoin(null)
+        setCoinPrice(null)
         setCustom('')
         setSelected(100)
         setLoading(false)
@@ -842,6 +865,25 @@ export default function DepositSheet() {
   // are smaller per unit so 3 decimals reads better).
   const fmtUsdt = minUsdt != null ? `${minUsdt.toFixed(2)} USDT` : null
   const fmtTon  = minTon  != null ? `${minTon.toFixed(3)} TON`  : null
+
+  // Crypto equivalent of 200 ₽ for the open extra-chain coin:
+  //   pegged stablecoin (USDT/USDC) → equals the USD amount;
+  //   everything else → USD / live coin price (same as TON).
+  // Decimal places scale with unit size so BTC (~0.00003) and
+  // TRX (~20) both read cleanly.
+  const minCoin = (() => {
+    if (view !== 'soon' || !soonCoin) return null
+    const usd = convertFromRub(MIN_RUB, 'USD', rates)
+    if (!(usd > 0)) return null
+    if (soonCoin.pegged) return usd
+    if (!coinPrice || coinPrice <= 0) return null
+    return usd / coinPrice
+  })()
+  const fmtCoin = (() => {
+    if (minCoin == null || !soonCoin) return null
+    const dp = minCoin < 0.001 ? 8 : minCoin < 1 ? 6 : minCoin < 100 ? 4 : 2
+    return `${minCoin.toFixed(dp)} ${soonCoin.sym}`
+  })()
 
   // ── Live fiat-equivalent helpers for the wallet-deposit views ──
   // Both helpers expect the entered coin amount as a string from
@@ -1463,7 +1505,10 @@ export default function DepositSheet() {
             <div className="deposit-crypto-info-block">
               <div className="deposit-crypto-info-row">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                <span>{t.depositCryptoMin}: <strong>{minFormatted}</strong></span>
+                <span>
+                  {t.depositCryptoMin}: <strong>{minFormatted}</strong>
+                  {fmtCoin && <span className="deposit-crypto-min-crypto">{' · ≈ '}{fmtCoin}</span>}
+                </span>
               </div>
               <div className="deposit-crypto-info-row">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>

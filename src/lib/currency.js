@@ -88,6 +88,49 @@ export async function fetchTonPrice() {
   return TON_PRICE_FALLBACK
 }
 
+// Generic live USD price for any CoinLore-listed coin — same
+// source / 5-min cache discipline as fetchTonPrice, just keyed
+// per coin id so the deposit sheet's extra chains (BTC/ETH/BNB/
+// TRX/LTC) read a real rate exactly like TON does. Returns null
+// (never a hardcoded guess) when the API + cache both miss, so
+// the UI can hide the "≈ X COIN" line instead of lying.
+const COIN_PRICE_CACHE_PREFIX = 'outplay_coin_price_'
+const COIN_PRICE_CACHE_TTL = 5 * 60 * 1000 // 5 min, like TON
+
+export async function fetchCoinPriceUsd(coinloreId) {
+  if (!coinloreId) return null
+  const key = COIN_PRICE_CACHE_PREFIX + coinloreId
+  const readCacheEntry = () => {
+    try {
+      const raw = localStorage.getItem(key)
+      if (!raw) return null
+      const { price, ts } = JSON.parse(raw)
+      if (!price || !ts) return null
+      return { price, fresh: Date.now() - ts < COIN_PRICE_CACHE_TTL }
+    } catch { return null }
+  }
+
+  const cached = readCacheEntry()
+  if (cached && cached.fresh) return cached.price
+
+  try {
+    const res = await fetch(`https://api.coinlore.net/api/ticker/?id=${coinloreId}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const price = parseFloat(data?.[0]?.price_usd)
+    if (Number.isFinite(price) && price > 0) {
+      try { localStorage.setItem(key, JSON.stringify({ price, ts: Date.now() })) } catch { /* quota */ }
+      return price
+    }
+    throw new Error('no price in response')
+  } catch (err) {
+    console.warn('fetchCoinPriceUsd failed:', err.message)
+  }
+
+  if (cached) return cached.price
+  return null
+}
+
 function readTonPriceCache() {
   try {
     const raw = localStorage.getItem(TON_PRICE_CACHE_KEY)
