@@ -131,29 +131,37 @@ serve(async (req) => {
     const walletAddr = getWalletAddress(kp.publicKey)
     const client = new TonClient({ endpoint: TONCENTER_ENDPOINT, apiKey: TONCENTER_API_KEY })
 
-    // Resolve a STON.fi router (prefer the latest major version).
+    // STON.fi routers. We FIRST simulate to learn which router/
+    // pool the route actually goes through, then build the tx with
+    // THAT exact router (picking an arbitrary one made the on-chain
+    // swap bounce — "Failed").
     const api = new StonApiClient()
     const routers = await api.getRouters()
-    const routerInfo = routers
-      .sort((a: any, b: any) => (b.majorVersion ?? 0) - (a.majorVersion ?? 0))[0]
-    if (!routerInfo) return json({ error: 'no_router' }, 502)
-    const dex = dexFactory(routerInfo)
-    const router = client.open(dex.Router.create(routerInfo.address))
-    const proxyTon = dex.pTON.create(routerInfo.ptonMasterAddress)
+    if (!routers || routers.length === 0) return json({ error: 'no_router' }, 502)
+    const sameAddr = (a: string, b: string) => {
+      try { return Address.parse(a).equals(Address.parse(b)) } catch { return a === b }
+    }
+    // A candidate just to get a pTON master for the simulate call.
+    const cand = [...routers].sort(
+      (a: any, b: any) => (b.majorVersion ?? 0) - (a.majorVersion ?? 0))[0]
+    const dexV2 = Number(cand.majorVersion ?? 1) >= 2
+    const minOut = (q: any) =>
+      BigInt(q.min_ask_units ?? q.minAskUnits ?? q.min_out ?? 0)
 
     let params: { to: Address; value: bigint; body: Cell }
     let quote: any
 
-    const dexV2 = Number(routerInfo.majorVersion ?? 1) >= 2
-    const minOut = (q: any) =>
-      BigInt(q.min_ask_units ?? q.minAskUnits ?? q.min_out ?? 0)
-
     if (dir === 'ton_to_usdt') {
       const offerNano = toNano(String(amount))                 // TON, 9 dec
       quote = await stonSimulate(
-        routerInfo.ptonMasterAddress, USDT_MASTER,
+        cand.ptonMasterAddress, USDT_MASTER,
         offerNano.toString(), slip, dexV2,
       )
+      const chosen = routers.find((r: any) =>
+        quote.router_address && sameAddr(r.address, quote.router_address)) || cand
+      const dex = dexFactory(chosen)
+      const router = client.open(dex.Router.create(chosen.address))
+      const proxyTon = dex.pTON.create(chosen.ptonMasterAddress)
       params = await router.getSwapTonToJettonTxParams({
         userWalletAddress: walletAddr,
         proxyTon,
@@ -165,9 +173,14 @@ serve(async (req) => {
     } else {
       const offerUnits = BigInt(Math.round(Number(amount) * 1e6)) // USDT, 6 dec
       quote = await stonSimulate(
-        USDT_MASTER, routerInfo.ptonMasterAddress,
+        USDT_MASTER, cand.ptonMasterAddress,
         offerUnits.toString(), slip, dexV2,
       )
+      const chosen = routers.find((r: any) =>
+        quote.router_address && sameAddr(r.address, quote.router_address)) || cand
+      const dex = dexFactory(chosen)
+      const router = client.open(dex.Router.create(chosen.address))
+      const proxyTon = dex.pTON.create(chosen.ptonMasterAddress)
       params = await router.getSwapJettonToTonTxParams({
         userWalletAddress: walletAddr,
         proxyTon,
@@ -191,6 +204,7 @@ serve(async (req) => {
         dir, amount: String(amount), slip,
         expect_out: quote?.ask_units ?? quote?.askUnits,
         min_out: quote?.min_ask_units ?? quote?.minAskUnits,
+        router: quote?.router_address, pool: quote?.pool_address,
       },
     })
     return json({
