@@ -47,7 +47,7 @@ BEGIN
   ) b;
 
   -- Last 15 jobs (any status) for the activity feed.
-  SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY r.created_at DESC), '[]'::jsonb) INTO v_recent
+  SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY r.age_min), '[]'::jsonb) INTO v_recent
   FROM (
     SELECT chain, amount, status, attempts, last_error,
            sweep_txid, gas_txid,
