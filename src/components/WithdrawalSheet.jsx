@@ -46,22 +46,14 @@ const NET_NAME = {
 }
 const ADDR_NET = { ton: 'TON', tron: 'Tron', evm: 'EVM 0x…' }
 const COINS = [
-  { id: 'ton',        kind: 'ton',       name: 'TON',  sub: 'Toncoin',   sym: 'TON',  addr: 'ton',  hero: smallTonSrc,  art: tonIconSrc,  badge: null,
-    desc: { ru: 'Сеть TON (Toncoin)\nУкажите адрес TON-кошелька', en: 'TON (Toncoin) network\nEnter your TON wallet address' } },
-  { id: 'usdt-ton',   kind: 'usdt-ton',  name: 'USDT', sub: 'Toncoin',   sym: 'USDT', addr: 'ton',  hero: smallUsdtSrc, art: usdtIconSrc, badge: tonBadgeSrc,
-    desc: { ru: 'USDT в сети TON (Toncoin)\nУкажите адрес TON-кошелька', en: 'USDT on the TON network\nEnter your TON wallet address' } },
-  { id: 'usdt-trc20', kind: 'crypto', chain: 'usdt-trc20', name: 'USDT', sub: 'TRC20',     sym: 'USDT', addr: 'tron', hero: smallUsdtSrc, art: usdtIconSrc, badge: trxBadgeSrc,
-    desc: { ru: 'USDT в сети Tron (TRC20)\nУкажите адрес Tron-кошелька', en: 'USDT on Tron (TRC20)\nEnter your Tron wallet address' } },
-  { id: 'trx',        kind: 'crypto', chain: 'trx',        name: 'TRX',  sub: 'Tron',      sym: 'TRX',  addr: 'tron', hero: smallTrxSrc,  art: trxIconSrc,  badge: null,
-    desc: { ru: 'Сеть Tron\nУкажите адрес Tron-кошелька', en: 'Tron network\nEnter your Tron wallet address' } },
-  { id: 'eth',        kind: 'crypto', chain: 'eth',        name: 'ETH',  sub: 'Ethereum',  sym: 'ETH',  addr: 'evm',  hero: smallEthSrc,  art: ethIconSrc,  badge: null,
-    desc: { ru: 'Сеть Ethereum (ERC20)\nУкажите адрес ETH-кошелька (0x…)', en: 'Ethereum network (ERC20)\nEnter your ETH wallet address (0x…)' } },
-  { id: 'usdt-erc20', kind: 'crypto', chain: 'usdt-erc20', name: 'USDT', sub: 'ERC20',     sym: 'USDT', addr: 'evm',  hero: smallUsdtSrc, art: usdtIconSrc, badge: ethBadgeSrc,
-    desc: { ru: 'USDT в сети Ethereum (ERC20)\nУкажите адрес ERC20-кошелька (0x…)', en: 'USDT on Ethereum (ERC20)\nEnter your ERC20 wallet address (0x…)' } },
-  { id: 'usdc-erc20', kind: 'crypto', chain: 'usdc-erc20', name: 'USDC', sub: 'ERC20',     sym: 'USDC', addr: 'evm',  hero: smallUsdcSrc, art: usdcIconSrc, badge: ethBadgeSrc,
-    desc: { ru: 'USDC в сети Ethereum (ERC20)\nУкажите адрес ERC20-кошелька (0x…)', en: 'USDC on Ethereum (ERC20)\nEnter your ERC20 wallet address (0x…)' } },
-  { id: 'usdc-bep20', kind: 'crypto', chain: 'usdc-bep20', name: 'USDC', sub: 'BEP20',     sym: 'USDC', addr: 'evm',  hero: smallUsdcSrc, art: usdcIconSrc, badge: bnbBadgeSrc,
-    desc: { ru: 'USDC в сети BNB Smart Chain (BEP20)\nУкажите адрес BEP20-кошелька (0x…)', en: 'USDC on BNB Smart Chain (BEP20)\nEnter your BEP20 wallet address (0x…)' } },
+  { id: 'ton',        kind: 'ton',       name: 'TON',  sub: 'Toncoin',   sym: 'TON',  addr: 'ton',  hero: smallTonSrc,  art: tonIconSrc,  badge: null },
+  { id: 'usdt-ton',   kind: 'usdt-ton',  name: 'USDT', sub: 'Toncoin',   sym: 'USDT', addr: 'ton',  hero: smallUsdtSrc, art: usdtIconSrc, badge: tonBadgeSrc },
+  { id: 'usdt-trc20', kind: 'crypto', chain: 'usdt-trc20', name: 'USDT', sub: 'TRC20',     sym: 'USDT', addr: 'tron', hero: smallUsdtSrc, art: usdtIconSrc, badge: trxBadgeSrc },
+  { id: 'trx',        kind: 'crypto', chain: 'trx',        name: 'TRX',  sub: 'Tron',      sym: 'TRX',  addr: 'tron', hero: smallTrxSrc,  art: trxIconSrc,  badge: null },
+  { id: 'eth',        kind: 'crypto', chain: 'eth',        name: 'ETH',  sub: 'Ethereum',  sym: 'ETH',  addr: 'evm',  hero: smallEthSrc,  art: ethIconSrc,  badge: null },
+  { id: 'usdt-erc20', kind: 'crypto', chain: 'usdt-erc20', name: 'USDT', sub: 'ERC20',     sym: 'USDT', addr: 'evm',  hero: smallUsdtSrc, art: usdtIconSrc, badge: ethBadgeSrc },
+  { id: 'usdc-erc20', kind: 'crypto', chain: 'usdc-erc20', name: 'USDC', sub: 'ERC20',     sym: 'USDC', addr: 'evm',  hero: smallUsdcSrc, art: usdcIconSrc, badge: ethBadgeSrc },
+  { id: 'usdc-bep20', kind: 'crypto', chain: 'usdc-bep20', name: 'USDC', sub: 'BEP20',     sym: 'USDC', addr: 'evm',  hero: smallUsdcSrc, art: usdcIconSrc, badge: bnbBadgeSrc },
 ]
 
 function isValidTonAddress(addr) {
@@ -246,13 +238,14 @@ export default function WithdrawalSheet() {
   const showWalletError = walletTouched && wallet.length > 0 && !walletValid
   const showAmountError = amountTouched && numAmount > 0 && !amountValid
 
-  // Per-coin texts (network fee label + invalid-address message).
+  // Per-coin texts: network names are proper nouns (component
+  // data); the sentences come from i18n with a {net} placeholder.
   const netName = coin ? (NET_NAME[coin.id] || coin.sub) : ''
   const addrNet = coin ? (ADDR_NET[coin.addr] || '') : ''
-  const gasLabel = lang === 'ru' ? `Комиссия сети ${netName}` : `${netName} network fee`
-  const invalidAddrMsg = lang === 'ru'
-    ? `Неверный адрес кошелька (${addrNet})`
-    : `Invalid wallet address (${addrNet})`
+  const rep = (s, v) => (s || '').replace(/\{net\}/g, v)
+  const gasLabel = rep(t.withdrawGas, netName)
+  const invalidAddrMsg = rep(t.withdrawInvalidAddress, addrNet)
+  const netDesc = rep(t.withdrawNetDesc, netName)
 
   return (
     <>
@@ -345,7 +338,7 @@ export default function WithdrawalSheet() {
                 </div>
                 <div className="wd-ton-text">
                   <span className="wd-ton-title">{coin.name} <span style={{ opacity: 0.5, fontWeight: 500 }}>· {coin.sub}</span></span>
-                  <span className="wd-ton-desc">{coin.desc?.[lang] || coin.desc?.en}</span>
+                  <span className="wd-ton-desc">{netDesc}</span>
                 </div>
               </div>
 
