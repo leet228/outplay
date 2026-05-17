@@ -41,7 +41,10 @@ const TONCENTER_ENDPOINT = 'https://toncenter.com/api/v2/jsonRPC'
 const TRON_API     = 'https://trx.nownodes.io'
 // SunSwap Smart Router (the classic V2 router is deprecated).
 // Overridable via env in case SunSwap rotates it.
-const SUN_ROUTER   = Deno.env.get('SUNSWAP_ROUTER') || 'TCFNp179Lg46D16zKoumd4Poa2WFFdtqYj'
+// Current SunSwap Smart Router (mainnet). TCFNp179… and
+// TKzxdSv2… are DEPRECATED — funds sent there do nothing.
+// Overridable via env if SunSwap rotates it again.
+const SUN_ROUTER   = Deno.env.get('SUNSWAP_ROUTER') || 'TQAvWQpT9H916GckwWDJNhYZvQMkuRL7PN'
 const SUN_API      = 'https://rot.endjgfsv.link/swap/router'
 const WTRX         = 'TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR'      // Wrapped TRX (native repr in the router API)
 const TRON_USDT    = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'      // USDT-TRC20
