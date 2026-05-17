@@ -30,6 +30,14 @@ import usdcIconSrc    from '../assets/crypto/usdc.svg'
 import trxBadgeSrc    from '../assets/crypto/small_trx_for_usdt.svg'
 import bnbBadgeSrc    from '../assets/crypto/small_bnb_for_usdt.svg'
 import ethBadgeSrc    from '../assets/crypto/small_eth_for_usdt.svg'
+// "small" hero icons — bare disc, matching the SmallTon/SmallUsdt
+// hero style used by the TON/USDT detail screens.
+import smallTrxSrc    from '../assets/crypto/small_trx.svg'
+import smallBtcSrc    from '../assets/crypto/small_btc.svg'
+import smallEthSrc    from '../assets/crypto/small_eth.svg'
+import smallBnbSrc    from '../assets/crypto/small_bnb.svg'
+import smallLtcSrc    from '../assets/crypto/small_litecoin.svg'
+import smallUsdcSrc   from '../assets/crypto/small_usdc.svg'
 import './DepositSheet.css'
 
 // Extra crypto cards shown after TON / USDT(TON). Order mirrors
@@ -41,16 +49,16 @@ const SOON_COINS = [
   // backend yet) — a fixed, realistic-looking address per network
   // so the detail screen is fully functional (copy works) without
   // memo. `warnNet` is the clean network name for the warning copy.
-  { id: 'usdt-trc20', name: 'USDT',     net: '(TRC 20)',         warnNet: 'Tron (TRC20)',            art: usdtIconSrc, badge: trxBadgeSrc, addr: 'TQ5nP8mK2vJrW7xYbCf3dHs9LtA4eR6uZn' },
-  { id: 'usdt-bep20', name: 'USDT',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', art: usdtIconSrc, badge: bnbBadgeSrc, addr: '0x7D3aF1c8E2b9046A5fC1d7E83b2A6c904D1e5B72' },
-  { id: 'trx',        name: 'TRX',      net: '(Tron)',           warnNet: 'Tron',                    art: trxIconSrc,  badge: null,        addr: 'TXh9Rb2KpL4mN6vQ8sY1cD3fG5jW7uZ0aE' },
-  { id: 'eth',        name: 'ETH',      net: '(Ethereum)',       warnNet: 'Ethereum (ERC20)',        art: ethIconSrc,  badge: null,        addr: '0x9F4c8A1b2E7d6C3f0A5B8e1D2c3F4a5B6c7D8E9F' },
-  { id: 'btc',        name: 'BTC',      net: '(Bitcoin)',        warnNet: 'Bitcoin',                 art: btcIconSrc,  badge: null,        addr: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq' },
-  { id: 'usdt-erc20', name: 'USDT',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        art: usdtIconSrc, badge: ethBadgeSrc, addr: '0x2B6d9E0a4C1f7385bD2e9A0c6F1b8D3e5A7c4F90' },
-  { id: 'usdc-erc20', name: 'USDC',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        art: usdcIconSrc, badge: ethBadgeSrc, addr: '0x5C1a8F3b9D2e7064aE0c1B7f4D8e3A2c6B9d0E15' },
-  { id: 'bnb',        name: 'BNB',      net: '(Binance\nchain)', warnNet: 'BNB Smart Chain (BEP20)', art: bnbIconSrc,  badge: null,        addr: '0x3A1f5D8c9B2e7A4d6C0b1F8e2D3c4A5b6C7d8E90' },
-  { id: 'ltc',        name: 'Litecoin', net: '',                 warnNet: 'Litecoin',                art: ltcIconSrc,  badge: null,        addr: 'ltc1qhxtthnq8e7fjz0mn0z6q9qg3z4k5l6m7n8p9q0' },
-  { id: 'usdc-bep20', name: 'USDC',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', art: usdcIconSrc, badge: bnbBadgeSrc, addr: '0x8E0c4A7d1B3f9265aC2e0B8f5D1e7A3c4B6d9F02' },
+  { id: 'usdt-trc20', name: 'USDT',     net: '(TRC 20)',         warnNet: 'Tron (TRC20)',            art: usdtIconSrc, hero: smallUsdtSrc, badge: trxBadgeSrc, addr: 'TQ5nP8mK2vJrW7xYbCf3dHs9LtA4eR6uZn' },
+  { id: 'usdt-bep20', name: 'USDT',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', art: usdtIconSrc, hero: smallUsdtSrc, badge: bnbBadgeSrc, addr: '0x7D3aF1c8E2b9046A5fC1d7E83b2A6c904D1e5B72' },
+  { id: 'trx',        name: 'TRX',      net: '(Tron)',           warnNet: 'Tron',                    art: trxIconSrc,  hero: smallTrxSrc,  badge: null,        addr: 'TXh9Rb2KpL4mN6vQ8sY1cD3fG5jW7uZ0aE' },
+  { id: 'eth',        name: 'ETH',      net: '(Ethereum)',       warnNet: 'Ethereum (ERC20)',        art: ethIconSrc,  hero: smallEthSrc,  badge: null,        addr: '0x9F4c8A1b2E7d6C3f0A5B8e1D2c3F4a5B6c7D8E9F' },
+  { id: 'btc',        name: 'BTC',      net: '(Bitcoin)',        warnNet: 'Bitcoin',                 art: btcIconSrc,  hero: smallBtcSrc,  badge: null,        addr: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq' },
+  { id: 'usdt-erc20', name: 'USDT',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        art: usdtIconSrc, hero: smallUsdtSrc, badge: ethBadgeSrc, addr: '0x2B6d9E0a4C1f7385bD2e9A0c6F1b8D3e5A7c4F90' },
+  { id: 'usdc-erc20', name: 'USDC',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        art: usdcIconSrc, hero: smallUsdcSrc, badge: ethBadgeSrc, addr: '0x5C1a8F3b9D2e7064aE0c1B7f4D8e3A2c6B9d0E15' },
+  { id: 'bnb',        name: 'BNB',      net: '(Binance\nchain)', warnNet: 'BNB Smart Chain (BEP20)', art: bnbIconSrc,  hero: smallBnbSrc,  badge: null,        addr: '0x3A1f5D8c9B2e7A4d6C0b1F8e2D3c4A5b6C7d8E90' },
+  { id: 'ltc',        name: 'Litecoin', net: '',                 warnNet: 'Litecoin',                art: ltcIconSrc,  hero: smallLtcSrc,  badge: null,        addr: 'ltc1qhxtthnq8e7fjz0mn0z6q9qg3z4k5l6m7n8p9q0' },
+  { id: 'usdc-bep20', name: 'USDC',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', art: usdcIconSrc, hero: smallUsdcSrc, badge: bnbBadgeSrc, addr: '0x8E0c4A7d1B3f9265aC2e0B8f5D1e7A3c4B6d9F02' },
 ]
 
 const PRESETS = [100, 500, 1000]
@@ -1422,7 +1430,7 @@ export default function DepositSheet() {
             <div className="deposit-crypto-hero">
               <div className="deposit-crypto-hero-icon">
                 <img
-                  src={soonCoin.art}
+                  src={soonCoin.hero}
                   width={56}
                   height={56}
                   alt=""
@@ -1464,8 +1472,10 @@ export default function DepositSheet() {
             </div>
 
             <div className="deposit-crypto-warnings-block">
+              {/* No memo on these chains → the "укажите Memo"
+                * warning (depositCryptoWarn2) is intentionally
+                * omitted here. */}
               <p>{t.depositCryptoWarn1.replace('{coin}', soonCoin.name).replace('{network}', soonCoin.warnNet)}</p>
-              <p>{t.depositCryptoWarn2}</p>
             </div>
           </div>
         )}
