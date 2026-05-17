@@ -502,6 +502,13 @@ export async function tronTreasury(action, userId, amount) {
   return data
 }
 
+// ── Admin: sweep monitoring overview ──
+export async function adminSweepOverview() {
+  const { data, error } = await supabase.rpc('admin_sweep_overview')
+  if (error) { console.error('adminSweepOverview error:', error); return null }
+  return data
+}
+
 // ── Admin: treasury withdrawal (new chains) ──
 // chain ∈ eth|bnb|usdt-erc20|usdc-erc20|usdt-bep20|usdc-bep20|
 // trx|usdt-trc20|btc|ltc. amount = string in coin units.

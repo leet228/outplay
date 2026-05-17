@@ -360,6 +360,63 @@
   border: 1px solid var(--border);
 }
 
+/* ── Sweep monitoring ── */
+.admin-sweep-health {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 9px 12px;
+  border-radius: 10px;
+}
+.admin-sweep-health.is-ok   { background: rgba(34,197,94,.12);  color: #22c55e; }
+.admin-sweep-health.is-warn { background: rgba(245,158,11,.12); color: #f59e0b; }
+.admin-sweep-health.is-bad  { background: rgba(239,68,68,.14);  color: #ef4444; }
+.admin-sweep-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.admin-sweep-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.admin-sweep-chip b { color: var(--text); }
+.admin-sweep-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+}
+.admin-sweep-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.admin-sweep-prob {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(239,68,68,.07);
+  border: 1px solid rgba(239,68,68,.2);
+}
+.admin-sweep-prob-h { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.admin-sweep-prob-e { font-size: 11.5px; color: #ef9a9a; word-break: break-all; }
+.admin-sweep-prob-tx { font-size: 11px; color: var(--text-muted); font-family: ui-monospace, monospace; }
+.admin-sweep-rec {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: var(--bg);
+}
+
 .admin-wallet-card {
   background: var(--surface);
   border: 1px solid var(--border);

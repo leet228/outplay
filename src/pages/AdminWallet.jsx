@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw } from '../lib/supabase'
+import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview } from '../lib/supabase'
 import { fetchChainBalances } from '../lib/chainBalances'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
@@ -153,6 +153,8 @@ export default function AdminWallet() {
   const [wcAmt, setWcAmt] = useState('')
   const [wcBusy, setWcBusy] = useState(false)
   const [wcMsg, setWcMsg] = useState('')
+  // Sweep monitoring overview.
+  const [sweepOv, setSweepOv] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -201,6 +203,16 @@ export default function AdminWallet() {
   }, [user])
 
   useEffect(() => { loadTron() }, [loadTron])
+
+  const loadSweep = useCallback(async () => {
+    const r = await adminSweepOverview()
+    if (r) setSweepOv(r)
+  }, [])
+  useEffect(() => {
+    loadSweep()
+    const iv = setInterval(loadSweep, 30_000)
+    return () => clearInterval(iv)
+  }, [loadSweep])
 
   const doTron = useCallback(async (action, amount) => {
     if (!user?.id || tronBusy) return
@@ -845,6 +857,102 @@ export default function AdminWallet() {
               )}
 
               {tronMsg && <div className="admin-tron-msg">{tronMsg}</div>}
+            </>
+          )
+        })()}
+      </div>
+
+      {/* ── Sweep monitoring ── */}
+      <div className="admin-tron-stake">
+        <div className="admin-wallet-section-title">Свип · мониторинг</div>
+        {!sweepOv && <div className="admin-tron-row"><span>Загрузка…</span></div>}
+        {sweepOv && (() => {
+          const c = sweepOv.counts || {}
+          const active = (c.pending || 0) + (c.needs_gas || 0) +
+            (c.gassing || 0) + (c.sweeping || 0)
+          const failed = c.failed || 0
+          const probs = sweepOv.problems || []
+          const STAT = [
+            ['pending', 'ожидают', '#64748b'],
+            ['needs_gas', 'нужен газ', '#f59e0b'],
+            ['gassing', 'газ', '#3b82f6'],
+            ['sweeping', 'свип', '#8b5cf6'],
+            ['swept', 'готово', '#22c55e'],
+            ['failed', 'ошибки', '#ef4444'],
+            ['skipped', 'пропуск', '#475569'],
+          ]
+          return (
+            <>
+              {/* Health line */}
+              <div className={'admin-sweep-health ' +
+                (failed > 0 ? 'is-bad' : active > 0 ? 'is-warn' : 'is-ok')}>
+                {failed > 0
+                  ? `⚠ ${failed} ошибок — нужно вмешательство`
+                  : active > 0
+                    ? `● ${active} в работе · старейшая ${sweepOv.oldest_active_min}м`
+                    : '✓ всё свипнуто, очередь пуста'}
+              </div>
+
+              {/* Status chips */}
+              <div className="admin-sweep-chips">
+                {STAT.filter(([k]) => (c[k] || 0) > 0).map(([k, label, col]) => (
+                  <span key={k} className="admin-sweep-chip">
+                    <span className="admin-sweep-dot" style={{ background: col }} />
+                    {label}<b>{c[k]}</b>
+                  </span>
+                ))}
+              </div>
+
+              {/* Per-chain swept totals */}
+              <div className="admin-tron-grid">
+                {(sweepOv.by_chain || [])
+                  .filter(b => b.swept_count > 0 || b.active_count > 0)
+                  .map(b => (
+                    <div key={b.chain} className="admin-tron-stat">
+                      <span className="admin-tron-k">{b.chain}</span>
+                      <span className="admin-tron-v">
+                        {Number(b.swept_amount || 0).toLocaleString('en-US', { maximumFractionDigits: 6 })}
+                      </span>
+                      <span className="admin-tron-k">
+                        свипов: {b.swept_count}{b.active_count > 0 ? ` · в работе ${b.active_count}` : ''}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Problem jobs */}
+              {probs.length > 0 && (
+                <div className="admin-sweep-problems">
+                  <div className="admin-tron-k">Проблемные ({probs.length}):</div>
+                  {probs.slice(0, 12).map((p, i) => (
+                    <div key={i} className="admin-sweep-prob">
+                      <span className="admin-sweep-prob-h">
+                        {p.chain} · {p.status} · {p.age_min}м · попыток {p.attempts}
+                      </span>
+                      {p.last_error && (
+                        <span className="admin-sweep-prob-e">{p.last_error}</span>
+                      )}
+                      {(p.sweep_txid || p.gas_txid) && (
+                        <span className="admin-sweep-prob-tx">
+                          {(p.sweep_txid || p.gas_txid).slice(0, 24)}…
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recent activity */}
+              <div className="admin-sweep-problems">
+                <div className="admin-tron-k">Последние:</div>
+                {(sweepOv.recent || []).slice(0, 10).map((r, i) => (
+                  <div key={i} className="admin-sweep-rec">
+                    <span>{r.chain}</span>
+                    <span>{r.status}</span>
+                    <span>{r.age_min}м</span>
+                  </div>
+                ))}
+              </div>
             </>
           )
         })()}
