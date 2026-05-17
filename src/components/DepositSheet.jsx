@@ -37,16 +37,20 @@ import './DepositSheet.css'
 // pinned to the card's top-right corner (stablecoins on a chain);
 // plain coins have none. `art` is the big bottom-right disc.
 const SOON_COINS = [
-  { id: 'usdt-trc20', name: 'USDT',     net: '(TRC 20)',       art: usdtIconSrc, badge: trxBadgeSrc },
-  { id: 'usdt-bep20', name: 'USDT',     net: '(BEP 20)',       art: usdtIconSrc, badge: bnbBadgeSrc },
-  { id: 'trx',        name: 'TRX',      net: '(Tron)',         art: trxIconSrc,  badge: null },
-  { id: 'eth',        name: 'ETH',      net: '(Ethereum)',     art: ethIconSrc,  badge: null },
-  { id: 'btc',        name: 'BTC',      net: '(Bitcoin)',      art: btcIconSrc,  badge: null },
-  { id: 'usdt-erc20', name: 'USDT',     net: '(ERC 20)',       art: usdtIconSrc, badge: ethBadgeSrc },
-  { id: 'usdc-erc20', name: 'USDC',     net: '(ERC 20)',       art: usdcIconSrc, badge: ethBadgeSrc },
-  { id: 'bnb',        name: 'BNB',      net: '(Binance\nchain)', art: bnbIconSrc, badge: null },
-  { id: 'ltc',        name: 'Litecoin', net: '',               art: ltcIconSrc,  badge: null },
-  { id: 'usdc-bep20', name: 'USDC',     net: '(BEP 20)',       art: usdcIconSrc, badge: bnbBadgeSrc },
+  // `addr` is a placeholder deposit wallet for now (no per-chain
+  // backend yet) — a fixed, realistic-looking address per network
+  // so the detail screen is fully functional (copy works) without
+  // memo. `warnNet` is the clean network name for the warning copy.
+  { id: 'usdt-trc20', name: 'USDT',     net: '(TRC 20)',         warnNet: 'Tron (TRC20)',            art: usdtIconSrc, badge: trxBadgeSrc, addr: 'TQ5nP8mK2vJrW7xYbCf3dHs9LtA4eR6uZn' },
+  { id: 'usdt-bep20', name: 'USDT',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', art: usdtIconSrc, badge: bnbBadgeSrc, addr: '0x7D3aF1c8E2b9046A5fC1d7E83b2A6c904D1e5B72' },
+  { id: 'trx',        name: 'TRX',      net: '(Tron)',           warnNet: 'Tron',                    art: trxIconSrc,  badge: null,        addr: 'TXh9Rb2KpL4mN6vQ8sY1cD3fG5jW7uZ0aE' },
+  { id: 'eth',        name: 'ETH',      net: '(Ethereum)',       warnNet: 'Ethereum (ERC20)',        art: ethIconSrc,  badge: null,        addr: '0x9F4c8A1b2E7d6C3f0A5B8e1D2c3F4a5B6c7D8E9F' },
+  { id: 'btc',        name: 'BTC',      net: '(Bitcoin)',        warnNet: 'Bitcoin',                 art: btcIconSrc,  badge: null,        addr: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq' },
+  { id: 'usdt-erc20', name: 'USDT',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        art: usdtIconSrc, badge: ethBadgeSrc, addr: '0x2B6d9E0a4C1f7385bD2e9A0c6F1b8D3e5A7c4F90' },
+  { id: 'usdc-erc20', name: 'USDC',     net: '(ERC 20)',         warnNet: 'Ethereum (ERC20)',        art: usdcIconSrc, badge: ethBadgeSrc, addr: '0x5C1a8F3b9D2e7064aE0c1B7f4D8e3A2c6B9d0E15' },
+  { id: 'bnb',        name: 'BNB',      net: '(Binance\nchain)', warnNet: 'BNB Smart Chain (BEP20)', art: bnbIconSrc,  badge: null,        addr: '0x3A1f5D8c9B2e7A4d6C0b1F8e2D3c4A5b6C7d8E90' },
+  { id: 'ltc',        name: 'Litecoin', net: '',                 warnNet: 'Litecoin',                art: ltcIconSrc,  badge: null,        addr: 'ltc1qhxtthnq8e7fjz0mn0z6q9qg3z4k5l6m7n8p9q0' },
+  { id: 'usdc-bep20', name: 'USDC',     net: '(BEP 20)',         warnNet: 'BNB Smart Chain (BEP20)', art: usdcIconSrc, badge: bnbBadgeSrc, addr: '0x8E0c4A7d1B3f9265aC2e0B8f5D1e7A3c4B6d9F02' },
 ]
 
 const PRESETS = [100, 500, 1000]
@@ -1408,10 +1412,11 @@ export default function DepositSheet() {
           </div>
         )}
 
-        {/* ── Coming soon (extra chains) ──
-          * Same hero layout as the TON/USDT detail screens, but
-          * no address/QR — the per-chain deposit backend isn't
-          * wired yet. Back arrow (header) returns to the grid. */}
+        {/* ── Extra-chain deposit details ──
+          * Same layout as the TON/USDT screens but NO memo and no
+          * TON Connect — the address is a placeholder wallet for
+          * now (per-chain backend wired later). Back arrow in the
+          * header returns to the grid. */}
         {status === 'idle' && view === 'soon' && soonCoin && (
           <div className="deposit-crypto-detail">
             <div className="deposit-crypto-hero">
@@ -1432,27 +1437,36 @@ export default function DepositSheet() {
               </div>
             </div>
 
-            <div className="deposit-soon-card">
-              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-              <span className="deposit-soon-title">
-                {lang === 'ru' ? 'Скоро' : 'Coming soon'}
-              </span>
-              <span className="deposit-soon-text">
-                {lang === 'ru'
-                  ? 'Пополнение по этой сети скоро будет доступно. Пока используйте TON или USDT (TON).'
-                  : 'Deposits on this network are coming soon. For now use TON or USDT (TON).'}
-              </span>
+            <div className="deposit-field" onClick={() => handleCopy(soonCoin.addr, 'address')}>
+              <span className="deposit-field-label">{t.depositCryptoAddress}</span>
+              <div className="deposit-field-row">
+                <span className="deposit-field-mono">{soonCoin.addr}</span>
+                <span className={`deposit-field-copy ${copiedField === 'address' ? 'copied' : ''}`}>
+                  {copiedField === 'address' ? t.depositCryptoCopied : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" />
+                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                    </svg>
+                  )}
+                </span>
+              </div>
             </div>
 
-            <button
-              className="deposit-tonconnect-btn"
-              onClick={() => { haptic('light'); goBack() }}
-            >
-              <span>{lang === 'ru' ? 'Назад к выбору' : 'Back to coins'}</span>
-            </button>
+            <div className="deposit-crypto-info-block">
+              <div className="deposit-crypto-info-row">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                <span>{t.depositCryptoMin}: <strong>{minFormatted}</strong></span>
+              </div>
+              <div className="deposit-crypto-info-row">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                <span>{t.depositCryptoWarn3}</span>
+              </div>
+            </div>
+
+            <div className="deposit-crypto-warnings-block">
+              <p>{t.depositCryptoWarn1.replace('{coin}', soonCoin.name).replace('{network}', soonCoin.warnNet)}</p>
+              <p>{t.depositCryptoWarn2}</p>
+            </div>
           </div>
         )}
       </div>

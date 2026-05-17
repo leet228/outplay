@@ -805,38 +805,6 @@
   line-height: 1.4;
 }
 
-/* === Coming-soon (extra chains) === */
-.deposit-soon-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 8px;
-  padding: 22px 18px;
-  border-radius: 14px;
-  background: rgba(59, 130, 246, 0.06);
-  border: 1px solid rgba(59, 130, 246, 0.12);
-}
-
-.deposit-soon-card svg {
-  color: var(--accent);
-  opacity: 0.85;
-  margin-bottom: 2px;
-}
-
-.deposit-soon-title {
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--text);
-}
-
-.deposit-soon-text {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-muted);
-  max-width: 280px;
-}
-
 /* === Success view === */
 .deposit-success {
   display: flex;
