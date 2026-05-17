@@ -37,6 +37,14 @@ const TON_MIN_RUB   = 500
 // (not "Toncoin" for everything). `ph` is the address placeholder
 // for that coin's address format.
 const ADDR_PH = { ton: 'UQ... / EQ...', evm: '0x...', tron: 'T...' }
+// Full network name per coin (for the fee label) and the address
+// family wording (for the "invalid address" error) per coin.
+const NET_NAME = {
+  'ton': 'TON', 'usdt-ton': 'TON', 'usdt-trc20': 'Tron (TRC20)', 'trx': 'Tron',
+  'eth': 'Ethereum', 'usdt-erc20': 'Ethereum (ERC20)',
+  'usdc-erc20': 'Ethereum (ERC20)', 'usdc-bep20': 'BNB Smart Chain (BEP20)',
+}
+const ADDR_NET = { ton: 'TON', tron: 'Tron', evm: 'EVM 0x…' }
 const COINS = [
   { id: 'ton',        kind: 'ton',       name: 'TON',  sub: 'Toncoin',   sym: 'TON',  addr: 'ton',  hero: smallTonSrc,  art: tonIconSrc,  badge: null,
     desc: { ru: 'Сеть TON (Toncoin)\nУкажите адрес TON-кошелька', en: 'TON (Toncoin) network\nEnter your TON wallet address' } },
@@ -209,7 +217,7 @@ export default function WithdrawalSheet() {
           min_amount: t.withdrawMin?.replace('{amount}', fmtMin()) || 'Minimum not met',
           insufficient_balance: t.withdrawInsufficientBalance,
           user_not_found: 'User not found',
-          bad_address: t.withdrawInvalidAddress,
+          bad_address: invalidAddrMsg,
           bad_chain: 'Unsupported network',
           amount_too_small_after_fees: lang === 'ru' ? 'Сумма слишком мала после вычета комиссии' : 'Amount too small after fees',
           network_unavailable: lang === 'ru'
@@ -237,6 +245,14 @@ export default function WithdrawalSheet() {
 
   const showWalletError = walletTouched && wallet.length > 0 && !walletValid
   const showAmountError = amountTouched && numAmount > 0 && !amountValid
+
+  // Per-coin texts (network fee label + invalid-address message).
+  const netName = coin ? (NET_NAME[coin.id] || coin.sub) : ''
+  const addrNet = coin ? (ADDR_NET[coin.addr] || '') : ''
+  const gasLabel = lang === 'ru' ? `Комиссия сети ${netName}` : `${netName} network fee`
+  const invalidAddrMsg = lang === 'ru'
+    ? `Неверный адрес кошелька (${addrNet})`
+    : `Invalid wallet address (${addrNet})`
 
   return (
     <>
@@ -354,7 +370,7 @@ export default function WithdrawalSheet() {
                   )}
                 </div>
                 {showWalletError && (
-                  <span className="wd-field-error">{t.withdrawInvalidAddress}</span>
+                  <span className="wd-field-error">{invalidAddrMsg}</span>
                 )}
               </div>
 
@@ -412,7 +428,7 @@ export default function WithdrawalSheet() {
               {numAmount > 0 && amountValid && (
                 <div className="wd-fees">
                   <div className="wd-fee-row">
-                    <span className="wd-fee-label">{t.withdrawGas}</span>
+                    <span className="wd-fee-label">{gasLabel}</span>
                     <span className="wd-fee-value">-{fmtTotalFee()}</span>
                   </div>
                   <div className="wd-fee-divider" />
