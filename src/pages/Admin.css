@@ -417,6 +417,36 @@
   background: var(--bg);
 }
 
+/* ── DEX swap pair ── */
+.admin-swap-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 6px 0 2px;
+}
+.admin-swap-coin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.admin-swap-coin img { border-radius: 50%; }
+.admin-swap-flip {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 18px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  transition: transform .15s, opacity .15s;
+}
+.admin-swap-flip:active { transform: rotate(180deg); }
+
 .admin-wallet-card {
   background: var(--surface);
   border: 1px solid var(--border);

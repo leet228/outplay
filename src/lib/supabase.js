@@ -502,6 +502,16 @@ export async function tronTreasury(action, userId, amount) {
   return data
 }
 
+// ── Admin: DEX swap (TON ↔ USDT-TON, manual phase) ──
+// dir: 'ton_to_usdt' | 'usdt_to_ton'; amount in the offered coin.
+export async function dexSwap(userId, dir, amount, slippage) {
+  const { data, error } = await supabase.functions.invoke('dex-swap', {
+    body: { user_id: userId, dir, amount: String(amount), slippage },
+  })
+  if (error) { console.error('dexSwap error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Admin: sweep monitoring overview ──
 export async function adminSweepOverview() {
   const { data, error } = await supabase.rpc('admin_sweep_overview')

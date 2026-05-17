@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview, getAdminStats } from '../lib/supabase'
+import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview, getAdminStats, dexSwap } from '../lib/supabase'
 import { fetchChainBalances } from '../lib/chainBalances'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
@@ -159,6 +159,12 @@ export default function AdminWallet() {
   const [sweepErr, setSweepErr] = useState(false)
   // Sum of all user balances (stars≈RUB) — rebalance reference.
   const [userBalRub, setUserBalRub] = useState(null)
+  // DEX swap (TON ↔ USDT-TON, manual).
+  const [swDir, setSwDir] = useState('ton_to_usdt')
+  const [swAmt, setSwAmt] = useState('')
+  const [swSlip, setSwSlip] = useState('1')
+  const [swBusy, setSwBusy] = useState(false)
+  const [swMsg, setSwMsg] = useState('')
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -245,6 +251,21 @@ export default function AdminWallet() {
     setTronBusy('')
     setTimeout(loadTron, 4000)  // refresh once the tx settles
   }, [user, tronBusy, loadTron])
+
+  const doSwap = useCallback(async () => {
+    if (!user?.id || swBusy) return
+    if (!(Number(swAmt) > 0)) { setSwMsg('Введи сумму'); return }
+    haptic('medium')
+    setSwBusy(true); setSwMsg('')
+    const r = await dexSwap(user.id, swDir, swAmt, (Number(swSlip) || 1) / 100)
+    if (r && r.ok) {
+      setSwMsg(`✓ отправлено · ожид. выход ~${r.expected_out ?? '?'} (мин ${r.min_out ?? '?'})`)
+      setSwAmt('')
+    } else {
+      setSwMsg('✗ ' + (r?.error || 'failed') + (r?.detail ? ' · ' + r.detail : ''))
+    }
+    setSwBusy(false)
+  }, [user, swBusy, swDir, swAmt, swSlip])
 
   const doWithdraw = useCallback(async () => {
     if (!user?.id || wcBusy) return
@@ -875,6 +896,65 @@ export default function AdminWallet() {
             </>
           )
         })()}
+      </div>
+
+      {/* ── DEX swap (TON ↔ USDT-TON) ── */}
+      <div className="admin-tron-stake">
+        <div className="admin-wallet-section-title">Свап монет · TON</div>
+        <div className="admin-swap-pair">
+          {(() => {
+            const ton = { src: smallTonSrc, sym: 'TON' }
+            const usdt = { src: smallUsdtSrc, sym: 'USDT' }
+            const from = swDir === 'ton_to_usdt' ? ton : usdt
+            const to = swDir === 'ton_to_usdt' ? usdt : ton
+            return (
+              <>
+                <span className="admin-swap-coin">
+                  <img src={from.src} width={34} height={34} alt="" draggable="false" />
+                  <span>{from.sym}</span>
+                </span>
+                <button
+                  type="button"
+                  className="admin-swap-flip"
+                  onClick={() => {
+                    haptic('light')
+                    setSwDir(d => d === 'ton_to_usdt' ? 'usdt_to_ton' : 'ton_to_usdt')
+                  }}
+                  aria-label="flip"
+                >⇄</button>
+                <span className="admin-swap-coin">
+                  <img src={to.src} width={34} height={34} alt="" draggable="false" />
+                  <span>{to.sym}</span>
+                </span>
+              </>
+            )
+          })()}
+        </div>
+        <div className="admin-tron-action">
+          <input
+            className="admin-tron-input"
+            type="number" inputMode="decimal"
+            placeholder={swDir === 'ton_to_usdt' ? 'Сумма в TON' : 'Сумма в USDT'}
+            value={swAmt}
+            onChange={e => setSwAmt(e.target.value)}
+          />
+        </div>
+        <div className="admin-tron-action">
+          <input
+            className="admin-tron-input"
+            type="number" inputMode="decimal" placeholder="Slippage %"
+            value={swSlip}
+            onChange={e => setSwSlip(e.target.value)}
+          />
+          <button
+            className="admin-tron-btn"
+            disabled={swBusy || !(Number(swAmt) > 0)}
+            onClick={doSwap}
+          >
+            {swBusy ? '…' : 'Свапнуть'}
+          </button>
+        </div>
+        {swMsg && <div className="admin-tron-msg">{swMsg}</div>}
       </div>
 
       {/* ── Sweep monitoring ── */}
