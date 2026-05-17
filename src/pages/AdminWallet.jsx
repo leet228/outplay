@@ -159,8 +159,9 @@ export default function AdminWallet() {
   const [sweepErr, setSweepErr] = useState(false)
   // Sum of all user balances (stars≈RUB) — rebalance reference.
   const [userBalRub, setUserBalRub] = useState(null)
-  // DEX swap (TON ↔ USDT-TON, manual).
-  const [swDir, setSwDir] = useState('ton_to_usdt')
+  // DEX swap (manual). chain: 'ton' (STON.fi) | 'trx' (SunSwap).
+  const [swChain, setSwChain] = useState('ton')
+  const [swFlip, setSwFlip] = useState(false)
   const [swAmt, setSwAmt] = useState('')
   const [swSlip, setSwSlip] = useState('1')
   const [swBusy, setSwBusy] = useState(false)
@@ -252,6 +253,11 @@ export default function AdminWallet() {
     setTimeout(loadTron, 4000)  // refresh once the tx settles
   }, [user, tronBusy, loadTron])
 
+  // Resolve full dir string from chain + flip.
+  const swDir = swChain === 'ton'
+    ? (swFlip ? 'usdt_to_ton' : 'ton_to_usdt')
+    : (swFlip ? 'usdt_to_trx' : 'trx_to_usdt')
+
   const doSwap = useCallback(async () => {
     if (!user?.id || swBusy) return
     if (!(Number(swAmt) > 0)) { setSwMsg('Введи сумму'); return }
@@ -259,14 +265,18 @@ export default function AdminWallet() {
     setSwBusy(true); setSwMsg('')
     const r = await dexSwap(user.id, swDir, swAmt, (Number(swSlip) || 1) / 100)
     if (r && r.ok) {
-      // ask token: USDT (6 dec) for ton→usdt, TON (9 dec) for usdt→ton
-      const dec = swDir === 'ton_to_usdt' ? 6 : 9
-      const sym = swDir === 'ton_to_usdt' ? 'USDT' : 'TON'
-      const h = (v) => v != null
-        ? (Number(v) / 10 ** dec).toLocaleString('en-US', { maximumFractionDigits: 6 })
-        : '?'
-      setSwMsg(`✓ отправлено · получишь ≈ ${h(r.expected_out)} ${sym} (мин ${h(r.min_out)} ${sym})`)
-      setSwAmt('')
+      if (r.step === 'approved') {
+        setSwMsg('✓ USDT разрешён роутеру — нажми «Свапнуть» ещё раз через ~10 сек')
+      } else {
+        // ask-token decimals/symbol: prefer server-provided
+        const dec = r.out_dec ?? (swDir === 'ton_to_usdt' ? 6 : swDir === 'usdt_to_ton' ? 9 : 6)
+        const sym = r.out_sym ?? (swDir.endsWith('_ton') ? 'TON' : 'USDT')
+        const h = (v) => v != null
+          ? (Number(v) / 10 ** dec).toLocaleString('en-US', { maximumFractionDigits: 6 })
+          : '?'
+        setSwMsg(`✓ отправлено · получишь ≈ ${h(r.expected_out)} ${sym} (мин ${h(r.min_out)} ${sym})`)
+        setSwAmt('')
+      }
     } else {
       setSwMsg('✗ ' + (r?.error || 'failed') + (r?.detail ? ' · ' + r.detail : ''))
     }
@@ -904,15 +914,28 @@ export default function AdminWallet() {
         })()}
       </div>
 
-      {/* ── DEX swap (TON ↔ USDT-TON) ── */}
+      {/* ── DEX swap ── */}
       <div className="admin-tron-stake">
-        <div className="admin-wallet-section-title">Свап монет · TON</div>
+        <div className="admin-wallet-section-title">Свап монет</div>
+        <div className="admin-tron-action">
+          {[['ton', 'TON · STON.fi'], ['trx', 'TRX · SunSwap']].map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              className={'admin-tron-btn' + (swChain === k ? '' : ' admin-tron-btn--warn')}
+              style={{ flex: 1 }}
+              onClick={() => { haptic('light'); setSwChain(k); setSwFlip(false); setSwMsg('') }}
+            >{l}</button>
+          ))}
+        </div>
         <div className="admin-swap-pair">
           {(() => {
-            const ton = { src: smallTonSrc, sym: 'TON' }
+            const native = swChain === 'ton'
+              ? { src: smallTonSrc, sym: 'TON' }
+              : { src: smallTrxSrc, sym: 'TRX' }
             const usdt = { src: smallUsdtSrc, sym: 'USDT' }
-            const from = swDir === 'ton_to_usdt' ? ton : usdt
-            const to = swDir === 'ton_to_usdt' ? usdt : ton
+            const from = swFlip ? usdt : native
+            const to = swFlip ? native : usdt
             return (
               <>
                 <span className="admin-swap-coin">
@@ -922,10 +945,7 @@ export default function AdminWallet() {
                 <button
                   type="button"
                   className="admin-swap-flip"
-                  onClick={() => {
-                    haptic('light')
-                    setSwDir(d => d === 'ton_to_usdt' ? 'usdt_to_ton' : 'ton_to_usdt')
-                  }}
+                  onClick={() => { haptic('light'); setSwFlip(f => !f); setSwMsg('') }}
                   aria-label="flip"
                 >⇄</button>
                 <span className="admin-swap-coin">
@@ -940,7 +960,7 @@ export default function AdminWallet() {
           <input
             className="admin-tron-input"
             type="number" inputMode="decimal"
-            placeholder={swDir === 'ton_to_usdt' ? 'Сумма в TON' : 'Сумма в USDT'}
+            placeholder={'Сумма в ' + (swFlip ? 'USDT' : (swChain === 'ton' ? 'TON' : 'TRX'))}
             value={swAmt}
             onChange={e => setSwAmt(e.target.value)}
           />

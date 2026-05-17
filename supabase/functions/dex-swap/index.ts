@@ -21,15 +21,82 @@ import {
 import { mnemonicToPrivateKey, sign } from 'npm:@ton/crypto@3'
 import { StonApiClient } from 'npm:@ston-fi/api'
 import { dexFactory } from 'npm:@ston-fi/sdk'
+import {
+  HDNodeWallet, SigningKey, keccak256, sha256 as eSha256, getBytes,
+  encodeBase58, decodeBase58, AbiCoder,
+} from 'https://esm.sh/ethers@6.13.4'
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const WALLET_TON_MNEMONIC  = Deno.env.get('WALLET_TON_MNEMONIC')!
 const TONCENTER_API_KEY    = Deno.env.get('TONCENTER_API_KEY') || undefined
 const ADMIN_TG             = Deno.env.get('ADMIN_TG_ID') || '945676433'
+const HD_MASTER_MNEMONIC   = Deno.env.get('HD_MASTER_MNEMONIC') || ''
+const NOWNODES_API_KEY     = Deno.env.get('NOWNODES_API_KEY') || ''
 
 const USDT_MASTER = 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs'
 const TONCENTER_ENDPOINT = 'https://toncenter.com/api/v2/jsonRPC'
+
+// ── TRON / SunSwap V2 ──
+const TRON_API     = 'https://trx.nownodes.io'
+const SUN_ROUTER   = 'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax'      // SunSwap V2 Router
+const WTRX         = 'TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR'      // Wrapped TRX
+const TRON_USDT    = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'      // USDT-TRC20
+const TRON_FEE_LIMIT = 100_000_000                            // 100 TRX cap
+const abi = AbiCoder.defaultAbiCoder()
+
+function tronPriv0(): string {
+  return HDNodeWallet.fromPhrase(HD_MASTER_MNEMONIC, undefined, "m/44'/195'/0'/0/0").privateKey
+}
+function tronAddr(priv: string): string {
+  const pub = getBytes(SigningKey.computePublicKey(priv, false)).slice(1)
+  const h = getBytes(keccak256(pub))
+  const a = new Uint8Array(21); a[0] = 0x41; a.set(h.slice(-20), 1)
+  const c = getBytes(eSha256(eSha256(a))).slice(0, 4)
+  const f = new Uint8Array(25); f.set(a, 0); f.set(c, 21)
+  return encodeBase58(f)
+}
+// base58 Tron addr → 0x-prefixed 20-byte EVM-style hex (for ABI).
+function tron20(b58: string): string {
+  let h = decodeBase58(b58).toString(16); if (h.length % 2) h = '0' + h
+  const b = getBytes('0x' + h).slice(0, 21) // 0x41 + 20
+  return '0x' + Array.from(b.slice(1)).map(x => x.toString(16).padStart(2, '0')).join('')
+}
+async function tronRpc(path: string, body: unknown): Promise<any> {
+  const hd: Record<string, string> = { 'content-type': 'application/json' }
+  if (NOWNODES_API_KEY) hd['api-key'] = NOWNODES_API_KEY
+  const r = await fetch(TRON_API + path, { method: 'POST', headers: hd, body: JSON.stringify(body) })
+  if (!r.ok) throw new Error(`tron ${path} ${r.status}`)
+  return r.json()
+}
+function tronSign(tx: any, priv: string) {
+  const s = new SigningKey(priv).sign('0x' + tx.txID)
+  return { ...tx, signature: [s.r.slice(2) + s.s.slice(2) + (s.yParity ? '01' : '00')] }
+}
+// constant (read) contract call → raw hex result
+async function tronConst(owner: string, contract: string, sel: string, paramHex: string): Promise<string> {
+  const r = await tronRpc('/wallet/triggerconstantcontract', {
+    owner_address: owner, contract_address: contract,
+    function_selector: sel, parameter: paramHex, visible: true,
+  })
+  return r?.constant_result?.[0] || ''
+}
+// state-changing call: build → sign → broadcast. Returns txid.
+async function tronCall(
+  priv: string, owner: string, contract: string, sel: string,
+  paramHex: string, callValueSun = 0,
+): Promise<string> {
+  const r0 = await tronRpc('/wallet/triggersmartcontract', {
+    owner_address: owner, contract_address: contract,
+    function_selector: sel, parameter: paramHex,
+    fee_limit: TRON_FEE_LIMIT, call_value: callValueSun, visible: true,
+  })
+  const tx = r0?.transaction
+  if (!tx?.txID) throw new Error('build failed: ' + JSON.stringify(r0).slice(0, 240))
+  const r = await tronRpc('/wallet/broadcasttransaction', tronSign(tx, priv))
+  if (r?.result !== true && !r?.txid) throw new Error('broadcast: ' + JSON.stringify(r).slice(0, 240))
+  return tx.txID
+}
 
 // ── Highload Wallet V3 (inlined, identical to process-withdrawals) ──
 const HIGHLOAD_V3_CODE_HEX = 'b5ee9c7241021001000228000114ff00f4a413f4bcf2c80b01020120020d02014803040078d020d74bc00101c060b0915be101d0d3030171b0915be0fa4030f828c705b39130e0d31f018210ae42e5a4ba9d8040d721d74cf82a01ed55fb04e030020120050a02027306070011adce76a2686b85ffc00201200809001aabb6ed44d0810122d721d70b3f0018aa3bed44d08307d721d70b1f0201200b0c001bb9a6eed44d0810162d721d70b15800e5b8bf2eda2edfb21ab09028409b0ed44d0810120d721f404f404d33fd315d1058e1bf82325a15210b99f326df82305aa0015a112b992306dde923033e2923033e25230800df40f6fa19ed021d721d70a00955f037fdb31e09130e259800df40f6fa19cd001d721d70a00937fdb31e0915be270801f6f2d48308d718d121f900ed44d0d3ffd31ff404f404d33fd315d1f82321a15220b98e12336df82324aa00a112b9926d32de58f82301de541675f910f2a106d0d31fd4d307d30cd309d33fd315d15168baf2a2515abaf2a6f8232aa15250bcf2a304f823bbf2a35304800df40f6fa199d024d721d70a00f2649130e20e01fe5309800df40f6fa18e13d05004d718d20001f264c858cf16cf8301cf168e1030c824cf40cf8384095005a1a514cf40e2f800c94039800df41704c8cbff13cb1ff40012f40012cb3f12cb15c9ed54f80f21d0d30001f265d3020171b0925f03e0fa4001d70b01c000f2a5fa4031fa0031f401fa0031fa00318060d721d300010f0020f265d2000193d431d19130e272b1fb00b585bf03'
@@ -117,16 +184,92 @@ const json = (b: unknown, s = 200) =>
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   try {
-    if (!WALLET_TON_MNEMONIC) return json({ error: 'no_ton_mnemonic' }, 500)
     const { user_id, dir, amount, slippage } = await req.json().catch(() => ({}))
     if (!user_id || !dir || !(Number(amount) > 0)) return json({ error: 'bad_params' }, 400)
-    if (dir !== 'ton_to_usdt' && dir !== 'usdt_to_ton') return json({ error: 'bad_dir' }, 400)
+    const TON_DIRS = ['ton_to_usdt', 'usdt_to_ton']
+    const TRX_DIRS = ['trx_to_usdt', 'usdt_to_trx']
+    if (![...TON_DIRS, ...TRX_DIRS].includes(dir)) return json({ error: 'bad_dir' }, 400)
 
     const { data: u } = await sb.from('users')
       .select('telegram_id').eq('id', user_id).maybeSingle()
     if (!u || String(u.telegram_id) !== String(ADMIN_TG)) return json({ error: 'forbidden' }, 403)
 
     const slip = Number(slippage) > 0 ? Number(slippage) : 0.01
+
+    // ── TRON / SunSwap V2 (treasury HD-0) ──
+    if (TRX_DIRS.includes(dir)) {
+      if (!HD_MASTER_MNEMONIC) return json({ error: 'no_hd_master' }, 500)
+      const priv = tronPriv0()
+      const owner = tronAddr(priv)
+      const o20 = tron20(owner)
+      const W = tron20(WTRX), U = tron20(TRON_USDT)
+      const router20 = tron20(SUN_ROUTER)
+      const deadline = Math.floor(Date.now() / 1000) + 600
+
+      const amountsOut = async (amtIn: bigint, path: string[]) => {
+        const p = abi.encode(['uint256', 'address[]'], [amtIn, path]).slice(2)
+        const res = await tronConst(owner, SUN_ROUTER, 'getAmountsOut(uint256,address[])', p)
+        if (!res) throw new Error('getAmountsOut empty')
+        const [arr] = abi.decode(['uint256[]'], '0x' + res)
+        return BigInt(arr[arr.length - 1])
+      }
+      const applySlip = (x: bigint) =>
+        (x * BigInt(Math.floor((1 - slip) * 1e6))) / 1_000_000n
+
+      let txid = '', expOut = 0n, minOut = 0n, step = 'swap'
+
+      if (dir === 'trx_to_usdt') {
+        const inSun = BigInt(Math.round(Number(amount) * 1e6))      // TRX 6dec
+        expOut = await amountsOut(inSun, [W, U])
+        minOut = applySlip(expOut)
+        const param = abi.encode(
+          ['uint256', 'address[]', 'address', 'uint256'],
+          [minOut, [W, U], o20, deadline],
+        ).slice(2)
+        txid = await tronCall(priv, owner, SUN_ROUTER,
+          'swapExactTRXForTokens(uint256,address[],address,uint256)',
+          param, Number(inSun))
+      } else {
+        const inUnits = BigInt(Math.round(Number(amount) * 1e6))    // USDT 6dec
+        // allowance(owner, router) on USDT
+        const alP = abi.encode(['address', 'address'], [o20, router20]).slice(2)
+        const alRes = await tronConst(owner, TRON_USDT, 'allowance(address,address)', alP)
+        const allowance = alRes ? BigInt('0x' + alRes) : 0n
+        if (allowance < inUnits) {
+          const MAX = (1n << 256n) - 1n
+          const apP = abi.encode(['address', 'uint256'], [router20, MAX]).slice(2)
+          txid = await tronCall(priv, owner, TRON_USDT,
+            'approve(address,uint256)', apP, 0)
+          step = 'approved'
+        } else {
+          expOut = await amountsOut(inUnits, [U, W])
+          minOut = applySlip(expOut)
+          const param = abi.encode(
+            ['uint256', 'uint256', 'address[]', 'address', 'uint256'],
+            [inUnits, minOut, [U, W], o20, deadline],
+          ).slice(2)
+          txid = await tronCall(priv, owner, SUN_ROUTER,
+            'swapExactTokensForTRX(uint256,uint256,address[],address,uint256)',
+            param, 0)
+        }
+      }
+
+      await sb.rpc('admin_log', {
+        p_level: 'info', p_source: 'edge:dex-swap',
+        p_message: `tron ${step}`,
+        p_details: { dir, amount: String(amount), slip, txid, exp: expOut.toString(), min: minOut.toString() },
+      })
+      return json({
+        ok: true, dir, step, txid,
+        expected_out: step === 'approved' ? null : expOut.toString(),
+        min_out: step === 'approved' ? null : minOut.toString(),
+        out_dec: 6, out_sym: dir === 'trx_to_usdt' ? 'USDT' : 'TRX',
+        note: step === 'approved' ? 'USDT разрешён роутеру — повтори свап через ~10 сек' : undefined,
+      })
+    }
+
+    // ── TON / STON.fi (Highload wallet) ──
+    if (!WALLET_TON_MNEMONIC) return json({ error: 'no_ton_mnemonic' }, 500)
     const kp = await mnemonicToPrivateKey(WALLET_TON_MNEMONIC.split(' '))
     const walletAddr = getWalletAddress(kp.publicKey)
     const client = new TonClient({ endpoint: TONCENTER_ENDPOINT, apiKey: TONCENTER_API_KEY })
