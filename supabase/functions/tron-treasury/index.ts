@@ -22,10 +22,13 @@ import {
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const HD_MASTER_MNEMONIC   = Deno.env.get('HD_MASTER_MNEMONIC') || ''
-const TRON_KEY             = Deno.env.get('TRONGRID_API_KEY') || ''
+const NOWNODES_API_KEY     = Deno.env.get('NOWNODES_API_KEY') || ''
 const ADMIN_TG             = Deno.env.get('ADMIN_TELEGRAM_ID') || '945676433'
 
-const TRON_API = 'https://api.trongrid.io'
+// NowNodes java-tron node: rate-limit-free (paid key) and serves
+// all /wallet/* HTTP endpoints we need. Public api.trongrid.io
+// without a key 429s instantly.
+const TRON_API = 'https://trx.nownodes.io'
 const SUN = 1_000_000
 
 const corsHeaders = {
@@ -51,9 +54,9 @@ function tronAddr(priv: string): string {
 }
 async function rpc(path: string, body: unknown): Promise<any> {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
-  if (TRON_KEY) headers['TRON-PRO-API-KEY'] = TRON_KEY
+  if (NOWNODES_API_KEY) headers['api-key'] = NOWNODES_API_KEY
   const r = await fetch(`${TRON_API}${path}`, { method: 'POST', headers, body: JSON.stringify(body) })
-  if (!r.ok) throw new Error(`trongrid ${path} HTTP ${r.status}`)
+  if (!r.ok) throw new Error(`tron ${path} HTTP ${r.status}`)
   return r.json()
 }
 function signAndSend(tx: any, priv: string) {

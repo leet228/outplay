@@ -163,8 +163,10 @@ async function processEvmJob(job: any, treasuryEvm: string) {
 // Deno), broadcast. Treasury = HD index 0 Tron address; it funds
 // the user address with TRX so a TRC20 transfer can pay energy.
 
-const TRON_API   = 'https://api.trongrid.io'
-const TRON_KEY   = Deno.env.get('TRONGRID_API_KEY') || ''
+// NowNodes java-tron node — rate-limit-free (paid key), serves
+// every /wallet/* endpoint the sweep uses. (The deposit indexer
+// keeps api.trongrid.io because /v1 listing is TronGrid-only.)
+const TRON_API   = 'https://trx.nownodes.io'
 const TRON_USDT  = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'   // base58
 const SUN        = 1_000_000n
 // Energy-delegation model: USDT moves on delegated (staked)
@@ -201,11 +203,11 @@ function tronB58ToBytes21(b58: string): Uint8Array {
 
 async function tronRpc(path: string, body: unknown): Promise<any> {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
-  if (TRON_KEY) headers['TRON-PRO-API-KEY'] = TRON_KEY
+  if (NOWNODES_API_KEY) headers['api-key'] = NOWNODES_API_KEY
   const r = await fetch(`${TRON_API}${path}`, {
     method: 'POST', headers, body: JSON.stringify(body),
   })
-  if (!r.ok) throw new Error(`trongrid ${path} HTTP ${r.status}`)
+  if (!r.ok) throw new Error(`tron ${path} HTTP ${r.status}`)
   return await r.json()
 }
 
