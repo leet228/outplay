@@ -259,7 +259,13 @@ export default function AdminWallet() {
     setSwBusy(true); setSwMsg('')
     const r = await dexSwap(user.id, swDir, swAmt, (Number(swSlip) || 1) / 100)
     if (r && r.ok) {
-      setSwMsg(`✓ отправлено · ожид. выход ~${r.expected_out ?? '?'} (мин ${r.min_out ?? '?'})`)
+      // ask token: USDT (6 dec) for ton→usdt, TON (9 dec) for usdt→ton
+      const dec = swDir === 'ton_to_usdt' ? 6 : 9
+      const sym = swDir === 'ton_to_usdt' ? 'USDT' : 'TON'
+      const h = (v) => v != null
+        ? (Number(v) / 10 ** dec).toLocaleString('en-US', { maximumFractionDigits: 6 })
+        : '?'
+      setSwMsg(`✓ отправлено · получишь ≈ ${h(r.expected_out)} ${sym} (мин ${h(r.min_out)} ${sym})`)
       setSwAmt('')
     } else {
       setSwMsg('✗ ' + (r?.error || 'failed') + (r?.detail ? ' · ' + r.detail : ''))
