@@ -426,16 +426,15 @@ export async function getPendingInvites(userId) {
 // ── Withdrawals ──
 
 export async function requestWithdrawal(userId, amountRub, tonAddress, memo) {
-  const { data, error } = await supabase.rpc('request_withdrawal', {
-    p_user_id: userId,
-    p_amount_rub: amountRub,
-    p_ton_address: tonAddress,
-    p_memo: memo || '',
+  // Through the Edge fn: it verifies the Highload wallet can fund
+  // this (TON in hand OR enough USDT-TON to swap) BEFORE the
+  // balance is touched. 'network_unavailable' = nothing deducted.
+  const { data, error } = await supabase.functions.invoke('process-withdrawals', {
+    body: { action: 'request', kind: 'ton', user_id: userId, amount_rub: amountRub, ton_address: tonAddress, memo: memo || '' },
   })
-  if (error) throw error
+  if (error) { console.error('requestWithdrawal error:', error); return { error: error.message } }
 
-  // Fire-and-forget: ping Edge Function to process immediately (don't wait for cron)
-  supabase.functions.invoke('process-withdrawals').catch(() => {})
+  if (data?.ok) supabase.functions.invoke('process-withdrawals').catch(() => {})
 
   return data
 }
@@ -446,15 +445,12 @@ export async function requestWithdrawal(userId, amountRub, tonAddress, memo) {
 // rate. Same signature as the TON version so WithdrawalSheet can
 // dispatch on `view` without changing call sites.
 export async function requestUsdtWithdrawal(userId, amountRub, tonAddress, memo) {
-  const { data, error } = await supabase.rpc('request_usdt_withdrawal', {
-    p_user_id: userId,
-    p_amount_rub: amountRub,
-    p_ton_address: tonAddress,
-    p_memo: memo || '',
+  const { data, error } = await supabase.functions.invoke('process-withdrawals', {
+    body: { action: 'request', kind: 'usdt-ton', user_id: userId, amount_rub: amountRub, ton_address: tonAddress, memo: memo || '' },
   })
-  if (error) throw error
+  if (error) { console.error('requestUsdtWithdrawal error:', error); return { error: error.message } }
 
-  supabase.functions.invoke('process-withdrawals').catch(() => {})
+  if (data?.ok) supabase.functions.invoke('process-withdrawals').catch(() => {})
 
   return data
 }

@@ -340,6 +340,66 @@ async function getKeyPair() {
   return await mnemonicToPrivateKey(WALLET_TON_MNEMONIC.split(' '))
 }
 
+// ── Auto-swap funding (USDT-TON ⇄ TON) ──
+// If the Highload wallet is short of TON but holds spare USDT-TON
+// (or vice-versa), fund the shortfall via a dex-swap, then pay out
+// next tick once it lands. A single app_settings flag tracks the
+// in-flight swap (one Highload wallet → one global flag is enough).
+const USDT_MASTER   = 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs'
+const ADMIN_TG_ID   = Deno.env.get('ADMIN_TG_ID') || '945676433'
+const SWAP_HEADROOM = 1.03
+const STON_SWAP_GAS = 0.2          // TON spent on a STON.fi swap tx
+const SWAP_FLAG_KEY = 'ton_fund_swap'
+
+async function getUsdtTonBalance(ownerNonBounceable: string): Promise<number> {
+  try {
+    const u = new URL('https://toncenter.com/api/v3/jetton/wallets')
+    u.searchParams.set('owner_address', ownerNonBounceable)
+    u.searchParams.set('jetton_address', USDT_MASTER)
+    const r = await fetch(u.toString())
+    return Number((await r.json())?.jetton_wallets?.[0]?.balance || 0) / 1e6
+  } catch { return 0 }
+}
+async function getTonPriceUsd(): Promise<number> {
+  try {
+    const res = await fetchWithRetry('https://api.coinlore.net/api/ticker/?id=54683')
+    const p = parseFloat((await res.json())?.[0]?.price_usd)
+    return Number.isFinite(p) && p > 0 ? p : 0
+  } catch { return 0 }
+}
+async function adminUserId(): Promise<string | null> {
+  const { data } = await getSupabase().from('users')
+    .select('id').eq('telegram_id', ADMIN_TG_ID).maybeSingle()
+  return (data as { id?: string } | null)?.id ?? null
+}
+async function callDexSwap(dir: string, amount: number): Promise<any> {
+  const uid = await adminUserId()
+  if (!uid) return { error: 'no_admin_user' }
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/dex-swap`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+    body: JSON.stringify({ user_id: uid, dir, amount: amount.toFixed(6), slippage: 0.01 }),
+  })
+  return r.json().catch(() => ({ error: `http_${r.status}` }))
+}
+async function getSwapFlag(): Promise<{ dir: string; txid: string; at: number } | null> {
+  const { data } = await getSupabase().from('app_settings')
+    .select('value').eq('key', SWAP_FLAG_KEY).maybeSingle()
+  const v = (data as { value?: any } | null)?.value
+  return v && typeof v === 'object' && v.at ? v : null
+}
+async function setSwapFlag(v: { dir: string; txid: string; at: number } | null) {
+  const sb = getSupabase()
+  if (v === null) {
+    await sb.from('app_settings').delete().eq('key', SWAP_FLAG_KEY)
+  } else {
+    await sb.from('app_settings').upsert(
+      { key: SWAP_FLAG_KEY, value: v, updated_at: new Date().toISOString() },
+      { onConflict: 'key' },
+    )
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -350,6 +410,54 @@ serve(async (req) => {
   try {
     if (!WALLET_TON_MNEMONIC) {
       return jsonResponse({ error: 'WALLET_TON_MNEMONIC not configured' }, 500)
+    }
+
+    const _body = await req.json().catch(() => ({}))
+
+    // ── action:'request' — feasibility gate (mirrors crypto) ──
+    // Accept only if the Highload wallet can fund it (asset in hand
+    // OR enough of the other asset to swap, incl. 3% headroom).
+    // Otherwise 'network_unavailable' and the balance is NOT touched.
+    if (_body?.action === 'request') {
+      const kind = _body.kind === 'usdt-ton' ? 'usdt-ton' : 'ton'
+      const user_id = _body.user_id
+      const addr = String(_body.ton_address || '').trim()
+      const memo = String(_body.memo || '')
+      const amount = Math.round(Number(_body.amount_rub) || 0)
+      if (!user_id || !(amount > 0) || addr.length < 10) {
+        return jsonResponse({ error: 'bad_params' }, 400)
+      }
+      const kp = await getKeyPair()
+      const wa = getWalletAddress(kp.publicKey)
+      const [usdRub, tonUsd] = await Promise.all([getUsdRubRate(), getTonPriceUsd()])
+      if (!(tonUsd > 0) || !(usdRub > 0)) {
+        return jsonResponse({ error: 'price_unavailable' }, 503)
+      }
+      const gas = kind === 'usdt-ton' ? 25 : 3
+      const net = amount * 0.99 - gas
+      if (net <= 0) return jsonResponse({ error: 'amount_too_small_after_fees' })
+      const netUsd = net / usdRub
+
+      const tonBal  = Number(await getTonClient().getBalance(wa)) / 1e9
+      const usdtBal = await getUsdtTonBalance(wa.toString({ bounceable: false }))
+
+      let feasible: boolean
+      if (kind === 'usdt-ton') {
+        const needUsdt = netUsd
+        feasible = usdtBal >= needUsdt ||
+          tonBal >= (needUsdt / tonUsd) * SWAP_HEADROOM + STON_SWAP_GAS
+      } else {
+        const needTon = netUsd / tonUsd
+        feasible = tonBal >= needTon ||
+          usdtBal >= needTon * tonUsd * SWAP_HEADROOM
+      }
+      if (!feasible) return jsonResponse({ error: 'network_unavailable' })
+
+      const fn = kind === 'usdt-ton' ? 'request_usdt_withdrawal' : 'request_withdrawal'
+      const { data: rpc } = await getSupabase().rpc(fn, {
+        p_user_id: user_id, p_amount_rub: amount, p_ton_address: addr, p_memo: memo,
+      })
+      return jsonResponse(rpc ?? { error: 'rpc_failed' })
     }
 
     const sb = getSupabase()
@@ -464,13 +572,77 @@ serve(async (req) => {
     const totalUsdtTonGas = usdtWds.length * USDT_JETTON_TRANSFER_VALUE
     const gasReserve     = 0.1 + (tonWds.length + usdtWds.length) * 0.01
     const totalRequired  = totalTon + totalUsdtTonGas + gasReserve
+    const usdtBal        = await getUsdtTonBalance(walletAddress.toString({ bounceable: false }))
+    const totalUsdtNeed  = usdtWds.reduce((s, w) => s + w.amountUsdt, 0)
+    const liveIds        = [...tonWds, ...usdtWds].map(w => w.id)
+    const revertPending  = () => sb.from('withdrawals').update({ status: 'pending' }).in('id', liveIds)
 
-    if (walletBalance < totalRequired) {
+    const tonOk  = walletBalance >= totalRequired
+    const usdtOk = usdtBal >= totalUsdtNeed
+    const flag   = await getSwapFlag()
+
+    if (flag) {
+      if (tonOk && usdtOk) {
+        await setSwapFlag(null)                 // funded → fall through to send
+      } else if (Date.now() - flag.at > 12 * 60 * 1000) {
+        await setSwapFlag(null)
+        for (const wd of [...tonWds, ...usdtWds]) {
+          await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: 'Swap funding timeout (12min)' })
+          failedIds.push(wd.id)
+        }
+        await logToAdmin('error', 'TON funding swap timed out', { flag })
+        return jsonResponse({ completed: 0, failed: failedIds.length, reason: 'swap_timeout' })
+      } else {
+        await revertPending()                   // still settling — wait
+        return jsonResponse({ completed: 0, failed: 0, reason: 'awaiting_swap', swap: flag.txid })
+      }
+    } else if (!tonOk || !usdtOk) {
+      const tonUsd = await getTonPriceUsd()
+      if (!(tonUsd > 0)) {
+        await revertPending()
+        return jsonResponse({ completed: 0, failed: 0, reason: 'price_unavailable' })
+      }
+      const usdtSurplus = usdtBal - totalUsdtNeed
+      const tonSurplus  = walletBalance - totalRequired
+
+      if (!tonOk) {
+        // short of TON → swap spare USDT-TON → TON
+        const needUsdt = (totalRequired - walletBalance) * tonUsd * SWAP_HEADROOM
+        if (usdtSurplus > 0 && usdtSurplus >= needUsdt) {
+          const sr = await callDexSwap('usdt_to_ton', needUsdt)
+          await revertPending()
+          if (sr?.ok && sr?.step === 'swap') {
+            await setSwapFlag({ dir: 'usdt_to_ton', txid: sr.txid, at: Date.now() })
+            await logToAdmin('info', 'TON funding swap fired', { needUsdt, txid: sr.txid })
+            return jsonResponse({ completed: 0, failed: 0, reason: 'swap_fired', swap: sr.txid })
+          }
+          return jsonResponse({ completed: 0, failed: 0, reason: 'swap_retry', detail: String(sr?.error || '') })
+        }
+      } else {
+        // short of USDT-TON → swap spare TON → USDT-TON
+        const needTon = ((totalUsdtNeed - usdtBal) / tonUsd) * SWAP_HEADROOM + STON_SWAP_GAS
+        if (tonSurplus > 0 && tonSurplus >= needTon) {
+          const sr = await callDexSwap('ton_to_usdt', needTon)
+          await revertPending()
+          if (sr?.ok && sr?.step === 'swap') {
+            await setSwapFlag({ dir: 'ton_to_usdt', txid: sr.txid, at: Date.now() })
+            await logToAdmin('info', 'USDT-TON funding swap fired', { needTon, txid: sr.txid })
+            return jsonResponse({ completed: 0, failed: 0, reason: 'swap_fired', swap: sr.txid })
+          }
+          return jsonResponse({ completed: 0, failed: 0, reason: 'swap_retry', detail: String(sr?.error || '') })
+        }
+      }
+
+      // neither asset can cover → genuine shortfall: fail + refund
       for (const wd of [...tonWds, ...usdtWds]) {
-        await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: `Balance low: ${walletBalance.toFixed(4)}` })
+        await sb.rpc('fail_withdrawal', {
+          p_withdrawal_id: wd.id,
+          p_error: `Treasury short (TON ${walletBalance.toFixed(3)}/${totalRequired.toFixed(3)}, USDT ${usdtBal.toFixed(2)}/${totalUsdtNeed.toFixed(2)})`,
+        })
         failedIds.push(wd.id)
       }
-      await logToAdmin('error', 'Wallet balance too low', { balance: walletBalance, needed: totalRequired })
+      await logToAdmin('error', 'TON wallet short, no swap cover',
+        { walletBalance, totalRequired, usdtBal, totalUsdtNeed })
       return jsonResponse({ completed: 0, failed: failedIds.length, reason: 'wallet_low_balance' })
     }
 
