@@ -1,25 +1,22 @@
 import { GAME_CARD_IMAGE_URLS } from './gameAssets'
 import tgStarSrc from '../assets/star/tgstar.png'
-// Crypto icons used by the deposit sheet (TON / USDT cards on
-// the main view + the detail screens). Tiny SVGs but we eager-
-// load them on app start so the first time the user opens the
-// deposit sheet there's zero flash-of-empty-icon.
-import tonIconSrc       from '../assets/crypto/ton.svg'
-import usdtIconSrc      from '../assets/crypto/usdt.svg'
-import smallTonSrc      from '../assets/crypto/small_ton.svg'
-import smallUsdtSrc     from '../assets/crypto/small_usdt.svg'
-import smallTonBadgeSrc from '../assets/crypto/small_ton_for_usdt.svg'
+// Crypto icons used by the deposit sheet — TON / USDT cards on
+// the main view, the full extra-chain card list, every detail
+// hero + network badge. Tiny SVGs; glob-imported so any icon
+// dropped into assets/crypto/ is eager-loaded on app start and
+// the deposit sheet never flashes an empty icon.
+const cryptoIconRaw = import.meta.glob(
+  '../assets/crypto/*.svg',
+  { eager: true, query: '?url', import: 'default' }
+)
+const CRYPTO_ICON_URLS = Object.values(cryptoIconRaw)
 
 const preloadedUrls = new Set()
 const activePreloads = new Map()
 const IMAGE_URL_KEYS = ['avatar_url', 'photo_url']
 const APP_IMAGE_URLS = [
   tgStarSrc,
-  tonIconSrc,
-  usdtIconSrc,
-  smallTonSrc,
-  smallUsdtSrc,
-  smallTonBadgeSrc,
+  ...CRYPTO_ICON_URLS,
 ]
 
 // Live feed icons — small thumbnails shown on the Home → Slots tab.
