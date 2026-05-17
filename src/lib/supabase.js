@@ -1248,6 +1248,20 @@ export async function finishStardewRound(roundId, payoutRub) {
   return data
 }
 
+/* ── Per-user crypto deposit addresses ─────────────────────────── */
+// Idempotently derives (server-side, from the HD master) the
+// user's 4 deposit addresses and returns them. Shape:
+//   { ok, ready, addresses: { evm, tron, btc, ltc } } | { error }
+// EVM serves ETH/BSC + USDT/USDC ERC20/BEP20; TRON serves TRX +
+// USDT-TRC20; BTC and LTC their own coin.
+export async function getUserDepositAddresses(userId) {
+  const { data, error } = await supabase.functions.invoke('derive-deposit-address', {
+    body: { user_id: userId },
+  })
+  if (error) { console.error('getUserDepositAddresses error:', error); return null }
+  return data
+}
+
 // ── Admin: slot stats ───────────────────────
 export async function adminGetSlotStats() {
   const { data, error } = await supabase.rpc('admin_get_slot_stats')

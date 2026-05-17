@@ -8,7 +8,7 @@ import { useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-rea
 import { beginCell as tonBeginCell, Address as TonAddress } from '@ton/core'
 import useGameStore from '../store/useGameStore'
 import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
-import { createStarsInvoice, processDeposit, getUserBalance, supabase } from '../lib/supabase'
+import { createStarsInvoice, processDeposit, getUserBalance, supabase, getUserDepositAddresses } from '../lib/supabase'
 import { formatCurrency, convertFromRub, fetchTonPrice, fetchCoinPriceUsd } from '../lib/currency'
 import { translations } from '../lib/i18n'
 import { TON_ADDRESS, USDT_ADDRESS, USDT_MASTER, DEPOSIT_ADDRESSES } from '../lib/addresses'
@@ -135,15 +135,30 @@ function depositAddrKey(coinId) {
   return 'deposit_addr_' + String(coinId).replace(/-/g, '_')
 }
 
+// Which derived chain a deposit card maps to. One EVM address
+// serves every Ethereum/BSC asset; the Tron address serves TRX +
+// USDT-TRC20; BTC and LTC are their own.
+const COIN_CHAIN = {
+  'trx': 'tron', 'usdt-trc20': 'tron',
+  'eth': 'evm', 'bnb': 'evm',
+  'usdt-erc20': 'evm', 'usdc-erc20': 'evm',
+  'usdt-bep20': 'evm', 'usdc-bep20': 'evm',
+  'btc': 'btc', 'ltc': 'ltc',
+}
+
 // Resolve the address to actually show, in priority order:
-//   1. admin override from app_settings (Admin → Control)
-//   2. the real built-in wallet for that chain (addresses.js)
-//   3. the legacy per-coin placeholder (last resort, unreachable
-//      now that every id is in DEPOSIT_ADDRESSES)
-function resolveDepositAddr(coin, appSettings) {
+//   1. the USER's own derived address (per-user crediting — the
+//      whole point of the deposit→sweep system)
+//   2. admin override from app_settings (Admin → Control)
+//   3. the shared built-in wallet (addresses.js) — fallback while
+//      the user's address is still deriving / for dev mode
+//   4. legacy per-coin placeholder (unreachable now)
+function resolveDepositAddr(coin, appSettings, userAddrs) {
+  const userAddr = userAddrs ? userAddrs[COIN_CHAIN[coin.id]] : ''
   const raw = appSettings?.[depositAddrKey(coin.id)]
   const override = typeof raw === 'string' ? raw.trim() : ''
-  return override || DEPOSIT_ADDRESSES[coin.id] || coin.addr
+  return (userAddr && userAddr.trim()) ||
+    override || DEPOSIT_ADDRESSES[coin.id] || coin.addr
 }
 
 function TgStarIcon({ size = 22, className = '' }) {
@@ -211,6 +226,10 @@ export default function DepositSheet() {
   const [view, setView] = useState('main')
   // Which extra-crypto card opened the "coming soon" screen.
   const [soonCoin, setSoonCoin] = useState(null)
+  // The user's own derived deposit addresses { evm, tron, btc,
+  // ltc } | null. Fetched once per sheet-open; null → fall back
+  // to the shared wallet (dev mode / still deriving).
+  const [userDepositAddrs, setUserDepositAddrs] = useState(null)
   const [selected, setSelected] = useState(100)
   const [custom, setCustom] = useState('')
   const [loading, setLoading] = useState(false)
@@ -351,6 +370,23 @@ export default function DepositSheet() {
       }, 300)
     }
   }, [depositOpen])
+
+  // Provision / fetch the user's OWN derived deposit addresses
+  // once the sheet opens. Idempotent server-side. Dev/no-user
+  // skips it → the new-chain cards fall back to the shared
+  // wallet so the sheet still works offline.
+  useEffect(() => {
+    if (!depositOpen) return
+    if (userDepositAddrs) return
+    const uid = user?.id
+    if (!uid || uid === 'dev') return
+    let cancelled = false
+    getUserDepositAddresses(uid).then(res => {
+      if (cancelled) return
+      if (res && res.ok && res.addresses) setUserDepositAddrs(res.addresses)
+    })
+    return () => { cancelled = true }
+  }, [depositOpen, user, userDepositAddrs])
 
   // Fetch the connected wallet's TON balance whenever the user
   // lands on EITHER wallet-deposit view. We need it on the TON
@@ -906,7 +942,7 @@ export default function DepositSheet() {
 
   // Admin-configured receiving wallet for the open chain (falls
   // back to the built-in placeholder until the admin sets it).
-  const soonAddr = soonCoin ? resolveDepositAddr(soonCoin, appSettings) : ''
+  const soonAddr = soonCoin ? resolveDepositAddr(soonCoin, appSettings, userDepositAddrs) : ''
 
   // ── Live fiat-equivalent helpers for the wallet-deposit views ──
   // Both helpers expect the entered coin amount as a string from
