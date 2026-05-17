@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury } from '../lib/supabase'
+import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw } from '../lib/supabase'
 import { fetchChainBalances } from '../lib/chainBalances'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
@@ -147,6 +147,12 @@ export default function AdminWallet() {
   const [tronMsg, setTronMsg] = useState('')
   const [stakeAmt, setStakeAmt] = useState('')
   const [unstakeAmt, setUnstakeAmt] = useState('')
+  // Multi-chain treasury withdrawal.
+  const [wcChain, setWcChain] = useState('usdt-trc20')
+  const [wcTo, setWcTo] = useState('')
+  const [wcAmt, setWcAmt] = useState('')
+  const [wcBusy, setWcBusy] = useState(false)
+  const [wcMsg, setWcMsg] = useState('')
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -212,6 +218,22 @@ export default function AdminWallet() {
     setTronBusy('')
     setTimeout(loadTron, 4000)  // refresh once the tx settles
   }, [user, tronBusy, loadTron])
+
+  const doWithdraw = useCallback(async () => {
+    if (!user?.id || wcBusy) return
+    if (!wcTo.trim() || !(Number(wcAmt) > 0)) { setWcMsg('Адрес и сумма?'); return }
+    haptic('medium')
+    setWcBusy(true); setWcMsg('')
+    const r = await treasuryWithdraw(user.id, wcChain, wcTo.trim(), String(wcAmt).trim())
+    if (r && r.ok) {
+      setWcMsg(`✓ отправлено · ${r.txid ? r.txid.slice(0, 16) + '…' : ''}`)
+      setWcTo(''); setWcAmt('')
+    } else {
+      setWcMsg('✗ ' + (r?.error || 'failed') +
+        (r?.detail ? ' · ' + JSON.stringify(r.detail).slice(0, 120) : ''))
+    }
+    setWcBusy(false)
+  }, [user, wcBusy, wcChain, wcTo, wcAmt])
   useEffect(() => {
     const iv = setInterval(fetchAll, 30_000)
     return () => clearInterval(iv)
@@ -826,6 +848,60 @@ export default function AdminWallet() {
             </>
           )
         })()}
+      </div>
+
+      {/* ── Treasury withdrawal (multi-chain) ── */}
+      <div className="admin-tron-stake">
+        <div className="admin-wallet-section-title">Вывод из казны</div>
+        <div className="admin-tron-note">
+          Отправка с казны на любой адрес. Сумма — в монете
+          (BTC/ETH/BNB/TRX/USDT/USDC/LTC). Комиссию платит казна.
+        </div>
+        <div className="admin-tron-action">
+          <select
+            className="admin-tron-input"
+            value={wcChain}
+            onChange={e => setWcChain(e.target.value)}
+          >
+            {[
+              ['usdt-trc20', 'USDT · TRC20'],
+              ['trx', 'TRX'],
+              ['usdt-bep20', 'USDT · BEP20'],
+              ['usdc-bep20', 'USDC · BEP20'],
+              ['bnb', 'BNB'],
+              ['usdt-erc20', 'USDT · ERC20'],
+              ['usdc-erc20', 'USDC · ERC20'],
+              ['eth', 'ETH'],
+              ['btc', 'BTC'],
+              ['ltc', 'LTC'],
+            ].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </div>
+        <div className="admin-tron-action">
+          <input
+            className="admin-tron-input"
+            type="text" spellCheck="false" autoComplete="off"
+            placeholder="Адрес получателя"
+            value={wcTo}
+            onChange={e => setWcTo(e.target.value)}
+          />
+        </div>
+        <div className="admin-tron-action">
+          <input
+            className="admin-tron-input"
+            type="number" inputMode="decimal" placeholder="Сумма (в монете)"
+            value={wcAmt}
+            onChange={e => setWcAmt(e.target.value)}
+          />
+          <button
+            className="admin-tron-btn admin-tron-btn--warn"
+            disabled={wcBusy || !wcTo.trim() || !(Number(wcAmt) > 0)}
+            onClick={doWithdraw}
+          >
+            {wcBusy ? '…' : 'Вывести'}
+          </button>
+        </div>
+        {wcMsg && <div className="admin-tron-msg">{wcMsg}</div>}
       </div>
     </div>
   )

@@ -502,6 +502,17 @@ export async function tronTreasury(action, userId, amount) {
   return data
 }
 
+// ── Admin: treasury withdrawal (new chains) ──
+// chain ∈ eth|bnb|usdt-erc20|usdc-erc20|usdt-bep20|usdc-bep20|
+// trx|usdt-trc20|btc|ltc. amount = string in coin units.
+export async function treasuryWithdraw(userId, chain, to, amount) {
+  const { data, error } = await supabase.functions.invoke('treasury-withdraw', {
+    body: { user_id: userId, chain, to, amount },
+  })
+  if (error) { console.error('treasuryWithdraw error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Deposits ──
 
 export async function createStarsInvoice(userId, amount, currencyAmount, currencyCode) {
