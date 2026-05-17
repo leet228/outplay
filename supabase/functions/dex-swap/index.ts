@@ -223,33 +223,49 @@ serve(async (req) => {
       const rr = await fetch(`${SUN_API}?${qs.toString()}`)
       if (!rr.ok) throw new Error(`sun router api ${rr.status}`)
       const rj = await rr.json()
-      const route = (rj?.data && rj.data[0]) || (Array.isArray(rj) ? rj[0] : null)
-      if (!route || !Array.isArray(route.tokens) || route.tokens.length < 2) {
-        throw new Error('no_route: ' + JSON.stringify(rj).slice(0, 200))
+      const all: any[] = Array.isArray(rj?.data) ? rj.data
+        : (Array.isArray(rj) ? rj : [])
+      // Prefer a DIRECT pool (2 tokens, 1 hop) — simple & safe
+      // encoding. Multi-hop (esp. v3) is deferred until verified.
+      const direct = all.find(r =>
+        Array.isArray(r?.tokens) && r.tokens.length === 2)
+      if (!direct) {
+        await sb.rpc('admin_log', {
+          p_level: 'warn', p_source: 'edge:dex-swap',
+          p_message: 'tron no direct route',
+          p_details: { dir, amount: String(amount), raw: JSON.stringify(all?.[0] || rj).slice(0, 600) },
+        })
+        return json({
+          error: 'no_direct_route',
+          detail: 'только мультихоп — не отправлено. Сырой маршрут в admin_log.',
+        }, 400)
       }
-
+      const route = direct
       const path20 = route.tokens.map((t: string) => tron20(t))
-      const perHop: string[] = route.poolVersions || route.poolVersion || []
+      const perHop: string[] = route.poolVersions || route.poolVersion || ['v2']
       const feesArr: number[] = (route.fees || route.poolFees || [])
         .map((x: any) => Number(x) || 0)
-      // Collapse consecutive equal pool versions → poolVersion[] +
-      // versionLen[] (first run = hops+1 tokens, later runs = hops).
-      const poolVersion: string[] = []
-      const versionLen: bigint[] = []
-      for (let i = 0; i < perHop.length; i++) {
-        if (i === 0 || perHop[i] !== perHop[i - 1]) {
-          poolVersion.push(perHop[i])
-          versionLen.push(i === 0 ? 2n : 1n)
-        } else {
-          versionLen[versionLen.length - 1] += 1n
-        }
-      }
-      const fees = feesArr.length === perHop.length
-        ? feesArr : perHop.map(() => 0)
+      // Single hop → one pool version, both tokens in it.
+      const poolVersion: string[] = [String(perHop[0] || 'v2')]
+      const versionLen: bigint[] = [2n]
+      const fees = feesArr.length ? [Number(feesArr[0]) || 0] : [0]
 
+      // route.amountOut may be human ("3.95") or raw integer
+      // ("3950000"). Decimal → ×1e6; pure integer → use as-is.
+      const aoStr = String(route.amountOut ?? route.amountout ?? '0')
+      const outUnits = aoStr.includes('.')
+        ? BigInt(Math.round(Number(aoStr) * 1e6))
+        : BigInt(aoStr || '0')
       const inUnits = BigInt(Math.round(Number(amount) * 1e6))   // TRX & USDT 6dec
-      const outUnits = BigInt(Math.round(Number(route.amountOut) * 1e6))
       const minOut = (outUnits * BigInt(Math.floor((1 - slip) * 1e6))) / 1_000_000n
+      if (outUnits <= 0n) {
+        await sb.rpc('admin_log', {
+          p_level: 'warn', p_source: 'edge:dex-swap',
+          p_message: 'tron zero out',
+          p_details: { dir, amount: String(amount), raw: JSON.stringify(route).slice(0, 600) },
+        })
+        return json({ error: 'zero_out', detail: JSON.stringify(route).slice(0, 200) }, 400)
+      }
 
       // USDT→TRX needs an allowance for the Smart Router.
       if (!isTrxIn) {
@@ -287,6 +303,7 @@ serve(async (req) => {
           dir, amount: String(amount), slip, txid,
           exp: outUnits.toString(), min: minOut.toString(),
           poolVersion, route_tokens: route.tokens,
+          route_raw: JSON.stringify(route).slice(0, 600),
         },
       })
       return json({
