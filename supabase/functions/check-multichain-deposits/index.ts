@@ -48,6 +48,14 @@ const EVM_TOKENS: Record<string, Record<string, { dec: number; label: string }>>
 }
 const TRON_USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
 
+// Treasury = HD index 0. The sweep funds user addresses with gas
+// FROM the treasury; those inbound transfers must NOT be credited
+// as user deposits (self-induced top-up loop). Skip anything sent
+// by the treasury on every chain.
+const TREASURY_EVM      = '0x71740514b90ac31d0ba0ff772107ab5ba8496ac2'
+const TREASURY_TRON_B58 = 'TNLov2u5DuHKiSJpQHziqb8Gcov2GQWZw4'
+const TREASURY_TRON_HEX = '4187b763889b9edeee35caff2ffc56170fca1d10a0'
+
 let supabase: ReturnType<typeof createClient>
 function getSupabase() {
   if (!supabase) supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
@@ -197,10 +205,14 @@ async function scanBlockbook(
     if (conf < need) continue
     const sym = kind === 'evm-eth' ? 'eth' : 'bnb'
 
+    // Skip our own treasury→user gas top-ups (not real deposits).
+    const evmFrom: string[] = (tx.vin?.[0]?.addresses) || []
+    const fromTreasury = evmFrom.some(x => String(x).toLowerCase() === TREASURY_EVM)
+
     // native incoming
     const toAddrs: string[] = (tx.vout?.[0]?.addresses) || []
     const isToUs = toAddrs.some(x => String(x).toLowerCase() === lc)
-    if (isToUs && tx.value && tx.value !== '0') {
+    if (!fromTreasury && isToUs && tx.value && tx.value !== '0') {
       const px = prices[sym]
       if (px != null) {
         const amt = Number(BigInt(tx.value)) / 1e18
@@ -217,6 +229,7 @@ async function scanBlockbook(
       const tr = transfers[ti]
       const to = String(tr.to || '').toLowerCase()
       if (to !== lc) continue
+      if (String(tr.from || '').toLowerCase() === TREASURY_EVM) continue // our gas/sweep move
       const contract = String(tr.contract || tr.token || '').toLowerCase()
       const meta = tokenMap[contract]
       if (!meta) continue
@@ -253,6 +266,9 @@ async function scanTron(
   )
   for (const t of (trc?.data || [])) {
     if (String(t.to) !== addr) continue
+    // Skip treasury→user gas top-ups (not real deposits).
+    const tfrom = String(t.from || '')
+    if (tfrom === TREASURY_TRON_B58 || tfrom.toLowerCase() === TREASURY_TRON_HEX) continue
     const txid = t.transaction_id
     if (!txid) continue
     const dec = Number(t.token_info?.decimals ?? 6)
@@ -276,6 +292,9 @@ async function scanTron(
     if (!c || c.type !== 'TransferContract') continue
     const v = c.parameter?.value
     if (!v || typeof v.amount !== 'number') continue
+    // Skip treasury→user gas top-ups (not real deposits).
+    const owner = String(v.owner_address || '').toLowerCase()
+    if (owner === TREASURY_TRON_HEX || owner === TREASURY_TRON_B58.toLowerCase()) continue
     const txid = t.txID
     if (!txid) continue
     // TronGrid marks success in `ret`
