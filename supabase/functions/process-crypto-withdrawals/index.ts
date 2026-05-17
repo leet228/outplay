@@ -170,6 +170,96 @@ function toCoin(chain: string, netUsd: number, pEth: number, pTrx: number): numb
   return netUsd // stablecoins ≈ $1
 }
 
+// ── Treasury balance readers (read-only; HD-0 public addrs) ──
+const T_EVM      = '0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2'
+const T_EVM_LC   = T_EVM.toLowerCase().slice(2)
+const T_TRON     = 'TNLov2u5DuHKiSJpQHziqb8Gcov2GQWZw4'
+const T_TRON20HX = '87b763889b9edeee35caff2ffc56170fca1d10a0'
+const num = (h: string) => { try { return Number(BigInt(h)) } catch { return 0 } }
+async function rpcEvmRead(net: 'eth' | 'bsc', method: string, params: unknown[]) {
+  const r = await fetch(RPC[net], {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'api-key': NOWNODES_API_KEY },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  })
+  const j = await r.json()
+  if (j.error) throw new Error(j.error.message)
+  return j.result as string
+}
+const evmNativeBal = async (net: 'eth' | 'bsc') =>
+  num(await rpcEvmRead(net, 'eth_getBalance', [T_EVM, 'latest'])) / 1e18
+const evmTokenBal = async (net: 'eth' | 'bsc', c: string, dec: number) =>
+  num(await rpcEvmRead(net, 'eth_call', [{ to: c, data: '0x70a08231' + '0'.repeat(24) + T_EVM_LC }, 'latest'])) / 10 ** dec
+async function tronTrxBal(): Promise<number> {
+  const r = await fetch(`${TRON_API}/wallet/getaccount`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'api-key': NOWNODES_API_KEY },
+    body: JSON.stringify({ address: T_TRON, visible: true }),
+  })
+  return Number((await r.json())?.balance || 0) / 1e6
+}
+async function tronUsdtBal(): Promise<number> {
+  const r = await fetch(`${TRON_API}/wallet/triggerconstantcontract`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'api-key': NOWNODES_API_KEY },
+    body: JSON.stringify({
+      owner_address: T_TRON, contract_address: TRON_USDT,
+      function_selector: 'balanceOf(address)',
+      parameter: '0'.repeat(24) + T_TRON20HX, visible: true,
+    }),
+  })
+  const h = (await r.json())?.constant_result?.[0]
+  return h ? num('0x' + h) / 1e6 : 0
+}
+
+// Balance of the REQUESTED coin in the treasury (target units).
+function targetBalance(chain: string): Promise<number> {
+  if (chain === 'eth') return evmNativeBal('eth')
+  if (chain === 'trx') return tronTrxBal()
+  if (chain === 'usdt-trc20') return tronUsdtBal()
+  const t = EVM_TOKEN[chain]                       // usdt/usdc erc20/bep20
+  return evmTokenBal(EVM_NET[chain], t.addr, t.dec)
+}
+// USD price of the requested coin (stablecoins ≈ 1).
+function targetUsd(chain: string, pEth: number, pTrx: number): number {
+  if (chain === 'eth') return pEth
+  if (chain === 'trx') return pTrx
+  return 1
+}
+// Backup asset that funds a short payout via a dex-swap.
+//   dir       — dex-swap direction (backup → target)
+//   bal()     — backup balance in backup units
+//   usd()     — backup USD price
+//   reserve   — native units to KEEP for gas (0 for token backups)
+interface Backup { dir: string; bal: () => Promise<number>; usd: () => number; reserve: number }
+function backupOf(chain: string, pEth: number, pBnb: number, pTrx: number): Backup | null {
+  switch (chain) {
+    case 'eth':        return { dir: 'usdt_to_eth', bal: () => evmTokenBal('eth', EVM_TOKEN['usdt-erc20'].addr, 6), usd: () => 1,    reserve: 0 }
+    case 'usdt-erc20': return { dir: 'eth_to_usdt', bal: () => evmNativeBal('eth'), usd: () => pEth, reserve: 0.01 }
+    case 'usdc-erc20': return { dir: 'eth_to_usdc', bal: () => evmNativeBal('eth'), usd: () => pEth, reserve: 0.01 }
+    case 'usdc-bep20': return { dir: 'bnb_to_usdc', bal: () => evmNativeBal('bsc'), usd: () => pBnb, reserve: 0.01 }
+    case 'trx':        return { dir: 'usdt_to_trx', bal: () => tronUsdtBal(),       usd: () => 1,    reserve: 0 }
+    case 'usdt-trc20': return { dir: 'trx_to_usdt', bal: () => tronTrxBal(),        usd: () => pTrx, reserve: 200 }
+    default: return null
+  }
+}
+
+let _adminId: string | null | undefined
+async function adminUserId(): Promise<string | null> {
+  if (_adminId !== undefined) return _adminId
+  const { data } = await sb.from('users')
+    .select('id').eq('telegram_id', ADMIN_TG_ID).maybeSingle()
+  _adminId = data?.id ?? null
+  return _adminId
+}
+async function callDexSwap(userId: string, dir: string, amount: number) {
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/dex-swap`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+    body: JSON.stringify({ user_id: userId, dir, amount: amount.toFixed(8), slippage: 0.01 }),
+  })
+  return r.json().catch(() => ({ error: `http_${r.status}` }))
+}
+const SWAP_HEADROOM = 1.03   // swap 3% extra to absorb slippage+fees
+
 async function sendPayout(
   chain: string, to: string, coin: number, nm: EvmNonce,
 ): Promise<string> {
@@ -249,8 +339,8 @@ serve(async (req) => {
     const enabled = en?.value === true || en?.value === 'true'
     if (!enabled) return json({ ok: true, skipped: 'disabled' })
 
-    const [pEth, pTrx, rate] = await Promise.all([
-      safe(px(80), 0), safe(px(2713), 0), safe(usdRub(), 90),
+    const [pEth, pBnb, pTrx, rate] = await Promise.all([
+      safe(px(80), 0), safe(px(2710), 0), safe(px(2713), 0), safe(usdRub(), 90),
     ])
 
     const started = Date.now()
@@ -263,34 +353,84 @@ serve(async (req) => {
       const row = Array.isArray(rows) ? rows[0] : rows
       if (!row?.id) break
 
-      // Take the shared treasury lock for this chain. If it's busy
-      // (dex-swap / treasury-withdraw mid-tx), put the row back to
-      // pending and stop — next cron tick retries cleanly.
-      const ch = lockChannel(row.chain)
-      const lock = await acquireLock(ch, 'crypto-withdraw')
-      if (!lock) {
-        await sb.from('crypto_withdrawals')
-          .update({ status: 'pending' })
-          .eq('id', row.id).eq('status', 'processing')
-        break
-      }
-
       try {
         const netUsd = rate > 0 ? Number(row.net_rub) / rate : 0
         const coin = toCoin(row.chain, netUsd, pEth, pTrx)
         if (!(coin > 0)) throw new Error('zero_amount (price feed?)')
 
-        let txid = ''
-        try {
-          txid = await sendPayout(row.chain, row.to_address, coin, nm)
-        } finally {
-          await releaseLock(ch, lock)
+        // 1. Enough of the requested coin already? → pay out.
+        const bal = await targetBalance(row.chain)
+        if (bal >= coin) {
+          const ch = lockChannel(row.chain)
+          const lock = await acquireLock(ch, 'crypto-withdraw')
+          if (!lock) {
+            // treasury busy — keep state, retry next tick
+            await sb.rpc(row.swap_txid ? 'crypto_back_to_swapping' : 'requeue_crypto_pending', { p_id: row.id })
+            break
+          }
+          let txid = ''
+          try {
+            txid = await sendPayout(row.chain, row.to_address, coin, nm)
+          } finally {
+            await releaseLock(ch, lock)
+          }
+          await sb.rpc('complete_crypto_withdrawal', {
+            p_id: row.id, p_tx_hash: txid, p_coin_amount: coin,
+          })
+          done.push({ id: row.id, chain: row.chain, txid, coin })
+          await tg(`✅ <b>Вывод выполнен</b>\n${row.chain} · ${coin.toFixed(6)}\n→ <code>${row.to_address}</code>\ntx: <code>${txid}</code>`)
+          continue
         }
-        await sb.rpc('complete_crypto_withdrawal', {
-          p_id: row.id, p_tx_hash: txid, p_coin_amount: coin,
-        })
-        done.push({ id: row.id, chain: row.chain, txid, coin })
-        await tg(`✅ <b>Вывод выполнен</b>\n${row.chain} · ${coin.toFixed(6)}\n→ <code>${row.to_address}</code>\ntx: <code>${txid}</code>`)
+
+        // 2. A swap was already fired but the coin still hasn't
+        //    landed → keep waiting (SQL 12-min guard refunds it).
+        if (row.swap_txid) {
+          await sb.rpc('crypto_back_to_swapping', { p_id: row.id })
+          done.push({ id: row.id, chain: row.chain, waiting_swap: row.swap_txid })
+          continue
+        }
+
+        // 3. Short, no swap yet → can the backup asset cover it?
+        const bk = backupOf(row.chain, pEth, pBnb, pTrx)
+        if (!bk) throw new Error('no_backup_route')
+        const tUsd = targetUsd(row.chain, pEth, pTrx)
+        const bUsd = bk.usd()
+        if (!(tUsd > 0) || !(bUsd > 0)) throw new Error('no_price')
+
+        const shortfall = coin - bal
+        const needBackup = (shortfall * tUsd * SWAP_HEADROOM) / bUsd
+        const bkBal = await bk.bal()
+        const avail = bk.reserve > 0 ? Math.max(0, bkBal - bk.reserve) : bkBal
+        if (avail < needBackup) {
+          throw new Error(`treasury_short: need ~${needBackup.toFixed(4)} backup, have ${avail.toFixed(4)}`)
+        }
+
+        // 4. Fire the swap via dex-swap (it self-locks its chain;
+        //    we hold NO lock here → no deadlock).
+        const admin = await adminUserId()
+        if (!admin) throw new Error('no_admin_user')
+        const sr = await callDexSwap(admin, bk.dir, needBackup)
+        if (sr?.step === 'approved') {
+          // allowance set — retry the whole row next tick
+          await sb.rpc('requeue_crypto_pending', { p_id: row.id })
+          done.push({ id: row.id, chain: row.chain, approved: sr.txid })
+          continue
+        }
+        if (sr?.ok && sr?.step === 'swap') {
+          await sb.rpc('mark_crypto_swapping', { p_id: row.id, p_txid: sr.txid })
+          done.push({ id: row.id, chain: row.chain, swap: sr.txid })
+          await tg(`🔄 <b>Свап под вывод</b>\n${row.chain}: ${bk.dir} · ~${needBackup.toFixed(4)}\ntx: <code>${sr.txid}</code>\nвывод уйдёт после подтверждения свапа`)
+          continue
+        }
+        // Transient (treasury lock busy / RPC 5xx) → retry, do NOT
+        // refund. Only a genuine swap rejection fails the row.
+        const se = String(sr?.error || '')
+        if (se === 'treasury_busy' || /^http_5/.test(se) || se === 'no_hd_master') {
+          await sb.rpc('requeue_crypto_pending', { p_id: row.id })
+          done.push({ id: row.id, chain: row.chain, retry: se })
+          break
+        }
+        throw new Error(`swap_failed: ${se || JSON.stringify(sr).slice(0, 120)}`)
       } catch (e) {
         const err = String(e).slice(0, 200)
         await sb.rpc('fail_crypto_withdrawal', { p_id: row.id, p_error: err })
