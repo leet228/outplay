@@ -8,6 +8,7 @@
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^15.4.0",
     "@tonkite/highload-wallet-v3": "^3.0.2",
+    "bech32": "^2",
     "bitcoinjs-lib": "^7",
     "ecpair": "^3",
     "ethers": "^6",
