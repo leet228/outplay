@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
-import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
+import { TON_ADDRESS, USDT_MASTER, DEPOSIT_WALLET_GROUPS } from '../lib/addresses'
 import { adminRequestWithdrawal, adminRequestUsdtWithdrawal } from '../lib/supabase'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
@@ -101,6 +101,8 @@ export default function AdminWallet() {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [usdtCopied, setUsdtCopied] = useState(false)
+  // Which extra-chain deposit-wallet card was just copied.
+  const [copiedGroup, setCopiedGroup] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -502,6 +504,45 @@ export default function AdminWallet() {
           )}
         </div>
       )}
+
+      {/* Multi-chain deposit wallets — the NEW cards. One real
+        * keypair per network (see scripts/.wallets.secret.json),
+        * so a single address serves the whole chain. No live
+        * balance/withdraw yet (per-chain indexers are a separate
+        * task) — this is the authoritative receiving-address
+        * reference for the operator. */}
+      <div className="admin-wallet-list">
+        <div className="admin-wallet-section-title">Кошельки пополнения</div>
+        {DEPOSIT_WALLET_GROUPS.map((g) => (
+          <div key={g.id} className="admin-wallet-card">
+            <div className="admin-wallet-accent" style={{ background: g.accent }} />
+            <div className="admin-wallet-top">
+              <div className="admin-wallet-title">
+                <span className="admin-wallet-name">{g.name}</span>
+                <span className="admin-wallet-fiat">{g.serves}</span>
+              </div>
+            </div>
+            <div className="admin-wallet-addr-row">
+              <code className="admin-wallet-addr">{truncAddr(g.address)}</code>
+              <button
+                className="admin-copy-btn"
+                onClick={() => {
+                  haptic('light')
+                  copyText(g.address)
+                  setCopiedGroup(g.id)
+                  setTimeout(() => setCopiedGroup(c => (c === g.id ? null : c)), 1500)
+                }}
+              >
+                {copiedGroup === g.id ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                )}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Price chip — TON & USDT current prices in the selected
         * fiat. USDT is pegged so its USD value is always 1.00,

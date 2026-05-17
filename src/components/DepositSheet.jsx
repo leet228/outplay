@@ -11,7 +11,7 @@ import { haptic, requestStarsPayment, getTelegramUser } from '../lib/telegram'
 import { createStarsInvoice, processDeposit, getUserBalance, supabase } from '../lib/supabase'
 import { formatCurrency, convertFromRub, fetchTonPrice, fetchCoinPriceUsd } from '../lib/currency'
 import { translations } from '../lib/i18n'
-import { TON_ADDRESS, USDT_ADDRESS, USDT_MASTER } from '../lib/addresses'
+import { TON_ADDRESS, USDT_ADDRESS, USDT_MASTER, DEPOSIT_ADDRESSES } from '../lib/addresses'
 import tgStarSrc      from '../assets/star/tgstar.png'
 import tonIconSrc     from '../assets/crypto/ton.svg'
 import usdtIconSrc    from '../assets/crypto/usdt.svg'
@@ -135,13 +135,15 @@ function depositAddrKey(coinId) {
   return 'deposit_addr_' + String(coinId).replace(/-/g, '_')
 }
 
-// Resolve the address to actually show: the admin-configured one
-// from app_settings if it's set, otherwise the built-in
-// placeholder so the screen is never broken/empty.
+// Resolve the address to actually show, in priority order:
+//   1. admin override from app_settings (Admin → Control)
+//   2. the real built-in wallet for that chain (addresses.js)
+//   3. the legacy per-coin placeholder (last resort, unreachable
+//      now that every id is in DEPOSIT_ADDRESSES)
 function resolveDepositAddr(coin, appSettings) {
   const raw = appSettings?.[depositAddrKey(coin.id)]
-  const addr = typeof raw === 'string' ? raw.trim() : ''
-  return addr || coin.addr
+  const override = typeof raw === 'string' ? raw.trim() : ''
+  return override || DEPOSIT_ADDRESSES[coin.id] || coin.addr
 }
 
 function TgStarIcon({ size = 22, className = '' }) {

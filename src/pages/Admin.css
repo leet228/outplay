@@ -250,6 +250,15 @@
   gap: 12px;
 }
 
+.admin-wallet-section-title {
+  margin: 22px 2px 2px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
 .admin-wallet-card {
   background: var(--surface);
   border: 1px solid var(--border);
