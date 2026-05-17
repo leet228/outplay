@@ -628,6 +628,29 @@ export default function AdminWallet() {
             <span>USDT</span>
             <span className="admin-price-val">{fmtFiat(prices.usdt[fiatCur], fiatCur)}</span>
           </div>
+
+          {/* New-chain coin prices — same live USD figure used to
+            * value the wallets, shown in the selected fiat. */}
+          {chainData && [
+            { id: 'btc', label: 'BTC', dot: '#F7931A' },
+            { id: 'eth', label: 'ETH', dot: '#627EEA' },
+            { id: 'bnb', label: 'BNB', dot: '#F0B90B' },
+            { id: 'trx', label: 'TRX', dot: '#EF3A3A' },
+            { id: 'ltc', label: 'LTC', dot: '#345D9D' },
+            { id: 'usdc-erc20', label: 'USDC', dot: '#2775CA' },
+          ].map(({ id, label, dot }) => {
+            const a = chainData.assets.find(x => x.id === id)
+            if (!a || a.priceUsd == null) return null
+            return (
+              <div key={id} className="admin-price-chip">
+                <span className="admin-price-dot" style={{ background: dot }} />
+                <span>{label}</span>
+                <span className="admin-price-val">
+                  {fmtFiat(a.priceUsd * usdToFiat, fiatCur)}
+                </span>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
