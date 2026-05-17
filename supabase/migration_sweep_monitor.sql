@@ -70,6 +70,9 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION admin_sweep_overview() TO authenticated;
+-- The mini-app calls Supabase as the `anon` role (no Supabase
+-- Auth session), like every other RPC in this project — grant
+-- both so the admin panel can actually read it.
+GRANT EXECUTE ON FUNCTION admin_sweep_overview() TO authenticated, anon;
 
 NOTIFY pgrst, 'reload schema';
