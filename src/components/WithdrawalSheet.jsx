@@ -212,6 +212,10 @@ export default function WithdrawalSheet() {
           bad_address: t.withdrawInvalidAddress,
           bad_chain: 'Unsupported network',
           amount_too_small_after_fees: lang === 'ru' ? 'Сумма слишком мала после вычета комиссии' : 'Amount too small after fees',
+          network_unavailable: lang === 'ru'
+            ? 'Вывод в этой сети сейчас недоступен. Попробуйте другую монету или сеть.'
+            : 'Withdrawals in this network are unavailable right now. Try another coin or network.',
+          price_unavailable: lang === 'ru' ? 'Сервис временно недоступен, попробуйте позже' : 'Service temporarily unavailable, try later',
         }
         setErrorMsg(errMap[result.error] || result.error)
         return

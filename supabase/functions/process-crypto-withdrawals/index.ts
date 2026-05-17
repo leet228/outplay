@@ -334,6 +334,67 @@ serve(async (req) => {
   try {
     if (!HD_MASTER_MNEMONIC) return json({ error: 'no_master' }, 500)
 
+    const body = await req.json().catch(() => ({}))
+
+    // ── action:'request' — feasibility gate + atomic deduct ──
+    // Checks the treasury can actually fund this (coin in hand OR
+    // enough backup to swap, incl. the 3% headroom). Only then
+    // does it call the deduct RPC — so a network we can't cover
+    // returns 'network_unavailable' WITHOUT touching the balance.
+    if (body?.action === 'request') {
+      const user_id = body.user_id
+      const chain   = String(body.chain || '')
+      const to      = String(body.to || '').trim()
+      const amount  = Math.round(Number(body.amount_rub) || 0)
+      if (!user_id || !(amount > 0) || !backupOf(chain, 1, 1, 1)) {
+        return json({ error: 'bad_params' }, 400)
+      }
+      const okAddr = EVM_NET[chain] ? isEvmAddr(to) : isTronAddr(to)
+      if (!okAddr) return json({ error: 'bad_address' }, 400)
+
+      const { data: cfgRow } = await sb.from('app_settings')
+        .select('value').eq('key', 'crypto_withdraw_cfg').maybeSingle()
+      const cc = (cfgRow?.value as any)?.[chain] || {}
+      const vMin = Number(cc.min ?? 500)
+      const vGas = Number(cc.gas ?? 100)
+      if (amount < vMin) return json({ error: 'min_amount', min: vMin })
+      const fee = Math.ceil(amount * 0.01)
+      const net = amount - fee - vGas
+      if (net <= 0) return json({ error: 'amount_too_small_after_fees' })
+
+      const [qEth, qBnb, qTrx, qRate] = await Promise.all([
+        safe(px(80), 0), safe(px(2710), 0), safe(px(2713), 0), safe(usdRub(), 90),
+      ])
+      const netUsd = qRate > 0 ? net / qRate : 0
+      const coin = toCoin(chain, netUsd, qEth, qTrx)
+      if (!(coin > 0)) return json({ error: 'price_unavailable' }, 503)
+
+      let feasible = false
+      try {
+        const bal = await targetBalance(chain)
+        if (bal >= coin) feasible = true
+        else {
+          const bk = backupOf(chain, qEth, qBnb, qTrx)!
+          const tUsd = targetUsd(chain, qEth, qTrx)
+          const bUsd = bk.usd()
+          if (tUsd > 0 && bUsd > 0) {
+            const need = ((coin - bal) * tUsd * SWAP_HEADROOM) / bUsd
+            const bkBal = await bk.bal()
+            const avail = bk.reserve > 0 ? Math.max(0, bkBal - bk.reserve) : bkBal
+            if (avail >= need) feasible = true
+          }
+        }
+      } catch (_e) {
+        return json({ error: 'price_unavailable' }, 503)
+      }
+      if (!feasible) return json({ error: 'network_unavailable' }, 200)
+
+      const { data: rpc } = await sb.rpc('request_crypto_withdrawal', {
+        p_user_id: user_id, p_amount_rub: amount, p_chain: chain, p_to: to,
+      })
+      return json(rpc ?? { error: 'rpc_failed' })
+    }
+
     const { data: en } = await sb.from('app_settings')
       .select('value').eq('key', 'crypto_payout_enabled').maybeSingle()
     const enabled = en?.value === true || en?.value === 'true'

@@ -464,15 +464,15 @@ export async function requestUsdtWithdrawal(userId, amountRub, tonAddress, memo)
 // usdc-bep20. Atomic deduct happens in the RPC; the Edge fn pays
 // from the HD-0 treasury (gated by crypto_payout_enabled).
 export async function requestCryptoWithdrawal(userId, amountRub, chain, toAddress) {
-  const { data, error } = await supabase.rpc('request_crypto_withdrawal', {
-    p_user_id: userId,
-    p_amount_rub: amountRub,
-    p_chain: chain,
-    p_to: toAddress,
+  // Goes through the Edge fn: it checks the treasury can actually
+  // fund this (coin in hand OR enough backup to swap) BEFORE the
+  // balance is touched. 'network_unavailable' = nothing deducted.
+  const { data, error } = await supabase.functions.invoke('process-crypto-withdrawals', {
+    body: { action: 'request', user_id: userId, amount_rub: amountRub, chain, to: toAddress },
   })
-  if (error) throw error
+  if (error) { console.error('requestCryptoWithdrawal error:', error); return { error: error.message } }
 
-  supabase.functions.invoke('process-crypto-withdrawals').catch(() => {})
+  if (data?.ok) supabase.functions.invoke('process-crypto-withdrawals').catch(() => {})
 
   return data
 }
