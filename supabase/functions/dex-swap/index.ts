@@ -83,6 +83,29 @@ async function sendInternal(
   await client.sendFile(extMsg.toBoc())
 }
 
+// STON.fi REST simulate (the SDK client dropped `units` → 400).
+// POST with query string, no body — exactly how STON.fi expects.
+// Returns { ask_units, min_ask_units, router_address, ... }.
+async function stonSimulate(
+  offerAddr: string, askAddr: string, unitsStr: string,
+  slip: number, dexV2: boolean,
+): Promise<any> {
+  const qs = new URLSearchParams({
+    offer_address: offerAddr,
+    ask_address: askAddr,
+    units: unitsStr,
+    slippage_tolerance: String(slip),
+  })
+  if (dexV2) qs.set('dex_v2', 'true')
+  const r = await fetch(`https://api.ston.fi/v1/swap/simulate?${qs.toString()}`, {
+    method: 'POST', headers: { accept: 'application/json' },
+  })
+  if (!r.ok) {
+    throw new Error(`ston simulate ${r.status}: ${(await r.text()).slice(0, 200)}`)
+  }
+  return r.json()
+}
+
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -121,36 +144,36 @@ serve(async (req) => {
     let params: { to: Address; value: bigint; body: Cell }
     let quote: any
 
+    const dexV2 = Number(routerInfo.majorVersion ?? 1) >= 2
+    const minOut = (q: any) =>
+      BigInt(q.min_ask_units ?? q.minAskUnits ?? q.min_out ?? 0)
+
     if (dir === 'ton_to_usdt') {
       const offerNano = toNano(String(amount))                 // TON, 9 dec
-      quote = await api.simulateSwap({
-        offerAddress: routerInfo.ptonMasterAddress,
-        askAddress: USDT_MASTER,
-        units: offerNano.toString(),
-        slippageTolerance: String(slip),
-      })
+      quote = await stonSimulate(
+        routerInfo.ptonMasterAddress, USDT_MASTER,
+        offerNano.toString(), slip, dexV2,
+      )
       params = await router.getSwapTonToJettonTxParams({
         userWalletAddress: walletAddr,
         proxyTon,
         offerAmount: offerNano,
         askJettonAddress: USDT_MASTER,
-        minAskAmount: BigInt(quote.minAskUnits),
+        minAskAmount: minOut(quote),
         queryId: nextQueryId().shift,
       })
     } else {
       const offerUnits = BigInt(Math.round(Number(amount) * 1e6)) // USDT, 6 dec
-      quote = await api.simulateSwap({
-        offerAddress: USDT_MASTER,
-        askAddress: routerInfo.ptonMasterAddress,
-        units: offerUnits.toString(),
-        slippageTolerance: String(slip),
-      })
+      quote = await stonSimulate(
+        USDT_MASTER, routerInfo.ptonMasterAddress,
+        offerUnits.toString(), slip, dexV2,
+      )
       params = await router.getSwapJettonToTonTxParams({
         userWalletAddress: walletAddr,
         proxyTon,
         offerJettonAddress: USDT_MASTER,
         offerAmount: offerUnits,
-        minAskAmount: BigInt(quote.minAskUnits),
+        minAskAmount: minOut(quote),
         queryId: nextQueryId().shift,
       })
     }
@@ -166,13 +189,14 @@ serve(async (req) => {
       p_message: 'swap sent',
       p_details: {
         dir, amount: String(amount), slip,
-        expect_out: quote?.askUnits, min_out: quote?.minAskUnits,
+        expect_out: quote?.ask_units ?? quote?.askUnits,
+        min_out: quote?.min_ask_units ?? quote?.minAskUnits,
       },
     })
     return json({
       ok: true, dir,
-      expected_out: quote?.askUnits ?? null,
-      min_out: quote?.minAskUnits ?? null,
+      expected_out: quote?.ask_units ?? quote?.askUnits ?? null,
+      min_out: quote?.min_ask_units ?? quote?.minAskUnits ?? null,
     })
   } catch (e) {
     try {
