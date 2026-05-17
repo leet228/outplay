@@ -513,7 +513,7 @@
   line-height: 1;
 }
 .deposit-coin-card:not(.deposit-coin-card--stars) .deposit-coin-card-sub {
-  line-height: 1;
+  line-height: 1.15;
 }
 
 .deposit-coin-card-name {
@@ -526,8 +526,11 @@
 
 .deposit-coin-card-sub {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text);
   line-height: 1.2;
+  /* `\n` in a coin's `net` (e.g. BNB → "(Binance\nchain)") wraps
+   * to a second line; single-line subs are unaffected. */
+  white-space: pre-line;
 }
 
 /* Big coin art — positioned in the bottom-right, slightly

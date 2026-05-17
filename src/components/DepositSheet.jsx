@@ -44,7 +44,7 @@ const SOON_COINS = [
   { id: 'btc',        name: 'BTC',      net: '(Bitcoin)',      art: btcIconSrc,  badge: null },
   { id: 'usdt-erc20', name: 'USDT',     net: '(ERC 20)',       art: usdtIconSrc, badge: ethBadgeSrc },
   { id: 'usdc-erc20', name: 'USDC',     net: '(ERC 20)',       art: usdcIconSrc, badge: ethBadgeSrc },
-  { id: 'bnb',        name: 'BNB',      net: '(Binance chain)', art: bnbIconSrc, badge: null },
+  { id: 'bnb',        name: 'BNB',      net: '(Binance\nchain)', art: bnbIconSrc, badge: null },
   { id: 'ltc',        name: 'Litecoin', net: '',               art: ltcIconSrc,  badge: null },
   { id: 'usdc-bep20', name: 'USDC',     net: '(BEP 20)',       art: usdcIconSrc, badge: bnbBadgeSrc },
 ]
