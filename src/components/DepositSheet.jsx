@@ -1135,7 +1135,15 @@ export default function DepositSheet() {
                       key={coin.id}
                       type="button"
                       className="deposit-coin-card deposit-coin-card--usdt"
-                      onClick={() => { haptic('medium'); setSoonCoin(coin); setView('soon') }}
+                      onClick={() => {
+                        haptic('medium')
+                        setSoonCoin(coin)
+                        setView('soon')
+                        // Nudge the indexer so a deposit the user
+                        // is about to make is picked up faster
+                        // than the 60s cron (best-effort).
+                        supabase.functions.invoke('check-multichain-deposits').catch(() => {})
+                      }}
                     >
                       {coin.badge && (
                         <img
