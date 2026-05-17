@@ -28,6 +28,8 @@ import {
   HDNodeWallet, JsonRpcProvider, FetchRequest, Wallet, Contract,
   SigningKey, keccak256, sha256, getBytes, encodeBase58, decodeBase58,
 } from 'https://esm.sh/ethers@6.13.4'
+import * as btc from 'https://esm.sh/@scure/btc-signer@1.3.2'
+import { secp256k1 } from 'https://esm.sh/@noble/curves@1.6.0/secp256k1'
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -424,6 +426,102 @@ async function processTronJob(job: any) {
   await setJob(job.id, 'sweeping', job.gas_txid ?? null, stxid, 'burn')
 }
 
+// ══════════════ BTC / LTC (UTXO) ══════════════
+// Pure-JS signing with @scure/btc-signer (audited, Deno-clean —
+// no bitcoinjs/wasm). Native segwit (p2wpkh). NowNodes Blockbook
+// for utxo/feerate/broadcast. No gas manager: the miner fee comes
+// out of the swept amount itself. Sweep is always user → treasury,
+// so there is no treasury→user self-credit risk here.
+
+const LTC_NET = {
+  bech32: 'ltc',
+  pubKeyHash: 0x30, scriptHash: 0x32, wif: 0xb0,
+}
+const UTXO_CFG = {
+  btc: { host: 'btcbook.nownodes.io', path: "m/84'/0'/0'/0", net: btc.NETWORK, fb: 8, dust: 1000n },
+  ltc: { host: 'ltcbook.nownodes.io', path: "m/84'/2'/0'/0", net: LTC_NET, fb: 4, dust: 5000n },
+}
+
+async function bbGet(host: string, path: string): Promise<any> {
+  const r = await fetch(`https://${host}${path}`, {
+    headers: NOWNODES_API_KEY ? { 'api-key': NOWNODES_API_KEY } : {},
+  })
+  if (!r.ok) throw new Error(`${host}${path} HTTP ${r.status}`)
+  return r.json()
+}
+
+async function processUtxoJob(job: any) {
+  const k = job.chain as 'btc' | 'ltc'
+  const cfg = UTXO_CFG[k]
+
+  const userPrivHex = HDNodeWallet.fromPhrase(
+    HD_MASTER_MNEMONIC, undefined, `${cfg.path}/${job.derivation_index}`,
+  ).privateKey
+  const userPriv = getBytes(userPrivHex)
+  const userPub = secp256k1.getPublicKey(userPriv, true)
+  const userP2 = btc.p2wpkh(userPub, cfg.net)
+
+  // HARD SAFETY: the address we derived MUST equal the one the
+  // ledger says we're sweeping — never sign for a mismatch.
+  if (userP2.address !== job.from_address) {
+    await setJob(job.id, 'failed', null, null,
+      `addr_mismatch:${userP2.address}!=${job.from_address}`)
+    await logAdmin('error', 'utxo addr mismatch', { job: job.id, chain: k })
+    return
+  }
+
+  const treasuryPrivHex = HDNodeWallet.fromPhrase(
+    HD_MASTER_MNEMONIC, undefined, `${cfg.path}/0`,
+  ).privateKey
+  const treasuryP2 = btc.p2wpkh(secp256k1.getPublicKey(getBytes(treasuryPrivHex), true), cfg.net)
+
+  // UTXOs (confirmed only).
+  const utxos = await bbGet(cfg.host, `/api/v2/utxo/${job.from_address}?confirmed=true`)
+  const usable = (Array.isArray(utxos) ? utxos : [])
+    .filter((u: any) => Number(u.confirmations || 0) >= 1)
+  let total = 0n
+  for (const u of usable) { try { total += BigInt(u.value) } catch { /* skip */ } }
+  if (usable.length === 0 || total <= cfg.dust) {
+    await setJob(job.id, 'swept', null, job.sweep_txid ?? null, 'empty')
+    return
+  }
+
+  // Fee: blockbook estimate (BTC/kvB) → sat/vB, with a floor.
+  let satPerVb = cfg.fb
+  try {
+    const fe = await bbGet(cfg.host, '/api/v2/estimatefee/3')
+    const perKb = Number(fe?.result || 0)
+    if (perKb > 0) satPerVb = Math.max(1, Math.ceil(perKb * 1e8 / 1000))
+  } catch { /* fallback */ }
+  const vsize = Math.ceil(10.5 + usable.length * 68 + 31) // n-in p2wpkh → 1-out
+  const fee = BigInt(vsize * satPerVb)
+  if (total <= fee + cfg.dust) {
+    await setJob(job.id, 'skipped', null, null, `dust:${total} fee:${fee}`)
+    return
+  }
+  const sendAmt = total - fee
+
+  // Build + sign + finalize.
+  const tx = new btc.Transaction()
+  for (const u of usable) {
+    tx.addInput({
+      txid: u.txid,
+      index: Number(u.vout),
+      witnessUtxo: { script: userP2.script, amount: BigInt(u.value) },
+    })
+  }
+  tx.addOutputAddress(treasuryP2.address, sendAmt, cfg.net)
+  tx.sign(userPriv)
+  tx.finalize()
+  const rawHex = tx.hex
+  const txid = tx.id
+
+  // Broadcast via Blockbook.
+  const res = await bbGet(cfg.host, `/api/v2/sendtx/${rawHex}`)
+  if (res?.error) throw new Error('broadcast: ' + JSON.stringify(res.error).slice(0, 200))
+  await setJob(job.id, 'sweeping', null, res?.result || txid, null)
+}
+
 serve(async (_req) => {
   const t0 = Date.now()
   try {
@@ -460,9 +558,10 @@ serve(async (_req) => {
         } else if (job.chain === 'trx' || job.chain === 'usdt-trc20') {
           await processTronJob(job)
           swept++
+        } else if (job.chain === 'btc' || job.chain === 'ltc') {
+          await processUtxoJob(job)
+          swept++
         } else {
-          // BTC / LTC — executor not shipped yet. Keep the job
-          // pending; NO funds moved.
           await setJob(job.id, 'pending', null, null, `executor_pending:${job.chain}`)
           deferred++
         }
