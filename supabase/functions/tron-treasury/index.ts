@@ -41,6 +41,22 @@ const json = (b: unknown, s = 200) =>
 let sbc: ReturnType<typeof createClient>
 const sb = () => (sbc ??= createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY))
 
+// ── Global treasury lock (shared HD-0 TRON; serializes vs
+// dex-swap / process-crypto-withdrawals / treasury-withdraw). ──
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+async function acquireLock(channel: string, holder: string, ttl = 120, waitMs = 90_000): Promise<string | null> {
+  const deadline = Date.now() + waitMs
+  for (;;) {
+    const { data } = await sb().rpc('acquire_treasury_lock', { p_channel: channel, p_holder: holder, p_ttl: ttl })
+    if ((data as any)?.ok) return (data as any).token as string
+    if (Date.now() > deadline) return null
+    await sleep(2_000)
+  }
+}
+async function releaseLock(channel: string, token: string) {
+  try { await sb().rpc('release_treasury_lock', { p_channel: channel, p_token: token }) } catch { /* noop */ }
+}
+
 function treasuryPriv(): string {
   return HDNodeWallet.fromPhrase(HD_MASTER_MNEMONIC, undefined, "m/44'/195'/0'/0/0").privateKey
 }
@@ -124,6 +140,12 @@ serve(async (req) => {
       return json({ ok: true, info: await buildInfo(addr) })
     }
 
+    // Mutating actions broadcast a TRON tx from the shared HD-0
+    // treasury → take the global 'tron' lock.
+    const lock = await acquireLock('tron', 'tron-treasury')
+    if (!lock) return json({ error: 'treasury_busy' }, 503)
+
+    try {
     if (action === 'stake') {
       const trx = Number(amount)
       if (!(trx > 0)) return json({ error: 'invalid_amount' }, 400)
@@ -173,6 +195,7 @@ serve(async (req) => {
     }
 
     return json({ error: 'unknown_action' }, 400)
+    } finally { await releaseLock('tron', lock) }
   } catch (e) {
     try {
       await sb().rpc('admin_log', {
