@@ -1,0 +1,4 @@
+# NEVER commit generated wallet secrets / private keys / mnemonics.
+.wallets.secret.json
+*.secret.json
+node_modules
