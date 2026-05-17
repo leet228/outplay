@@ -43,6 +43,7 @@ const TRON_API     = 'https://trx.nownodes.io'
 // Overridable via env in case SunSwap rotates it.
 const SUN_ROUTER   = Deno.env.get('SUNSWAP_ROUTER') || 'TCFNp179Lg46D16zKoumd4Poa2WFFdtqYj'
 const SUN_API      = 'https://rot.endjgfsv.link/swap/router'
+const WTRX         = 'TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR'      // Wrapped TRX (native repr in the router API)
 const TRON_USDT    = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'      // USDT-TRC20
 const TRON_FEE_LIMIT = 100_000_000                            // 100 TRX cap
 const abi = AbiCoder.defaultAbiCoder()
@@ -208,8 +209,10 @@ serve(async (req) => {
       const deadline = Math.floor(Date.now() / 1000) + 600
 
       const isTrxIn = dir === 'trx_to_usdt'
-      const fromToken = isTrxIn ? 'TRX' : TRON_USDT
-      const toToken   = isTrxIn ? TRON_USDT : 'TRX'
+      // SunSwap router API validates these as addresses — native
+      // TRX is represented by the WTRX address.
+      const fromToken = isTrxIn ? WTRX : TRON_USDT
+      const toToken   = isTrxIn ? TRON_USDT : WTRX
 
       // Best route from SunSwap's router API — gives tokens /
       // poolVersions / fees / amountOut so we never hand-guess the
