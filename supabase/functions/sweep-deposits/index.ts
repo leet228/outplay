@@ -174,6 +174,11 @@ const SUN        = 1_000_000n
 // bandwidth float keeps a little TRX on the user address.
 const TRC20_FEE_LIMIT  = 50_000_000    // 50 TRX hard cap (sun)
 const TRX_BW_RESERVE   = 1_200_000n    // ~1.2 TRX kept for bandwidth
+// Burn-mode fallback (no delegatable energy): fund the user addr
+// with enough TRX that the transfer's energy is paid by burning
+// TRX. Leftover returns via the native-trx sweep.
+const TRC20_BURN_TOPUP = 45n * SUN     // sent to user when burning
+const TRC20_BURN_MIN   = 28n * SUN     // enough on addr to burn safely
 
 function tronPriv(index: number): string {
   return HDNodeWallet.fromPhrase(
@@ -360,45 +365,63 @@ async function processTronJob(job: any) {
 
   const needEnergy = await tronEstimateUsdtEnergy(userB58, treasuryB58, usdt)
   const tRes = await tronResource(treasuryB58)
-  if (tRes.ePerTrx <= 0) {
-    await setJob(job.id, 'needs_gas', null, null, 'trongrid_ratio')
-    return
-  }
-  if (tRes.avail < needEnergy) {
-    await setJob(job.id, 'needs_gas', null, null, `treasury_energy_low:${needEnergy}`)
-    await logAdmin('warn', 'treasury energy low — run scripts/tron-stake.js',
-      { need: needEnergy, avail: tRes.avail })
-    return
-  }
-  const balSun = BigInt(Math.max(1, Math.ceil(needEnergy / tRes.ePerTrx))) * SUN
-
-  // 1) Bandwidth float: a TRC20 send needs ~345 bandwidth; a never-
-  //    used deposit addr may have none. Keep ~1 TRX there (returned
-  //    later by the native-trx sweep).
   const userTrx = await tronTrxBalanceSun(userB58)
-  if (userTrx < SUN) {
-    const tBal = await tronTrxBalanceSun(treasuryB58)
-    if (tBal < 4n * SUN) {
-      await setJob(job.id, 'needs_gas', null, null, 'treasury_low:trx_bw')
-      await logAdmin('warn', 'treasury TRX low (bandwidth float)', {})
+
+  // Energy mode iff the treasury actually has delegatable energy.
+  // Otherwise fall back to burning TRX so a sweep never stalls
+  // just because nothing is staked.
+  const energyMode = tRes.ePerTrx > 0 && tRes.avail >= needEnergy
+
+  if (energyMode) {
+    const balSun = BigInt(Math.max(1, Math.ceil(needEnergy / tRes.ePerTrx))) * SUN
+
+    // 1) Bandwidth float — a TRC20 send needs ~345 bandwidth; a
+    //    fresh deposit addr may have none. Keep ~1 TRX there
+    //    (returned later by the native-trx sweep).
+    if (userTrx < SUN) {
+      const tBal = await tronTrxBalanceSun(treasuryB58)
+      if (tBal < 4n * SUN) {
+        await setJob(job.id, 'needs_gas', null, null, 'treasury_low:trx_bw')
+        await logAdmin('warn', 'treasury TRX low (bandwidth float)', {})
+        return
+      }
+      const g = await tronSendTrx(treasuryPriv, treasuryB58, userB58, 2n * SUN)
+      await setJob(job.id, 'gassing', g, null, 'bw_float')
       return
     }
-    const g = await tronSendTrx(treasuryPriv, treasuryB58, userB58, 2n * SUN)
-    await setJob(job.id, 'gassing', g, null, 'bw_float')
+
+    // 2) Delegate energy treasury → user (if not already there).
+    const uRes = await tronResource(userB58)
+    if (uRes.energyLimit < needEnergy) {
+      const dtx = await tronDelegateEnergy(treasuryPriv, treasuryB58, userB58, balSun)
+      await setJob(job.id, 'gassing', dtx, null, `delegated:${balSun}`)
+      return
+    }
+
+    // 3) Bandwidth + delegated energy → move all USDT to treasury.
+    const stxid = await tronSendUsdt(userPriv, userB58, treasuryB58, usdt)
+    await setJob(job.id, 'sweeping', job.gas_txid ?? null, stxid, `delegated:${balSun}`)
     return
   }
 
-  // 2) Delegate energy from treasury → user (if not already there).
-  const uRes = await tronResource(userB58)
-  if (uRes.energyLimit < needEnergy) {
-    const dtx = await tronDelegateEnergy(treasuryPriv, treasuryB58, userB58, balSun)
-    await setJob(job.id, 'gassing', dtx, null, `delegated:${balSun}`)
+  // ── Burn-mode fallback: no delegatable energy → fund the user
+  //    address with TRX and let the transfer burn it. ──
+  if (userTrx < TRC20_BURN_MIN) {
+    const tBal = await tronTrxBalanceSun(treasuryB58)
+    if (tBal < TRC20_BURN_TOPUP + TRX_BW_RESERVE) {
+      // Genuinely no funds: no energy AND not enough TRX.
+      await setJob(job.id, 'needs_gas', null, null, `treasury_low:trx (need_energy:${needEnergy})`)
+      await logAdmin('warn', 'treasury has neither energy nor TRX for TRC20 sweep',
+        { need_energy: needEnergy, avail_energy: tRes.avail })
+      return
+    }
+    const g = await tronSendTrx(treasuryPriv, treasuryB58, userB58, TRC20_BURN_TOPUP)
+    await setJob(job.id, 'gassing', g, null, 'burn_float')
     return
   }
-
-  // 3) Have bandwidth + delegated energy → move all USDT to treasury.
+  // Enough TRX on the addr → transfer (burns ~13–27 TRX).
   const stxid = await tronSendUsdt(userPriv, userB58, treasuryB58, usdt)
-  await setJob(job.id, 'sweeping', job.gas_txid ?? null, stxid, `delegated:${balSun}`)
+  await setJob(job.id, 'sweeping', job.gas_txid ?? null, stxid, 'burn')
 }
 
 serve(async (_req) => {
