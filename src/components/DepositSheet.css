@@ -8,8 +8,8 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.25s;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
 }
 
 .deposit-overlay.visible {
@@ -24,7 +24,7 @@
   transform: translateX(-50%) translateY(100%);
   width: 100%;
   max-width: 430px;
-  max-height: min(68vh, 560px);
+  max-height: min(82vh, 660px);
   overflow-y: auto;
   background:
     radial-gradient(circle at 18% 0%, rgba(251, 191, 36, 0.11), transparent 34%),
