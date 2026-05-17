@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview } from '../lib/supabase'
+import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview, getAdminStats } from '../lib/supabase'
 import { fetchChainBalances } from '../lib/chainBalances'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
@@ -157,6 +157,8 @@ export default function AdminWallet() {
   // (e.g. migration not run yet) so we stop the infinite spinner.
   const [sweepOv, setSweepOv] = useState(null)
   const [sweepErr, setSweepErr] = useState(false)
+  // Sum of all user balances (stars≈RUB) — rebalance reference.
+  const [userBalRub, setUserBalRub] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -216,6 +218,16 @@ export default function AdminWallet() {
     const iv = setInterval(loadSweep, 30_000)
     return () => clearInterval(iv)
   }, [loadSweep])
+
+  useEffect(() => {
+    let alive = true
+    getAdminStats().then(s => {
+      if (alive && s && typeof s.total_user_balances === 'number') {
+        setUserBalRub(s.total_user_balances)
+      }
+    })
+    return () => { alive = false }
+  }, [])
 
   const doTron = useCallback(async (action, amount) => {
     if (!user?.id || tronBusy) return
@@ -964,6 +976,80 @@ export default function AdminWallet() {
                   </div>
                 ))}
               </div>
+            </>
+          )
+        })()}
+      </div>
+
+      {/* ── Rebalance (alert-only, daily) ── */}
+      <div className="admin-tron-stake">
+        <div className="admin-wallet-section-title">Ребаланс · раз в день</div>
+        {(() => {
+          const usdRub = prices?.usdt?.rub
+          if (!usdRub || userBalRub == null || !chainData || !prices) {
+            return <div className="admin-tron-row"><span>Загрузка…</span></div>
+          }
+          const totalUserUsd = userBalRub / usdRub
+          const target = 0.30 * totalUserUsd
+          const A = (id) => (chainData.assets || []).find(x => x.id === id)
+          const f$ = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+          const fc = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 6 })
+
+          const coins = [
+            {
+              sym: 'TON', amt: tonBalance || 0, price: prices.ton.usd,
+              nativeUsd: (tonBalance || 0) * prices.ton.usd,
+              stableUsd: usdtBalance || 0, stable: 'USDT(TON)',
+            },
+            {
+              sym: 'ETH', amt: A('eth')?.amount || 0, price: A('eth')?.priceUsd || 0,
+              nativeUsd: A('eth')?.usd || 0,
+              stableUsd: (A('usdt-erc20')?.usd || 0) + (A('usdc-erc20')?.usd || 0),
+              stable: 'USDT/USDC ERC20',
+            },
+            {
+              sym: 'BNB', amt: A('bnb')?.amount || 0, price: A('bnb')?.priceUsd || 0,
+              nativeUsd: A('bnb')?.usd || 0,
+              stableUsd: (A('usdt-bep20')?.usd || 0) + (A('usdc-bep20')?.usd || 0),
+              stable: 'USDT/USDC BEP20',
+            },
+            {
+              sym: 'TRX', amt: A('trx')?.amount || 0, price: A('trx')?.priceUsd || 0,
+              nativeUsd: A('trx')?.usd || 0,
+              stableUsd: A('usdt-trc20')?.usd || 0, stable: 'USDT-TRC20',
+            },
+          ]
+          return (
+            <>
+              <div className="admin-tron-note">
+                Цель: в каждой монете ≈ <b>30%</b> от суммы балансов юзеров
+                ({f$(totalUserUsd)}) = <b>{f$(target)}</b>. Остальное — в
+                стейблах. Свапы делаешь вручную/на бирже.
+              </div>
+              {coins.map(c => {
+                const delta = c.nativeUsd - target
+                const tol = Math.max(1, target * 0.03)
+                let cls = 'is-ok', txt = 'в норме'
+                if (delta > tol) {
+                  cls = 'is-warn'
+                  txt = `Свапнуть ≈ ${f$(delta)} (~${fc(c.price > 0 ? delta / c.price : 0)} ${c.sym}) → ${c.stable}`
+                } else if (delta < -tol) {
+                  cls = 'is-bad'
+                  const need = -delta
+                  txt = `Докупить ≈ ${f$(need)} ${c.sym} из ${c.stable}` +
+                    (c.stableUsd < need ? ` ⚠ не хватает стейбла (есть ${f$(c.stableUsd)})` : '')
+                }
+                return (
+                  <div key={c.sym} className="admin-tron-stat">
+                    <span className="admin-tron-k">
+                      {c.sym}: {f$(c.nativeUsd)} ({fc(c.amt)}) · стейбл {f$(c.stableUsd)}
+                    </span>
+                    <span className={'admin-sweep-health ' + cls} style={{ marginTop: 4 }}>
+                      {txt}
+                    </span>
+                  </div>
+                )
+              })}
             </>
           )
         })()}
