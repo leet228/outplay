@@ -3,37 +3,65 @@ import useGameStore from '../store/useGameStore'
 import { haptic } from '../lib/telegram'
 import { formatCurrency, convertFromRub } from '../lib/currency'
 import { translations } from '../lib/i18n'
-import { requestWithdrawal, requestUsdtWithdrawal } from '../lib/supabase'
+import { requestWithdrawal, requestUsdtWithdrawal, requestCryptoWithdrawal, getCryptoWithdrawCfg } from '../lib/supabase'
 import tonIconSrc    from '../assets/crypto/ton.svg'
 import usdtIconSrc   from '../assets/crypto/usdt.svg'
+import trxIconSrc    from '../assets/crypto/trx.svg'
+import ethIconSrc    from '../assets/crypto/eth.svg'
+import usdcIconSrc   from '../assets/crypto/usdc.svg'
 import tonBadgeSrc   from '../assets/crypto/small_ton_for_usdt.svg'
+import trxBadgeSrc   from '../assets/crypto/small_trx_for_usdt.svg'
+import ethBadgeSrc   from '../assets/crypto/small_eth_for_usdt.svg'
+import bnbBadgeSrc   from '../assets/crypto/small_bnb_for_usdt.svg'
 import smallTonSrc   from '../assets/crypto/small_ton.svg'
 import smallUsdtSrc  from '../assets/crypto/small_usdt.svg'
-// The withdraw sheet reuses the deposit sheet's coin-picker
-// styles (`.deposit-coin-card` / `.deposit-coin-card-art` etc.)
-// so the two sheets feel like one consistent surface. Importing
-// the CSS here guarantees the rules ship even if the user
-// opens Withdraw before Deposit.
+import smallTrxSrc   from '../assets/crypto/small_trx.svg'
+import smallEthSrc   from '../assets/crypto/small_eth.svg'
+import smallUsdcSrc  from '../assets/crypto/small_usdc.svg'
+// The withdraw sheet reuses the deposit sheet's coin-picker styles.
 import './DepositSheet.css'
 import './WithdrawalSheet.css'
 
-const MIN_WITHDRAW_RUB = 500
-// Combined network fee: includes gas + 1% platform fee.
-// TON path mirrors request_withdrawal: 0.01 TON @ 250 ₽/TON ≈ 2.5 ₽.
-// USDT path mirrors request_usdt_withdrawal: jetton-wallet hop +
-// recipient notification cost ~0.07 TON, fixed at 25 ₽ server-side.
-const FEE_PERCENT = 0.01
-const GAS_TON = 0.01
+// Fixed fee model for the TON-family rails (unchanged, proven).
+const FEE_PERCENT   = 0.01
+const GAS_TON       = 0.01
 const TON_RUB_PRICE = 250
-const GAS_RUB_USDT = 25
+const GAS_RUB_USDT  = 25
+const TON_MIN_RUB   = 500
 
-// Brand icons shared with the deposit sheet.
-function TonIcon({ size = 22 }) {
-  return <img src={smallTonSrc} width={size} height={size} alt="" draggable="false" />
+// The 8 withdrawal coins (mirrors the reference wallet exactly).
+// kind: 'ton' | 'usdt-ton' → existing RPCs; 'crypto' → the new
+// multi-chain queue (chain = treasury-withdraw key). addr: which
+// address validator to use. badge = network chip on the card.
+const COINS = [
+  { id: 'ton',        kind: 'ton',       name: 'TON',  sub: 'Toncoin',   sym: 'TON',  addr: 'ton',  hero: smallTonSrc,  art: tonIconSrc,  badge: null },
+  { id: 'usdt-ton',   kind: 'usdt-ton',  name: 'USDT', sub: 'Toncoin',   sym: 'USDT', addr: 'ton',  hero: smallUsdtSrc, art: usdtIconSrc, badge: tonBadgeSrc },
+  { id: 'usdt-trc20', kind: 'crypto', chain: 'usdt-trc20', name: 'USDT', sub: 'TRC20',     sym: 'USDT', addr: 'tron', hero: smallUsdtSrc, art: usdtIconSrc, badge: trxBadgeSrc },
+  { id: 'trx',        kind: 'crypto', chain: 'trx',        name: 'TRX',  sub: 'Tron',      sym: 'TRX',  addr: 'tron', hero: smallTrxSrc,  art: trxIconSrc,  badge: null },
+  { id: 'eth',        kind: 'crypto', chain: 'eth',        name: 'ETH',  sub: 'Ethereum',  sym: 'ETH',  addr: 'evm',  hero: smallEthSrc,  art: ethIconSrc,  badge: null },
+  { id: 'usdt-erc20', kind: 'crypto', chain: 'usdt-erc20', name: 'USDT', sub: 'ERC20',     sym: 'USDT', addr: 'evm',  hero: smallUsdtSrc, art: usdtIconSrc, badge: ethBadgeSrc },
+  { id: 'usdc-erc20', kind: 'crypto', chain: 'usdc-erc20', name: 'USDC', sub: 'ERC20',     sym: 'USDC', addr: 'evm',  hero: smallUsdcSrc, art: usdcIconSrc, badge: ethBadgeSrc },
+  { id: 'usdc-bep20', kind: 'crypto', chain: 'usdc-bep20', name: 'USDC', sub: 'BEP20',     sym: 'USDC', addr: 'evm',  hero: smallUsdcSrc, art: usdcIconSrc, badge: bnbBadgeSrc },
+]
+
+function isValidTonAddress(addr) {
+  if (!addr) return false
+  const t = addr.trim()
+  if (/^[UE]Q[A-Za-z0-9_-]{46}$/.test(t)) return true
+  if (/^0:[a-fA-F0-9]{64}$/.test(t)) return true
+  return false
 }
-
-function UsdtIcon({ size = 22 }) {
-  return <img src={smallUsdtSrc} width={size} height={size} alt="" draggable="false" />
+function isValidEvmAddress(addr) {
+  return /^0x[a-fA-F0-9]{40}$/.test((addr || '').trim())
+}
+function isValidTronAddress(addr) {
+  return /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test((addr || '').trim())
+}
+function validateAddress(type, addr) {
+  if (type === 'ton') return isValidTonAddress(addr)
+  if (type === 'evm') return isValidEvmAddress(addr)
+  if (type === 'tron') return isValidTronAddress(addr)
+  return false
 }
 
 function SuccessCheckmark() {
@@ -46,78 +74,71 @@ function SuccessCheckmark() {
   )
 }
 
-function isValidTonAddress(addr) {
-  if (!addr) return false
-  const trimmed = addr.trim()
-  // User-friendly: UQ... or EQ... (48 chars base64)
-  if (/^[UE]Q[A-Za-z0-9_-]{46}$/.test(trimmed)) return true
-  // Raw: 0:hex (64 hex chars)
-  if (/^0:[a-fA-F0-9]{64}$/.test(trimmed)) return true
-  return false
-}
-
 export default function WithdrawalSheet() {
   const { withdrawalOpen, setWithdrawalOpen, lang, currency, rates, balance, user, setBalance } = useGameStore()
   const t = translations[lang]
 
-  // View state mirrors the deposit sheet:
-  //   'picker' — coin grid (TON / USDT-Toncoin)
-  //   'ton'    — TON withdraw form (the existing working flow)
-  //   'usdt'   — USDT (Toncoin) "coming soon" stub
-  const [view, setView] = useState('picker')
+  const [view, setView] = useState('picker')   // 'picker' | coin.id
   const [wallet, setWallet] = useState('')
   const [memo, setMemo] = useState('')
   const [amount, setAmount] = useState('')
-  const [status, setStatus] = useState('idle') // 'idle' | 'loading' | 'success' | 'error'
+  const [status, setStatus] = useState('idle') // idle | loading | success | error
   const [errorMsg, setErrorMsg] = useState('')
   const [walletTouched, setWalletTouched] = useState(false)
   const [amountTouched, setAmountTouched] = useState(false)
+  const [cfg, setCfg] = useState(null)         // per-chain { min, gas } RUB
 
-  // Convert min withdrawal to user currency for display
-  const minInCurrency = convertFromRub(MIN_WITHDRAW_RUB, currency.code, rates)
-  const maxInCurrency = convertFromRub(balance, currency.code, rates)
-  // Gas math is view-aware: USDT withdraws pay a flat 25 ₽ to
-  // cover the on-chain jetton-transfer hop, TON withdraws pay
-  // ~2.5 ₽ for a plain TON message.
-  const gasInRub = view === 'usdt' ? GAS_RUB_USDT : GAS_TON * TON_RUB_PRICE
+  const coin = COINS.find(c => c.id === view) || null
+
+  // Load per-chain crypto config once when the sheet opens.
+  useEffect(() => {
+    if (withdrawalOpen && !cfg) {
+      getCryptoWithdrawCfg().then(c => setCfg(c || {})).catch(() => setCfg({}))
+    }
+  }, [withdrawalOpen, cfg])
+
+  // Per-coin economics (min + gas in RUB).
+  const isTonFamily = coin && (coin.kind === 'ton' || coin.kind === 'usdt-ton')
+  const chainCfg = coin?.kind === 'crypto' ? (cfg?.[coin.chain] || null) : null
+  const minRub = isTonFamily
+    ? TON_MIN_RUB
+    : (chainCfg ? Number(chainCfg.min) : null)
+  const gasInRub = !coin
+    ? 0
+    : coin.kind === 'ton'
+      ? GAS_TON * TON_RUB_PRICE
+      : coin.kind === 'usdt-ton'
+        ? GAS_RUB_USDT
+        : (chainCfg ? Number(chainCfg.gas) : 0)
 
   const numAmount = Number(amount) || 0
-  // Convert user input back to RUB for validation
-  const amountInRub = currency.code === 'RUB' ? numAmount : (rates[currency.code] ? numAmount / rates[currency.code] : numAmount)
+  const amountInRub = currency.code === 'RUB'
+    ? numAmount
+    : (rates[currency.code] ? numAmount / rates[currency.code] : numAmount)
 
   const fee = Math.round(amountInRub * FEE_PERCENT)
-  const gasDisplay = gasInRub
-  const totalFee = fee + Math.round(gasDisplay)
+  const totalFee = fee + Math.round(gasInRub)
   const netRub = amountInRub - totalFee
   const netDisplay = netRub > 0 ? netRub : 0
 
-  const walletValid = isValidTonAddress(wallet)
-  const amountValid = amountInRub >= MIN_WITHDRAW_RUB && amountInRub <= balance
-  const canSubmit = walletValid && amountValid && numAmount > 0
+  const walletValid = coin ? validateAddress(coin.addr, wallet) : false
+  const cfgReady = isTonFamily || (coin?.kind === 'crypto' && chainCfg != null)
+  const amountValid = minRub != null && amountInRub >= minRub && amountInRub <= balance
+  const canSubmit = !!coin && cfgReady && walletValid && amountValid && numAmount > 0
 
-  const close = () => {
-    haptic('light')
-    setWithdrawalOpen(false)
-  }
+  const close = () => { haptic('light'); setWithdrawalOpen(false) }
 
-  // Reset on close
   useEffect(() => {
     if (!withdrawalOpen) {
       setTimeout(() => {
-        setView('picker')
-        setWallet('')
-        setMemo('')
-        setAmount('')
-        setStatus('idle')
-        setErrorMsg('')
-        setWalletTouched(false)
-        setAmountTouched(false)
+        setView('picker'); setWallet(''); setMemo(''); setAmount('')
+        setStatus('idle'); setErrorMsg('')
+        setWalletTouched(false); setAmountTouched(false)
       }, 300)
     }
   }, [withdrawalOpen])
 
-  // Telegram BackButton — back inside the sheet goes from a
-  // detail view to the picker; from the picker it closes.
+  // Telegram BackButton: detail → picker, picker → close.
   useEffect(() => {
     const tg = window.Telegram?.WebApp
     if (!tg) return
@@ -125,11 +146,8 @@ export default function WithdrawalSheet() {
       tg.BackButton.show()
       const handler = () => {
         haptic('light')
-        if (view === 'ton' || view === 'usdt') {
-          setView('picker')
-        } else {
-          close()
-        }
+        if (view !== 'picker') setView('picker')
+        else close()
       }
       tg.BackButton.onClick(handler)
       return () => { tg.BackButton.offClick(handler) }
@@ -138,7 +156,6 @@ export default function WithdrawalSheet() {
     }
   }, [withdrawalOpen, view])
 
-  // Auto-close after success
   useEffect(() => {
     if (status === 'success') {
       const timer = setTimeout(() => setWithdrawalOpen(false), 2500)
@@ -151,14 +168,10 @@ export default function WithdrawalSheet() {
     setAmount(val)
     if (!amountTouched) setAmountTouched(true)
   }
-
   function handleMaxClick() {
     haptic('light')
-    if (currency.code === 'RUB') {
-      setAmount(String(balance))
-    } else {
-      setAmount(maxInCurrency.toFixed(2))
-    }
+    if (currency.code === 'RUB') setAmount(String(balance))
+    else setAmount(convertFromRub(balance, currency.code, rates).toFixed(2))
     setAmountTouched(true)
   }
 
@@ -167,14 +180,16 @@ export default function WithdrawalSheet() {
     haptic('medium')
     setStatus('loading')
     setErrorMsg('')
-
     try {
       const amountRub = Math.round(amountInRub)
-      // Dispatch by view — both RPCs share the same shape and
-      // return identical error codes so the handling below is
-      // a single code path.
-      const submit = view === 'usdt' ? requestUsdtWithdrawal : requestWithdrawal
-      const result = await submit(user.id, amountRub, wallet.trim(), memo.trim())
+      let result
+      if (coin.kind === 'ton') {
+        result = await requestWithdrawal(user.id, amountRub, wallet.trim(), memo.trim())
+      } else if (coin.kind === 'usdt-ton') {
+        result = await requestUsdtWithdrawal(user.id, amountRub, wallet.trim(), memo.trim())
+      } else {
+        result = await requestCryptoWithdrawal(user.id, amountRub, coin.chain, wallet.trim())
+      }
 
       if (result?.error) {
         setStatus('error')
@@ -182,18 +197,16 @@ export default function WithdrawalSheet() {
           min_amount: t.withdrawMin?.replace('{amount}', fmtMin()) || 'Minimum not met',
           insufficient_balance: t.withdrawInsufficientBalance,
           user_not_found: 'User not found',
+          bad_address: t.withdrawInvalidAddress,
+          bad_chain: 'Unsupported network',
           amount_too_small_after_fees: lang === 'ru' ? 'Сумма слишком мала после вычета комиссии' : 'Amount too small after fees',
         }
         setErrorMsg(errMap[result.error] || result.error)
         return
       }
-
-      // Success — update local balance
-      if (result?.new_balance != null) {
-        setBalance(result.new_balance)
-      }
+      if (result?.new_balance != null) setBalance(result.new_balance)
       setStatus('success')
-      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success') } catch {}
+      try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success') } catch { /* noop */ }
     } catch (err) {
       console.error('Withdrawal error:', err)
       setStatus('error')
@@ -201,19 +214,10 @@ export default function WithdrawalSheet() {
     }
   }
 
-  // Format helpers
-  function fmtMin() {
-    return formatCurrency(MIN_WITHDRAW_RUB, currency, rates)
-  }
-  function fmtMax() {
-    return formatCurrency(balance, currency, rates)
-  }
-  function fmtTotalFee() {
-    return formatCurrency(totalFee, currency, rates)
-  }
-  function fmtReceive() {
-    return formatCurrency(netDisplay, currency, rates)
-  }
+  function fmtMin() { return minRub != null ? formatCurrency(minRub, currency, rates) : '—' }
+  function fmtMax() { return formatCurrency(balance, currency, rates) }
+  function fmtTotalFee() { return formatCurrency(totalFee, currency, rates) }
+  function fmtReceive() { return formatCurrency(netDisplay, currency, rates) }
 
   const showWalletError = walletTouched && wallet.length > 0 && !walletValid
   const showAmountError = amountTouched && numAmount > 0 && !amountValid
@@ -225,7 +229,6 @@ export default function WithdrawalSheet() {
       <div className={`wd-sheet ${withdrawalOpen ? 'open' : ''}`}>
         <div className="wd-handle" />
 
-        {/* Success */}
         {status === 'success' && (
           <div className="wd-success">
             <SuccessCheckmark />
@@ -234,7 +237,6 @@ export default function WithdrawalSheet() {
           </div>
         )}
 
-        {/* Error */}
         {status === 'error' && (
           <div className="wd-success">
             <div className="wd-success-circle" style={{ background: 'rgba(239, 68, 68, 0.12)' }}>
@@ -250,9 +252,7 @@ export default function WithdrawalSheet() {
           </div>
         )}
 
-        {/* Coin picker — first view the user lands on. Reuses
-          * the deposit sheet's coin-card layout so the two
-          * sheets read as one consistent surface. */}
+        {/* Coin picker */}
         {(status === 'idle' || status === 'loading') && view === 'picker' && (
           <>
             <div className="wd-header">
@@ -267,53 +267,30 @@ export default function WithdrawalSheet() {
             <div className="wd-body">
               <span className="deposit-section-heading">{t.withdrawChooseCoin}</span>
               <div className="deposit-coin-grid">
-                {/* TON — left, fully working */}
-                <button
-                  type="button"
-                  className="deposit-coin-card deposit-coin-card--ton"
-                  onClick={() => { haptic('medium'); setView('ton') }}
-                >
-                  <div className="deposit-coin-card-text">
-                    <span className="deposit-coin-card-name">{t.depositCryptoTon}</span>
-                    <span className="deposit-coin-card-sub">{t.depositCryptoTonSub}</span>
-                  </div>
-                  <img className="deposit-coin-card-art" src={tonIconSrc} alt="" draggable="false" />
-                </button>
-
-                {/* USDT (Toncoin) — right, stub. Card looks
-                  * identical to the deposit USDT card (TON
-                  * badge in the corner) so users have one
-                  * mental model across deposit and withdraw. */}
-                <button
-                  type="button"
-                  className="deposit-coin-card deposit-coin-card--usdt"
-                  onClick={() => { haptic('medium'); setView('usdt') }}
-                >
-                  <img
-                    className="deposit-coin-card-net-badge"
-                    src={tonBadgeSrc}
-                    alt=""
-                    draggable="false"
-                  />
-                  <div className="deposit-coin-card-text">
-                    <span className="deposit-coin-card-name">{t.depositCryptoUsdt}</span>
-                    <span className="deposit-coin-card-sub">{t.depositCryptoUsdtSub}</span>
-                  </div>
-                  <img className="deposit-coin-card-art" src={usdtIconSrc} alt="" draggable="false" />
-                </button>
+                {COINS.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`deposit-coin-card ${c.sym === 'TON' ? 'deposit-coin-card--ton' : 'deposit-coin-card--usdt'}`}
+                    onClick={() => { haptic('medium'); setView(c.id); setWallet(''); setMemo(''); setAmount(''); setWalletTouched(false); setAmountTouched(false) }}
+                  >
+                    {c.badge && (
+                      <img className="deposit-coin-card-net-badge" src={c.badge} alt="" draggable="false" />
+                    )}
+                    <div className="deposit-coin-card-text">
+                      <span className="deposit-coin-card-name">{c.name}</span>
+                      <span className="deposit-coin-card-sub">{c.sub}</span>
+                    </div>
+                    <img className="deposit-coin-card-art" src={c.art} alt="" draggable="false" />
+                  </button>
+                ))}
               </div>
             </div>
           </>
         )}
 
-        {/* USDT (Toncoin) detail — full form mirroring the TON
-          * flow, but with a green banner and a disabled submit
-          * button. Wallet address / memo / amount fields share
-          * state and handlers with the TON form because USDT
-          * deposits also use a TON wallet address. The submit
-          * is intentionally inert until the highload jetton-
-          * transfer signer ships server-side. */}
-        {(status === 'idle' || status === 'loading') && view === 'usdt' && (
+        {/* Detail form — one generic view for every coin */}
+        {(status === 'idle' || status === 'loading') && coin && (
           <>
             <div className="wd-header">
               <button className="wd-back" onClick={() => { haptic('light'); setView('picker') }}>
@@ -330,149 +307,12 @@ export default function WithdrawalSheet() {
             </div>
 
             <div className="wd-body">
-              {/* Green USDT banner — same layout / typography
-                * as the TON banner so the two coin flows feel
-                * symmetric. */}
-              <div className="wd-usdt-banner">
-                <div className="wd-ton-icon">
-                  <img src={smallUsdtSrc} width={56} height={56} alt="" draggable="false" />
-                </div>
-                <div className="wd-ton-text">
-                  <span className="wd-ton-title">USDT</span>
-                  <span className="wd-ton-desc">{t.withdrawUsdtDesc}</span>
-                </div>
-              </div>
-
-              {/* Wallet address — same TON address format. */}
-              <div className="wd-field">
-                <label className="wd-label">{t.withdrawWallet}</label>
-                <div className={`wd-input-wrap ${showWalletError ? 'error' : wallet && walletValid ? 'valid' : ''}`}>
-                  <input
-                    className="wd-input"
-                    type="text"
-                    placeholder={t.withdrawWalletPlaceholder}
-                    value={wallet}
-                    onChange={e => setWallet(e.target.value)}
-                    onBlur={() => setWalletTouched(true)}
-                    autoComplete="off"
-                    spellCheck="false"
-                  />
-                  {wallet && walletValid && (
-                    <svg className="wd-input-icon valid" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round">
-                      <path d="M20 6L9 17l-5-5"/>
-                    </svg>
-                  )}
-                </div>
-                {showWalletError && (
-                  <span className="wd-field-error">{t.withdrawInvalidAddress}</span>
-                )}
-              </div>
-
-              {/* Memo */}
-              <div className="wd-field">
-                <label className="wd-label">{t.withdrawMemo}</label>
-                <div className="wd-input-wrap">
-                  <input
-                    className="wd-input"
-                    type="text"
-                    placeholder={t.withdrawMemoPlaceholder}
-                    value={memo}
-                    onChange={e => setMemo(e.target.value)}
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-
-              {/* Amount */}
-              <div className="wd-field">
-                <label className="wd-label">{t.withdrawAmount}</label>
-                <div className={`wd-input-wrap wd-amount-wrap ${showAmountError ? 'error' : numAmount > 0 && amountValid ? 'valid' : ''}`}>
-                  <input
-                    className="wd-input wd-amount-input"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder={currency.code === 'RUB' ? '0' : '0.00'}
-                    value={amount}
-                    onChange={handleAmountChange}
-                    onBlur={() => setAmountTouched(true)}
-                  />
-                  <span className="wd-amount-symbol">{currency.symbol}</span>
-                  <button className="wd-max-btn" onClick={handleMaxClick}>MAX</button>
-                </div>
-                <div className="wd-amount-hint">
-                  <span>{t.withdrawMinLabel} {fmtMin()}</span>
-                  <span>{t.withdrawMaxLabel} {fmtMax()}</span>
-                </div>
-                {showAmountError && amountInRub < MIN_WITHDRAW_RUB && (
-                  <span className="wd-field-error">{t.withdrawMin.replace('{amount}', fmtMin())}</span>
-                )}
-                {showAmountError && amountInRub > balance && (
-                  <span className="wd-field-error">{t.withdrawInsufficientBalance}</span>
-                )}
-              </div>
-
-              {/* Fee breakdown — identical math to TON since
-                * the wire fee is paid in TON regardless of
-                * which jetton we're sending. */}
-              {numAmount > 0 && amountValid && (
-                <div className="wd-fees">
-                  <div className="wd-fee-row">
-                    <span className="wd-fee-label">{t.withdrawGas}</span>
-                    <span className="wd-fee-value">-{fmtTotalFee()}</span>
-                  </div>
-                  <div className="wd-fee-divider" />
-                  <div className="wd-fee-row wd-fee-total">
-                    <span className="wd-fee-label">{t.withdrawReceive}</span>
-                    <span className="wd-fee-value wd-fee-receive">{fmtReceive()}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Submit — real handler now that the Edge
-                * Function signs jetton transfers. Same loading
-                * / disabled gating as the TON form. */}
-              <button
-                className="wd-submit-btn"
-                disabled={!canSubmit || status === 'loading'}
-                onClick={handleSubmit}
-              >
-                {status === 'loading' ? (
-                  <div className="wd-btn-spinner" />
-                ) : (
-                  <>{t.withdrawBtn} <UsdtIcon size={18} /></>
-                )}
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* TON detail — the existing working withdraw form. */}
-        {(status === 'idle' || status === 'loading') && view === 'ton' && (
-          <>
-            <div className="wd-header">
-              <button className="wd-back" onClick={() => { haptic('light'); setView('picker') }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round">
-                  <path d="M15 18l-6-6 6-6" />
-                </svg>
-                {t.withdrawBack}
-              </button>
-              <button className="wd-close" onClick={close}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="wd-body">
-              {/* TON info banner — bare 56 px icon (no blue
-                * tint square behind it), title "TON", two-line
-                * description from i18n. */}
               <div className="wd-ton-banner">
                 <div className="wd-ton-icon">
-                  <TonIcon size={56} />
+                  <img src={coin.hero} width={56} height={56} alt="" draggable="false" />
                 </div>
                 <div className="wd-ton-text">
-                  <span className="wd-ton-title">TON</span>
+                  <span className="wd-ton-title">{coin.name} <span style={{ opacity: 0.5, fontWeight: 500 }}>· {coin.sub}</span></span>
                   <span className="wd-ton-desc">{t.withdrawDesc}</span>
                 </div>
               </div>
@@ -502,20 +342,22 @@ export default function WithdrawalSheet() {
                 )}
               </div>
 
-              {/* Memo */}
-              <div className="wd-field">
-                <label className="wd-label">{t.withdrawMemo}</label>
-                <div className="wd-input-wrap">
-                  <input
-                    className="wd-input"
-                    type="text"
-                    placeholder={t.withdrawMemoPlaceholder}
-                    value={memo}
-                    onChange={e => setMemo(e.target.value)}
-                    autoComplete="off"
-                  />
+              {/* Memo — TON family only (USDT/TON deposits use memo) */}
+              {isTonFamily && (
+                <div className="wd-field">
+                  <label className="wd-label">{t.withdrawMemo}</label>
+                  <div className="wd-input-wrap">
+                    <input
+                      className="wd-input"
+                      type="text"
+                      placeholder={t.withdrawMemoPlaceholder}
+                      value={memo}
+                      onChange={e => setMemo(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Amount */}
               <div className="wd-field">
@@ -537,7 +379,12 @@ export default function WithdrawalSheet() {
                   <span>{t.withdrawMinLabel} {fmtMin()}</span>
                   <span>{t.withdrawMaxLabel} {fmtMax()}</span>
                 </div>
-                {showAmountError && amountInRub < MIN_WITHDRAW_RUB && (
+                {!cfgReady && coin.kind === 'crypto' && (
+                  <span className="wd-field-error" style={{ color: 'var(--text-muted)' }}>
+                    {lang === 'ru' ? 'Загрузка лимитов…' : 'Loading limits…'}
+                  </span>
+                )}
+                {showAmountError && minRub != null && amountInRub < minRub && (
                   <span className="wd-field-error">{t.withdrawMin.replace('{amount}', fmtMin())}</span>
                 )}
                 {showAmountError && amountInRub > balance && (
@@ -545,7 +392,7 @@ export default function WithdrawalSheet() {
                 )}
               </div>
 
-              {/* Fee breakdown — only show when amount is valid */}
+              {/* Fee breakdown */}
               {numAmount > 0 && amountValid && (
                 <div className="wd-fees">
                   <div className="wd-fee-row">
@@ -560,7 +407,6 @@ export default function WithdrawalSheet() {
                 </div>
               )}
 
-              {/* Submit */}
               <button
                 className="wd-submit-btn"
                 disabled={!canSubmit || status === 'loading'}
@@ -569,7 +415,7 @@ export default function WithdrawalSheet() {
                 {status === 'loading' ? (
                   <div className="wd-btn-spinner" />
                 ) : (
-                  <>{t.withdrawBtn} <TonIcon size={18} /></>
+                  <>{t.withdrawBtn} <img src={coin.hero} width={18} height={18} alt="" draggable="false" style={{ verticalAlign: 'middle' }} /></>
                 )}
               </button>
             </div>

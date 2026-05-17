@@ -459,6 +459,31 @@ export async function requestUsdtWithdrawal(userId, amountRub, tonAddress, memo)
   return data
 }
 
+// ── Multi-chain crypto withdrawal (the 6 non-TON rails) ──
+// chain ∈ trx | usdt-trc20 | eth | usdt-erc20 | usdc-erc20 |
+// usdc-bep20. Atomic deduct happens in the RPC; the Edge fn pays
+// from the HD-0 treasury (gated by crypto_payout_enabled).
+export async function requestCryptoWithdrawal(userId, amountRub, chain, toAddress) {
+  const { data, error } = await supabase.rpc('request_crypto_withdrawal', {
+    p_user_id: userId,
+    p_amount_rub: amountRub,
+    p_chain: chain,
+    p_to: toAddress,
+  })
+  if (error) throw error
+
+  supabase.functions.invoke('process-crypto-withdrawals').catch(() => {})
+
+  return data
+}
+
+// Per-chain min + gas (RUB) config for the withdraw sheet.
+export async function getCryptoWithdrawCfg() {
+  const { data, error } = await supabase.rpc('get_crypto_withdraw_cfg')
+  if (error) { console.error('getCryptoWithdrawCfg error:', error); return {} }
+  return data || {}
+}
+
 export async function adminRequestWithdrawal(adminUserId, tonAddress, tonAmount, memo) {
   const { data, error } = await supabase.rpc('admin_request_withdrawal', {
     p_admin_user_id: adminUserId,
