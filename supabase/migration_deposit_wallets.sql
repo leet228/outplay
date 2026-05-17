@@ -23,30 +23,35 @@
 -- re-running is always safe and never clobbers a changed wallet.
 
 INSERT INTO app_settings (key, value) VALUES
-  ('deposit_addr_usdt_trc20', '"TAajZiWyXR2RwBZ4WhJUbJqGsaboCBtFZj"'::jsonb),
-  ('deposit_addr_trx',        '"TAajZiWyXR2RwBZ4WhJUbJqGsaboCBtFZj"'::jsonb),
-  ('deposit_addr_eth',        '"0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848"'::jsonb),
-  ('deposit_addr_bnb',        '"0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848"'::jsonb),
-  ('deposit_addr_usdt_erc20', '"0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848"'::jsonb),
-  ('deposit_addr_usdc_erc20', '"0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848"'::jsonb),
-  ('deposit_addr_usdt_bep20', '"0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848"'::jsonb),
-  ('deposit_addr_usdc_bep20', '"0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848"'::jsonb),
-  ('deposit_addr_btc',        '"bc1qphuhskgp025vmvvkyjelckkr8hgyqzvpfskem7"'::jsonb),
-  ('deposit_addr_ltc',        '"ltc1qyfhfwzpyvf846jn6zsnndqfswl64nelm6j07q6"'::jsonb)
+-- Defaults = the HD-index-0 treasury (single canonical hot
+-- wallet; the legacy generate-wallets.js addresses are retired).
+  ('deposit_addr_usdt_trc20', '"TNLov2u5DuHKiSJpQHziqb8Gcov2GQWZw4"'::jsonb),
+  ('deposit_addr_trx',        '"TNLov2u5DuHKiSJpQHziqb8Gcov2GQWZw4"'::jsonb),
+  ('deposit_addr_eth',        '"0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2"'::jsonb),
+  ('deposit_addr_bnb',        '"0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2"'::jsonb),
+  ('deposit_addr_usdt_erc20', '"0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2"'::jsonb),
+  ('deposit_addr_usdc_erc20', '"0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2"'::jsonb),
+  ('deposit_addr_usdt_bep20', '"0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2"'::jsonb),
+  ('deposit_addr_usdc_bep20', '"0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2"'::jsonb),
+  ('deposit_addr_btc',        '"bc1qprd6zdx8kv73xup6ed9rypnedxcltm89k8pfzk"'::jsonb),
+  ('deposit_addr_ltc',        '"ltc1qc65xapvmpzqesmvajncddleww3gxuy7z7jku6g"'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
--- Backfill: if a previous run seeded these as '' (the old empty
--- default), set the real address now. Skips any wallet an admin
--- has already customised.
-UPDATE app_settings SET value = '"TAajZiWyXR2RwBZ4WhJUbJqGsaboCBtFZj"'::jsonb
-  WHERE key IN ('deposit_addr_usdt_trc20','deposit_addr_trx') AND value = '""'::jsonb;
-UPDATE app_settings SET value = '"0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848"'::jsonb
+-- Consolidate: rewrite rows still on the OLD empty default ('')
+-- OR the retired legacy generate-wallets.js addresses → the
+-- HD-index-0 treasury. A custom admin-set address is untouched.
+UPDATE app_settings SET value = '"TNLov2u5DuHKiSJpQHziqb8Gcov2GQWZw4"'::jsonb
+  WHERE key IN ('deposit_addr_usdt_trc20','deposit_addr_trx')
+    AND value IN ('""'::jsonb, '"TAajZiWyXR2RwBZ4WhJUbJqGsaboCBtFZj"'::jsonb);
+UPDATE app_settings SET value = '"0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2"'::jsonb
   WHERE key IN ('deposit_addr_eth','deposit_addr_bnb','deposit_addr_usdt_erc20',
                 'deposit_addr_usdc_erc20','deposit_addr_usdt_bep20','deposit_addr_usdc_bep20')
-    AND value = '""'::jsonb;
-UPDATE app_settings SET value = '"bc1qphuhskgp025vmvvkyjelckkr8hgyqzvpfskem7"'::jsonb
-  WHERE key = 'deposit_addr_btc' AND value = '""'::jsonb;
-UPDATE app_settings SET value = '"ltc1qyfhfwzpyvf846jn6zsnndqfswl64nelm6j07q6"'::jsonb
-  WHERE key = 'deposit_addr_ltc' AND value = '""'::jsonb;
+    AND value IN ('""'::jsonb, '"0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848"'::jsonb);
+UPDATE app_settings SET value = '"bc1qprd6zdx8kv73xup6ed9rypnedxcltm89k8pfzk"'::jsonb
+  WHERE key = 'deposit_addr_btc'
+    AND value IN ('""'::jsonb, '"bc1qphuhskgp025vmvvkyjelckkr8hgyqzvpfskem7"'::jsonb);
+UPDATE app_settings SET value = '"ltc1qc65xapvmpzqesmvajncddleww3gxuy7z7jku6g"'::jsonb
+  WHERE key = 'deposit_addr_ltc'
+    AND value IN ('""'::jsonb, '"ltc1qyfhfwzpyvf846jn6zsnndqfswl64nelm6j07q6"'::jsonb);
 
 NOTIFY pgrst, 'reload schema';

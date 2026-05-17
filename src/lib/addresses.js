@@ -28,20 +28,22 @@ export const USDT_JETTON_WALLET = 'UQD35azoUEPUPyTucTRbKj3SVOdtbB5-f3akyFyZmR7YA
 // filter `/jetton/transfers` to USDT-only events.
 export const USDT_MASTER = 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs'
 
-// ── Multi-chain deposit wallets (the NEW cards) ──────────────────
-// PUBLIC receiving addresses only — private keys live solely in
-// scripts/.wallets.secret.json (gitignored), never in the bundle.
-// One key per network, so a single address serves the whole chain:
+// ── Treasury wallet = HD derivation index 0 ──────────────────────
+// PUBLIC addresses only — the key is server-derived from
+// HD_MASTER_MNEMONIC (index 0), never in the bundle/git. This is
+// the SINGLE canonical hot wallet: sweep destination, gas source,
+// admin-displayed balance, AND the deposit fallback shown before a
+// user's own derived address is ready. One key per network, so a
+// single address serves the whole chain:
 //   TRON → TRX + USDT-TRC20
-//   EVM  → same 0x address on Ethereum AND BSC, so it covers
-//          ETH, BNB, USDT/USDC on ERC20 and BEP20
+//   EVM  → same 0x on Ethereum AND BSC: ETH, BNB, USDT/USDC
+//          ERC20+BEP20
 //   BTC  → BTC      ·   LTC → LTC
-// These are the built-in defaults; an admin can still override any
-// of them at runtime via Admin → Control (app_settings).
-export const TRON_DEPOSIT_ADDRESS = 'TAajZiWyXR2RwBZ4WhJUbJqGsaboCBtFZj'
-export const EVM_DEPOSIT_ADDRESS  = '0x8a224AcBc5c5cc034CB72CA921C4e25F02C90848'
-export const BTC_DEPOSIT_ADDRESS  = 'bc1qphuhskgp025vmvvkyjelckkr8hgyqzvpfskem7'
-export const LTC_DEPOSIT_ADDRESS  = 'ltc1qyfhfwzpyvf846jn6zsnndqfswl64nelm6j07q6'
+// (Derived via scripts/hd-derive.js index 0 — keep in sync.)
+export const TRON_DEPOSIT_ADDRESS = 'TNLov2u5DuHKiSJpQHziqb8Gcov2GQWZw4'
+export const EVM_DEPOSIT_ADDRESS  = '0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2'
+export const BTC_DEPOSIT_ADDRESS  = 'bc1qprd6zdx8kv73xup6ed9rypnedxcltm89k8pfzk'
+export const LTC_DEPOSIT_ADDRESS  = 'ltc1qc65xapvmpzqesmvajncddleww3gxuy7z7jku6g'
 
 // coin-id (as used by DepositSheet.SOON_COINS / depositAddrKey)
 // → its default receiving address.
