@@ -127,6 +127,23 @@ function UsdtTonIcon({ size = 22 }) {
   )
 }
 
+// app_settings key holding the admin's MAIN receiving wallet for
+// a given extra-chain coin (seeded by migration_deposit_wallets
+// .sql, edited in Admin → Control). e.g. 'usdt-trc20' →
+// 'deposit_addr_usdt_trc20'.
+function depositAddrKey(coinId) {
+  return 'deposit_addr_' + String(coinId).replace(/-/g, '_')
+}
+
+// Resolve the address to actually show: the admin-configured one
+// from app_settings if it's set, otherwise the built-in
+// placeholder so the screen is never broken/empty.
+function resolveDepositAddr(coin, appSettings) {
+  const raw = appSettings?.[depositAddrKey(coin.id)]
+  const addr = typeof raw === 'string' ? raw.trim() : ''
+  return addr || coin.addr
+}
+
 function TgStarIcon({ size = 22, className = '' }) {
   return (
     <img
@@ -885,6 +902,10 @@ export default function DepositSheet() {
     return `${minCoin.toFixed(dp)} ${soonCoin.sym}`
   })()
 
+  // Admin-configured receiving wallet for the open chain (falls
+  // back to the built-in placeholder until the admin sets it).
+  const soonAddr = soonCoin ? resolveDepositAddr(soonCoin, appSettings) : ''
+
   // ── Live fiat-equivalent helpers for the wallet-deposit views ──
   // Both helpers expect the entered coin amount as a string from
   // the input field. They convert coin → RUB and then run it
@@ -1487,10 +1508,10 @@ export default function DepositSheet() {
               </div>
             </div>
 
-            <div className="deposit-field" onClick={() => handleCopy(soonCoin.addr, 'address')}>
+            <div className="deposit-field" onClick={() => handleCopy(soonAddr, 'address')}>
               <span className="deposit-field-label">{t.depositCryptoAddress}</span>
               <div className="deposit-field-row">
-                <span className="deposit-field-mono">{soonCoin.addr}</span>
+                <span className="deposit-field-mono">{soonAddr}</span>
                 <span className={`deposit-field-copy ${copiedField === 'address' ? 'copied' : ''}`}>
                   {copiedField === 'address' ? t.depositCryptoCopied : (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -96,6 +96,24 @@ const IMPORTANT_RPC_FUNCTIONS = [
   { name: 'request_withdrawal', label: 'Withdrawal Request' },
 ]
 
+// Multi-chain deposit wallets. `key` matches the app_settings
+// keys seeded by migration_deposit_wallets.sql AND the
+// depositAddrKey() helper in DepositSheet (id with '-' → '_').
+// TON / USDT(TON) are intentionally absent — they keep their
+// hardcoded Highload-V3 address.
+const DEPOSIT_WALLET_CHAINS = [
+  { key: 'deposit_addr_usdt_trc20', label: 'USDT · TRC20 (Tron)' },
+  { key: 'deposit_addr_usdt_bep20', label: 'USDT · BEP20 (BSC)' },
+  { key: 'deposit_addr_usdt_erc20', label: 'USDT · ERC20 (Ethereum)' },
+  { key: 'deposit_addr_usdc_erc20', label: 'USDC · ERC20 (Ethereum)' },
+  { key: 'deposit_addr_usdc_bep20', label: 'USDC · BEP20 (BSC)' },
+  { key: 'deposit_addr_trx',        label: 'TRX (Tron)' },
+  { key: 'deposit_addr_eth',        label: 'ETH (Ethereum)' },
+  { key: 'deposit_addr_btc',        label: 'BTC (Bitcoin)' },
+  { key: 'deposit_addr_bnb',        label: 'BNB (BNB Smart Chain)' },
+  { key: 'deposit_addr_ltc',        label: 'LTC (Litecoin)' },
+]
+
 const APP_VERSION = '0.2.2'
 
 export default function AdminControl() {
@@ -106,6 +124,11 @@ export default function AdminControl() {
   const [serverInfo, setServerInfo] = useState(null)
   const [serverLoading, setServerLoading] = useState(true)
   const [expandedSection, setExpandedSection] = useState({})
+  // Deposit-wallet editor: in-progress text per key + per-key
+  // saving flag. `walletEdits[key] === undefined` → show the
+  // saved value from `settings`.
+  const [walletEdits, setWalletEdits] = useState({})
+  const [savingWallet, setSavingWallet] = useState({})
   const setAppSettings = useGameStore(s => s.setAppSettings)
 
   const toggleSection = (key) => {
@@ -175,6 +198,29 @@ export default function AdminControl() {
     setUpdating(prev => ({ ...prev, [key]: false }))
   }, [settings, setAppSettings])
 
+  // Save one deposit-wallet address. Trims, writes to
+  // app_settings, syncs the global store (so the deposit sheet
+  // picks it up immediately) and clears the local edit so the
+  // input reflects the saved value.
+  const handleSaveWallet = useCallback(async (key) => {
+    const value = String(walletEdits[key] ?? '').trim()
+    haptic('light')
+    setSavingWallet(prev => ({ ...prev, [key]: true }))
+
+    const success = await updateAppSetting(key, value)
+    if (success) {
+      setSettings(prev => ({ ...(prev || {}), [key]: value }))
+      setAppSettings({ ...(settings || {}), [key]: value })
+      setWalletEdits(prev => {
+        const next = { ...prev }
+        delete next[key]
+        return next
+      })
+    }
+
+    setSavingWallet(prev => ({ ...prev, [key]: false }))
+  }, [walletEdits, settings, setAppSettings])
+
   // Compute deposit stats
   const today = new Date().toISOString().split('T')[0]
   const depositsToday = deposits.filter(d => d.created_at?.startsWith(today)).length
@@ -225,6 +271,55 @@ export default function AdminControl() {
             </label>
           </div>
         ))}
+      </div>
+
+      {/* Crypto deposit wallets (multi-chain) */}
+      <div className="admin-toggle-section">
+        <h3 className="admin-section-title">Кошельки пополнения</h3>
+        <p className="admin-wallet-cfg-hint">
+          Главные адреса приёма для новых сетей. Пусто → в шторке
+          показывается заглушка. TON / USDT(TON) настроены отдельно.
+        </p>
+
+        {loading && (
+          <div className="admin-toggle-skeleton">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="admin-skeleton-row" />
+            ))}
+          </div>
+        )}
+
+        {settings && !loading && DEPOSIT_WALLET_CHAINS.map(({ key, label }) => {
+          const saved = typeof settings[key] === 'string' ? settings[key] : ''
+          const val = walletEdits[key] !== undefined ? walletEdits[key] : saved
+          const dirty = walletEdits[key] !== undefined && walletEdits[key].trim() !== saved.trim()
+          return (
+            <div key={key} className="admin-wallet-cfg-row">
+              <span className="admin-wallet-cfg-label">{label}</span>
+              <div className="admin-wallet-cfg-input-row">
+                <input
+                  className="admin-wallet-cfg-input"
+                  type="text"
+                  spellCheck="false"
+                  autoComplete="off"
+                  placeholder="Адрес кошелька…"
+                  value={val}
+                  onChange={(e) =>
+                    setWalletEdits(prev => ({ ...prev, [key]: e.target.value }))
+                  }
+                />
+                <button
+                  type="button"
+                  className="admin-wallet-cfg-save"
+                  disabled={!dirty || savingWallet[key]}
+                  onClick={() => handleSaveWallet(key)}
+                >
+                  {savingWallet[key] ? '…' : 'Сохранить'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {/* Bot Statistics */}

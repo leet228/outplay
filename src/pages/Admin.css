@@ -2030,3 +2030,72 @@
 }
 .admin-btn-sm.danger:active { opacity: 0.7; transform: scale(0.96); }
 
+/* ── Crypto deposit wallet config ── */
+.admin-wallet-cfg-hint {
+  margin: 4px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.admin-wallet-cfg-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.admin-wallet-cfg-row:first-of-type { border-radius: 14px 14px 0 0; }
+.admin-wallet-cfg-row:last-of-type { border-radius: 0 0 14px 14px; border-bottom: none; }
+
+.admin-wallet-cfg-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.admin-wallet-cfg-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-wallet-cfg-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  outline: none;
+}
+.admin-wallet-cfg-input:focus {
+  border-color: var(--accent);
+}
+.admin-wallet-cfg-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.admin-wallet-cfg-save {
+  flex-shrink: 0;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 9px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.admin-wallet-cfg-save:disabled {
+  opacity: 0.4;
+}
+.admin-wallet-cfg-save:not(:disabled):active {
+  transform: scale(0.96);
+}
+
