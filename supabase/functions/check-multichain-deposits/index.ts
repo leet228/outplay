@@ -243,9 +243,12 @@ async function scanTron(
   usdRub: number,
   stats: { credited: number; errors: number },
 ) {
-  // USDT-TRC20 incoming
+  // USDT-TRC20 incoming. NowNodes' trx.nownodes.io is a java-tron
+  // node (no TronGrid /v1 indexer routes), so address-tx listing
+  // uses TronGrid directly — the canonical Tron indexer (free
+  // tier is fine for our once-a-minute windowed polling).
   const trc = await nnFetch(
-    `https://trx.nownodes.io/v1/accounts/${addr}/transactions/trc20?limit=40&only_to=true&contract_address=${TRON_USDT}`,
+    `https://api.trongrid.io/v1/accounts/${addr}/transactions/trc20?limit=40&only_to=true&contract_address=${TRON_USDT}`,
     `trx-trc20/${addr.slice(0, 8)}`,
   )
   for (const t of (trc?.data || [])) {
@@ -265,7 +268,7 @@ async function scanTron(
   // Native TRX incoming
   if (trxUsd == null) return
   const nat = await nnFetch(
-    `https://trx.nownodes.io/v1/accounts/${addr}/transactions?limit=40&only_to=true`,
+    `https://api.trongrid.io/v1/accounts/${addr}/transactions?limit=40&only_to=true`,
     `trx-native/${addr.slice(0, 8)}`,
   )
   for (const t of (nat?.data || [])) {
@@ -339,8 +342,8 @@ serve(async (_req) => {
       if (u.ltc_address)
         await scanBlockbook(sb, 'ltcbook.nownodes.io', 'utxo-ltc', u.ltc_address, uid, prices, usdRub, stats)
       if (u.evm_address) {
-        await scanBlockbook(sb, 'ethbook.nownodes.io', 'evm-eth', u.evm_address, uid, prices, usdRub, stats)
-        await scanBlockbook(sb, 'bscbook.nownodes.io', 'evm-bsc', u.evm_address, uid, prices, usdRub, stats)
+        await scanBlockbook(sb, 'eth-blockbook.nownodes.io', 'evm-eth', u.evm_address, uid, prices, usdRub, stats)
+        await scanBlockbook(sb, 'bsc-blockbook.nownodes.io', 'evm-bsc', u.evm_address, uid, prices, usdRub, stats)
       }
       if (u.tron_address)
         await scanTron(sb, u.tron_address, uid, prices.trx, usdRub, stats)
