@@ -1,10 +1,45 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
-import { TON_ADDRESS, USDT_MASTER, DEPOSIT_WALLET_GROUPS } from '../lib/addresses'
+import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
 import { adminRequestWithdrawal, adminRequestUsdtWithdrawal } from '../lib/supabase'
+import { fetchChainBalances } from '../lib/chainBalances'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
 import smallUsdtSrc from '../assets/crypto/small_usdt.svg'
+import smallUsdcSrc from '../assets/crypto/small_usdc.svg'
+import smallTrxSrc  from '../assets/crypto/small_trx.svg'
+import smallEthSrc  from '../assets/crypto/small_eth.svg'
+import smallBtcSrc  from '../assets/crypto/small_btc.svg'
+import smallBnbSrc  from '../assets/crypto/small_bnb.svg'
+import smallLtcSrc  from '../assets/crypto/small_litecoin.svg'
+
+// Per-asset icon for the multi-chain deposit cards. USDT/USDC
+// reuse their disc across networks (the network is shown in the
+// card subtitle), matching the deposit-sheet convention.
+const CHAIN_ICON = {
+  'trx':        smallTrxSrc,
+  'usdt-trc20': smallUsdtSrc,
+  'eth':        smallEthSrc,
+  'usdt-erc20': smallUsdtSrc,
+  'usdc-erc20': smallUsdcSrc,
+  'bnb':        smallBnbSrc,
+  'usdt-bep20': smallUsdtSrc,
+  'usdc-bep20': smallUsdcSrc,
+  'btc':        smallBtcSrc,
+  'ltc':        smallLtcSrc,
+}
+const CHAIN_ACCENT = {
+  'trx':        'linear-gradient(135deg, #EF3A3A 0%, #FF7A7A 100%)',
+  'usdt-trc20': 'linear-gradient(135deg, #26A17B 0%, #4ECCA3 100%)',
+  'eth':        'linear-gradient(135deg, #627EEA 0%, #A9B6F7 100%)',
+  'usdt-erc20': 'linear-gradient(135deg, #26A17B 0%, #4ECCA3 100%)',
+  'usdc-erc20': 'linear-gradient(135deg, #2775CA 0%, #6FA8E8 100%)',
+  'bnb':        'linear-gradient(135deg, #F0B90B 0%, #F8D33A 100%)',
+  'usdt-bep20': 'linear-gradient(135deg, #26A17B 0%, #4ECCA3 100%)',
+  'usdc-bep20': 'linear-gradient(135deg, #2775CA 0%, #6FA8E8 100%)',
+  'btc':        'linear-gradient(135deg, #F7931A 0%, #FFC46B 100%)',
+  'ltc':        'linear-gradient(135deg, #345D9D 0%, #6E91C9 100%)',
+}
 
 // ── Chain icons — compact "small" variants (cleanest disc, no
 //    extra stroke) that match the deposit-detail hero icons.
@@ -103,6 +138,8 @@ export default function AdminWallet() {
   const [usdtCopied, setUsdtCopied] = useState(false)
   // Which extra-chain deposit-wallet card was just copied.
   const [copiedGroup, setCopiedGroup] = useState(null)
+  // Live multi-chain balances { assets, totalUsd, ok } | null.
+  const [chainData, setChainData] = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -120,14 +157,16 @@ export default function AdminWallet() {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [tonBal, usdtBal, priceData] = await Promise.all([
+      const [tonBal, usdtBal, priceData, chain] = await Promise.all([
         fetchTonBalance(TON_ADDRESS),
         fetchUsdtBalance(TON_ADDRESS),
         fetchPrices(),
+        fetchChainBalances(),
       ])
       setPrices(priceData)
       setTonBalance(tonBal)
       setUsdtBalance(usdtBal)
+      setChainData(chain)
       setLastRefresh(new Date())
     } catch (err) {
       console.error('AdminWallet fetch error:', err)
@@ -235,7 +274,11 @@ export default function AdminWallet() {
 
   const fiatVal      = tonBalance  != null && prices ? tonBalance  * prices.ton[fiatCur]  : 0
   const usdtFiatVal  = usdtBalance != null && prices ? usdtBalance * prices.usdt[fiatCur] : 0
-  const totalFiatVal = fiatVal + usdtFiatVal
+  // USD→selected-fiat factor (USDT is the $1 peg, so its `rub`
+  // entry IS the live USD-RUB rate). Reused for every chain asset.
+  const usdToFiat    = fiatCur === 'usd' ? 1 : (prices ? prices.usdt.rub : 1)
+  const chainFiatVal = chainData ? chainData.totalUsd * usdToFiat : 0
+  const totalFiatVal = fiatVal + usdtFiatVal + chainFiatVal
   const amountNum    = parseFloat(wdAmount) || 0
   // Fiat preview tracks whichever coin's form is currently open.
   const fiatPreview  = amountNum > 0 && prices && wdCoin
@@ -505,44 +548,69 @@ export default function AdminWallet() {
         </div>
       )}
 
-      {/* Multi-chain deposit wallets — the NEW cards. One real
-        * keypair per network (see scripts/.wallets.secret.json),
-        * so a single address serves the whole chain. No live
-        * balance/withdraw yet (per-chain indexers are a separate
-        * task) — this is the authoritative receiving-address
-        * reference for the operator. */}
-      <div className="admin-wallet-list">
-        <div className="admin-wallet-section-title">Кошельки пополнения</div>
-        {DEPOSIT_WALLET_GROUPS.map((g) => (
-          <div key={g.id} className="admin-wallet-card">
-            <div className="admin-wallet-accent" style={{ background: g.accent }} />
-            <div className="admin-wallet-top">
-              <div className="admin-wallet-title">
-                <span className="admin-wallet-name">{g.name}</span>
-                <span className="admin-wallet-fiat">{g.serves}</span>
+      {/* Multi-chain deposit wallets — one card PER ASSET (same
+        * icon style as TON / USDT above). USDT(TRC20) and TRX are
+        * split into their own cards even though they share the
+        * Tron address (same for the EVM assets) — the address row
+        * makes the shared wallet explicit. Balances are live
+        * on-chain; "—" means that asset's API was unreachable. */}
+      {chainData && chainData.assets && (
+        <div className="admin-wallet-list">
+          <div className="admin-wallet-section-title">Кошельки пополнения</div>
+          {chainData.assets.map((a) => {
+            const fiat = a.usd != null ? a.usd * usdToFiat : null
+            return (
+              <div key={a.id} className="admin-wallet-card">
+                <div className="admin-wallet-accent" style={{ background: CHAIN_ACCENT[a.id] }} />
+                <div className="admin-wallet-top">
+                  <div className="admin-wallet-icon-wrap" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
+                    <img src={CHAIN_ICON[a.id]} width={32} height={32} alt="" draggable="false" />
+                  </div>
+                  <div className="admin-wallet-title">
+                    <span className="admin-wallet-name">
+                      {a.name}{' '}
+                      <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: '0.78em' }}>
+                        {a.network}
+                      </span>
+                    </span>
+                    <span className="admin-wallet-fiat">
+                      {fiat != null ? fmtFiat(fiat, fiatCur) : '—'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="admin-wallet-balance-row">
+                  <span className="admin-wallet-balance">
+                    {a.amount != null
+                      ? a.amount.toLocaleString('en-US', { maximumFractionDigits: a.amount < 1 ? 8 : 4 })
+                      : '—'}
+                  </span>
+                  <span className="admin-wallet-symbol">{a.symbol}</span>
+                </div>
+
+                <div className="admin-wallet-addr-row">
+                  <code className="admin-wallet-addr">{truncAddr(a.address)}</code>
+                  <button
+                    className="admin-copy-btn"
+                    onClick={() => {
+                      haptic('light')
+                      copyText(a.address)
+                      setCopiedGroup(a.id)
+                      setTimeout(() => setCopiedGroup(c => (c === a.id ? null : c)), 1500)
+                    }}
+                  >
+                    {copiedGroup === a.id ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="admin-wallet-addr-row">
-              <code className="admin-wallet-addr">{truncAddr(g.address)}</code>
-              <button
-                className="admin-copy-btn"
-                onClick={() => {
-                  haptic('light')
-                  copyText(g.address)
-                  setCopiedGroup(g.id)
-                  setTimeout(() => setCopiedGroup(c => (c === g.id ? null : c)), 1500)
-                }}
-              >
-                {copiedGroup === g.id ? (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                )}
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Price chip — TON & USDT current prices in the selected
         * fiat. USDT is pegged so its USD value is always 1.00,

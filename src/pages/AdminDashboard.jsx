@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getAdminStats, adminSearchUser, getBotStarsBalance } from '../lib/supabase'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
+import { fetchChainBalances } from '../lib/chainBalances'
 
 // ── Blockchain fetchers (same as wallet, but lightweight here) ──
 async function fetchTonBalance(addr) {
@@ -115,13 +116,14 @@ export default function AdminDashboard() {
     async function load() {
       setLoading(true)
       try {
-        const [statsData, tonBal, tonPriceRub, usdtBal, usdRubRate, realBotStars] = await Promise.all([
+        const [statsData, tonBal, tonPriceRub, usdtBal, usdRubRate, realBotStars, chain] = await Promise.all([
           getAdminStats(),
           fetchTonBalance(TON_ADDRESS),
           fetchTonPriceRub(),
           fetchUsdtBalance(TON_ADDRESS),
           fetchUsdRubRate(),
           getBotStarsBalance(),
+          fetchChainBalances(),
         ])
         if (cancelled) return
         setStats(statsData)
@@ -135,10 +137,17 @@ export default function AdminDashboard() {
           const botStars       = realBotStars // real balance from Telegram API
           const userBalances   = statsData.total_user_balances ?? 0
           const guildPrizePool = statsData.guild_prize_pool ?? 0
-          // Total Assets now includes BOTH on-chain wallets: TON
-          // native + USDT jetton. 1 star ≈ 1 RUB for parity with
-          // the bot stars balance.
-          const totalAssetsRub   = botStars + walletRub + usdtWalletRub
+          // Multi-chain deposit wallets (BTC/LTC/ETH/BNB/TRX +
+          // USDT/USDC tokens). Live on-chain USD total → RUB via
+          // the same USD-RUB rate. Failed assets contribute 0.
+          const chainUsd       = chain && Number.isFinite(chain.totalUsd) ? chain.totalUsd : 0
+          const chainWalletRub = chainUsd * usdRubRate
+          const chainAssets    = (chain && chain.assets) ? chain.assets : []
+
+          // Total Assets includes every on-chain wallet: TON
+          // native + USDT jetton + all multi-chain wallets. 1 star
+          // ≈ 1 RUB for parity with the bot stars balance.
+          const totalAssetsRub   = botStars + walletRub + usdtWalletRub + chainWalletRub
           const totalLiabilities = userBalances + guildPrizePool
           const netRevenue       = totalAssetsRub - totalLiabilities
           setRevenue({
@@ -156,6 +165,8 @@ export default function AdminDashboard() {
             netRevenue,
             tonBal,
             tonPriceRub,
+            chainWalletRub,
+            chainAssets,
           })
         }
       } catch (err) {
@@ -415,6 +426,28 @@ export default function AdminDashboard() {
               <span>{revenue.usdtBal.toFixed(2)} USDT × {fmtNum(Math.round(revenue.usdRubRate))} {'₽'}</span>
               <span></span>
             </div>
+
+            <div className="admin-revenue-row" style={{ marginTop: 6 }}>
+              <span>{'🪙'} Multi-chain Wallets</span>
+              <span className="admin-revenue-highlight">{fmtRub(revenue.chainWalletRub)}</span>
+            </div>
+            {(revenue.chainAssets || [])
+              .filter(a => a.amount != null && a.amount > 0)
+              .map(a => (
+                <div key={a.id} className="admin-revenue-row admin-revenue-row-sub">
+                  <span>
+                    {a.amount.toLocaleString('en-US', { maximumFractionDigits: a.amount < 1 ? 8 : 4 })}
+                    {' '}{a.symbol} · {a.network}
+                  </span>
+                  <span>{a.usd != null ? fmtRub(a.usd * revenue.usdRubRate) : '—'}</span>
+                </div>
+              ))}
+            {(revenue.chainAssets || []).every(a => !(a.amount > 0)) && (
+              <div className="admin-revenue-row admin-revenue-row-sub">
+                <span>пока пусто / нет поступлений</span>
+                <span></span>
+              </div>
+            )}
 
             <div className="admin-revenue-total-row">
               <span>Total Assets</span>
