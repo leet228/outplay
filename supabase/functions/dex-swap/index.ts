@@ -214,11 +214,11 @@ serve(async (req) => {
       const fromToken = isTrxIn ? WTRX : TRON_USDT
       const toToken   = isTrxIn ? TRON_USDT : WTRX
 
-      // Best route from SunSwap's router API — gives tokens /
-      // poolVersions / fees / amountOut so we never hand-guess the
-      // pool encoding (and no tx is sent if there's no route).
+      // SunSwap router API wants amountIn in RAW units (it divides
+      // by precision for display). TRX & USDT are both 6-dec.
+      const inUnits = BigInt(Math.round(Number(amount) * 1e6))
       const qs = new URLSearchParams({
-        fromToken, toToken, amountIn: String(amount),
+        fromToken, toToken, amountIn: inUnits.toString(),
       })
       const rr = await fetch(`${SUN_API}?${qs.toString()}`)
       if (!rr.ok) throw new Error(`sun router api ${rr.status}`)
@@ -242,21 +242,32 @@ serve(async (req) => {
       }
       const route = direct
       const path20 = route.tokens.map((t: string) => tron20(t))
-      const perHop: string[] = route.poolVersions || route.poolVersion || ['v2']
-      const feesArr: number[] = (route.fees || route.poolFees || [])
-        .map((x: any) => Number(x) || 0)
-      // Single hop → one pool version, both tokens in it.
-      const poolVersion: string[] = [String(perHop[0] || 'v2')]
-      const versionLen: bigint[] = [2n]
-      const fees = feesArr.length ? [Number(feesArr[0]) || 0] : [0]
+      // Use the API's ACTUAL pool data (this direct pair is a v3
+      // pool, fee 3000 — must not be hardcoded to v2).
+      const perHop: string[] = (route.poolVersions || route.poolVersion || ['v2'])
+        .map((v: any) => String(v))
+      // Collapse consecutive equal versions → poolVersion[] +
+      // versionLen[] (token counts; first run hops+1, rest hops).
+      const poolVersion: string[] = []
+      const versionLen: bigint[] = []
+      for (let i = 0; i < perHop.length; i++) {
+        if (i === 0 || perHop[i] !== perHop[i - 1]) {
+          poolVersion.push(perHop[i]); versionLen.push(i === 0 ? 2n : 1n)
+        } else {
+          versionLen[versionLen.length - 1] += 1n
+        }
+      }
+      // fees uint24[] — one per token (API poolFees length == tokens).
+      const pf = (route.poolFees || route.fees || []).map((x: any) => Number(x) || 0)
+      const fees = pf.length === route.tokens.length
+        ? pf : route.tokens.map(() => 0)
 
-      // route.amountOut may be human ("3.95") or raw integer
-      // ("3950000"). Decimal → ×1e6; pure integer → use as-is.
+      // route.amountOut is human ("3.95") with raw amountIn.
+      // Decimal → ×1e6; pure integer → use as-is.
       const aoStr = String(route.amountOut ?? route.amountout ?? '0')
       const outUnits = aoStr.includes('.')
         ? BigInt(Math.round(Number(aoStr) * 1e6))
         : BigInt(aoStr || '0')
-      const inUnits = BigInt(Math.round(Number(amount) * 1e6))   // TRX & USDT 6dec
       const minOut = (outUnits * BigInt(Math.floor((1 - slip) * 1e6))) / 1_000_000n
       if (outUnits <= 0n) {
         await sb.rpc('admin_log', {
