@@ -36,12 +36,9 @@ const ADMIN_TG             = Deno.env.get('ADMIN_TG_ID') || '945676433'
 const HD_MASTER_MNEMONIC   = Deno.env.get('HD_MASTER_MNEMONIC') || ''
 const NOWNODES_API_KEY     = Deno.env.get('NOWNODES_API_KEY') || ''
 
-// ── Ethereum / Uniswap V2 Router02 (same proven pattern as
-// SunSwap; Uniswap V2 is a fork). Env-overridable. ──
-const UNI_ROUTER = Deno.env.get('UNISWAP_ROUTER') || '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
-const WETH       = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
-const ETH_USDT   = '0xdAC17F958D2ee523a2206206994597C13D831ec7' // 6 dec
-const ETH_USDC   = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' // 6 dec
+// ── EVM (Ethereum/Uniswap V2 + BSC/PancakeSwap V2) ──
+// Both are Uniswap-V2 forks → identical swapExact*ForTokens /
+// ForETH flow. NOTE: ETH USDT/USDC = 6 dec, BSC USDT/USDC = 18.
 const UNI_ABI = [
   'function getAmountsOut(uint256,address[]) view returns (uint256[])',
   'function swapExactETHForTokens(uint256,address[],address,uint256) payable returns (uint256[])',
@@ -51,8 +48,29 @@ const ERC20_ABI = [
   'function allowance(address,address) view returns (uint256)',
   'function approve(address,uint256) returns (bool)',
 ]
-function evmTreasuryWallet(): Wallet {
-  const fr = new FetchRequest('https://eth.nownodes.io')
+const EVM_CHAIN: Record<string, {
+  rpc: string; router: string; weth: string;
+  usdt: string; usdc: string; tokDec: number; native: string;
+}> = {
+  eth: {
+    rpc: 'https://eth.nownodes.io',
+    router: Deno.env.get('UNISWAP_ROUTER') || '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D',
+    weth: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+    usdt: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    tokDec: 6, native: 'ETH',
+  },
+  bnb: {
+    rpc: 'https://bsc.nownodes.io',
+    router: Deno.env.get('PANCAKE_ROUTER') || '0x10ED43C718714eb63d5aA57B78B54704E256024E',
+    weth: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', // WBNB
+    usdt: '0x55d398326f99059fF775485246999027B3197955',
+    usdc: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+    tokDec: 18, native: 'BNB',
+  },
+}
+function evmTreasuryWallet(rpc: string): Wallet {
+  const fr = new FetchRequest(rpc)
   if (NOWNODES_API_KEY) fr.setHeader('api-key', NOWNODES_API_KEY)
   const node = HDNodeWallet.fromPhrase(HD_MASTER_MNEMONIC, undefined, "m/44'/60'/0'/0/0")
   return new Wallet(node.privateKey, new JsonRpcProvider(fr))
@@ -217,7 +235,10 @@ serve(async (req) => {
     if (!user_id || !dir || !(Number(amount) > 0)) return json({ error: 'bad_params' }, 400)
     const TON_DIRS = ['ton_to_usdt', 'usdt_to_ton']
     const TRX_DIRS = ['trx_to_usdt', 'usdt_to_trx']
-    const EVM_DIRS = ['eth_to_usdt', 'usdt_to_eth', 'eth_to_usdc', 'usdc_to_eth']
+    const EVM_DIRS = [
+      'eth_to_usdt', 'usdt_to_eth', 'eth_to_usdc', 'usdc_to_eth',
+      'bnb_to_usdt', 'usdt_to_bnb', 'bnb_to_usdc', 'usdc_to_bnb',
+    ]
     if (![...TON_DIRS, ...TRX_DIRS, ...EVM_DIRS].includes(dir)) {
       return json({ error: 'bad_dir' }, 400)
     }
@@ -307,21 +328,24 @@ serve(async (req) => {
       })
     }
 
-    // ── Ethereum / Uniswap V2 (treasury HD-0) ──
+    // ── EVM / Uniswap-V2-fork (ETH→Uniswap, BNB→PancakeSwap) ──
+    // Treasury HD-0 wallet. ETH USDT/USDC = 6 dec, BSC = 18 dec.
     if (EVM_DIRS.includes(dir)) {
       if (!HD_MASTER_MNEMONIC) return json({ error: 'no_hd_master' }, 500)
-      const w = evmTreasuryWallet()
+      const chain = dir.includes('bnb') ? 'bnb' : 'eth'
+      const cfg = EVM_CHAIN[chain]
+      const w = evmTreasuryWallet(cfg.rpc)
       const me = await w.getAddress()
-      const isEthIn = dir.startsWith('eth_to_')
+      const isNativeIn = dir.startsWith(`${chain}_to_`)
       const isUsdc = dir.includes('usdc')
-      const token = isUsdc ? ETH_USDC : ETH_USDT
+      const token = isUsdc ? cfg.usdc : cfg.usdt
       const tokSym = isUsdc ? 'USDC' : 'USDT'
-      const router = new Contract(UNI_ROUTER, UNI_ABI, w)
+      const router = new Contract(cfg.router, UNI_ABI, w)
       const deadline = Math.floor(Date.now() / 1000) + 600
-      const path = isEthIn ? [WETH, token] : [token, WETH]
-      const amountIn = isEthIn
-        ? parseEther(String(amount))            // ETH 18 dec
-        : parseUnits(String(amount), 6)         // USDT/USDC 6 dec
+      const path = isNativeIn ? [cfg.weth, token] : [token, cfg.weth]
+      const amountIn = isNativeIn
+        ? parseEther(String(amount))                  // native 18 dec
+        : parseUnits(String(amount), cfg.tokDec)      // USDT/USDC
 
       const amounts = await router.getAmountsOut(amountIn, path)
       const outUnits: bigint = amounts[amounts.length - 1]
@@ -329,18 +353,18 @@ serve(async (req) => {
       const minOut = (outUnits * BigInt(Math.floor((1 - slip) * 1e6))) / 1_000_000n
 
       let txid = ''
-      if (isEthIn) {
+      if (isNativeIn) {
         const tx = await router.swapExactETHForTokens(
           minOut, path, me, deadline, { value: amountIn })
         txid = tx.hash
       } else {
         const erc = new Contract(token, ERC20_ABI, w)
-        const allow: bigint = await erc.allowance(me, UNI_ROUTER)
+        const allow: bigint = await erc.allowance(me, cfg.router)
         if (allow < amountIn) {
-          const atx = await erc.approve(UNI_ROUTER, MaxUint256)
+          const atx = await erc.approve(cfg.router, MaxUint256)
           await sb.rpc('admin_log', {
             p_level: 'info', p_source: 'edge:dex-swap',
-            p_message: 'evm approved', p_details: { txid: atx.hash, token, router: UNI_ROUTER },
+            p_message: 'evm approved', p_details: { chain, txid: atx.hash, token, router: cfg.router },
           })
           return json({
             ok: true, dir, step: 'approved', txid: atx.hash,
@@ -356,14 +380,15 @@ serve(async (req) => {
         p_level: 'info', p_source: 'edge:dex-swap',
         p_message: 'evm swap',
         p_details: {
-          dir, amount: String(amount), slip, txid,
-          exp: outUnits.toString(), min: minOut.toString(), router: UNI_ROUTER,
+          chain, dir, amount: String(amount), slip, txid,
+          exp: outUnits.toString(), min: minOut.toString(), router: cfg.router,
         },
       })
       return json({
         ok: true, dir, step: 'swap', txid,
         expected_out: outUnits.toString(), min_out: minOut.toString(),
-        out_dec: isEthIn ? 6 : 18, out_sym: isEthIn ? tokSym : 'ETH',
+        out_dec: isNativeIn ? cfg.tokDec : 18,
+        out_sym: isNativeIn ? tokSym : cfg.native,
       })
     }
 
