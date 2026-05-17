@@ -37,16 +37,16 @@ import './DepositSheet.css'
 // pinned to the card's top-right corner (stablecoins on a chain);
 // plain coins have none. `art` is the big bottom-right disc.
 const SOON_COINS = [
-  { id: 'usdt-trc20', name: 'USDT', net: 'Tron · TRC20',            art: usdtIconSrc, badge: trxBadgeSrc },
-  { id: 'usdt-bep20', name: 'USDT', net: 'BNB Smart Chain · BEP20', art: usdtIconSrc, badge: bnbBadgeSrc },
-  { id: 'trx',        name: 'TRX',  net: 'Tron',                     art: trxIconSrc,  badge: null },
-  { id: 'eth',        name: 'ETH',  net: 'Ethereum',                 art: ethIconSrc,  badge: null },
-  { id: 'btc',        name: 'BTC',  net: 'Bitcoin',                  art: btcIconSrc,  badge: null },
-  { id: 'usdt-erc20', name: 'USDT', net: 'Ethereum · ERC20',         art: usdtIconSrc, badge: ethBadgeSrc },
-  { id: 'usdc-erc20', name: 'USDC', net: 'Ethereum · ERC20',         art: usdcIconSrc, badge: ethBadgeSrc },
-  { id: 'bnb',        name: 'BNB',  net: 'BNB Smart Chain',          art: bnbIconSrc,  badge: null },
-  { id: 'ltc',        name: 'LTC',  net: 'Litecoin',                 art: ltcIconSrc,  badge: null },
-  { id: 'usdc-bep20', name: 'USDC', net: 'BNB Smart Chain · BEP20',  art: usdcIconSrc, badge: bnbBadgeSrc },
+  { id: 'usdt-trc20', name: 'USDT',     net: '(TRC 20)',       art: usdtIconSrc, badge: trxBadgeSrc },
+  { id: 'usdt-bep20', name: 'USDT',     net: '(BEP 20)',       art: usdtIconSrc, badge: bnbBadgeSrc },
+  { id: 'trx',        name: 'TRX',      net: '(Tron)',         art: trxIconSrc,  badge: null },
+  { id: 'eth',        name: 'ETH',      net: '(Ethereum)',     art: ethIconSrc,  badge: null },
+  { id: 'btc',        name: 'BTC',      net: '(Bitcoin)',      art: btcIconSrc,  badge: null },
+  { id: 'usdt-erc20', name: 'USDT',     net: '(ERC 20)',       art: usdtIconSrc, badge: ethBadgeSrc },
+  { id: 'usdc-erc20', name: 'USDC',     net: '(ERC 20)',       art: usdcIconSrc, badge: ethBadgeSrc },
+  { id: 'bnb',        name: 'BNB',      net: '(Binance chain)', art: bnbIconSrc, badge: null },
+  { id: 'ltc',        name: 'Litecoin', net: '',               art: ltcIconSrc,  badge: null },
+  { id: 'usdc-bep20', name: 'USDC',     net: '(BEP 20)',       art: usdcIconSrc, badge: bnbBadgeSrc },
 ]
 
 const PRESETS = [100, 500, 1000]
@@ -1034,7 +1034,9 @@ export default function DepositSheet() {
                       )}
                       <div className="deposit-coin-card-text">
                         <span className="deposit-coin-card-name">{coin.name}</span>
-                        <span className="deposit-coin-card-sub">{coin.net}</span>
+                        {coin.net && (
+                          <span className="deposit-coin-card-sub">{coin.net}</span>
+                        )}
                       </div>
                       <img
                         className="deposit-coin-card-art"
@@ -1424,7 +1426,9 @@ export default function DepositSheet() {
               </div>
               <div className="deposit-crypto-hero-text">
                 <span className="deposit-crypto-hero-name">{soonCoin.name}</span>
-                <span className="deposit-crypto-hero-net">{soonCoin.net}</span>
+                {soonCoin.net && (
+                  <span className="deposit-crypto-hero-net">{soonCoin.net}</span>
+                )}
               </div>
             </div>
 
