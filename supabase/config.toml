@@ -1,0 +1,13 @@
+# Supabase CLI config. Only the bits we need are set; the CLI
+# fills the rest with defaults.
+#
+# dex-swap is invoked SERVER-TO-SERVER (process-withdrawals,
+# process-crypto-withdrawals, rebalance) and by the admin UI. The
+# Functions gateway otherwise rejects the bearer with
+# UNAUTHORIZED_INVALID_JWT_FORMAT before the function even runs.
+# dex-swap enforces its OWN authorization (user_id must map to the
+# admin telegram_id), so gateway JWT verification is redundant and
+# must be off for the internal callers to work.
+
+[functions.dex-swap]
+verify_jwt = false
