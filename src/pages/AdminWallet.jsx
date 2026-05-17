@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview, getAdminStats, dexSwap, getTreasuryBalances } from '../lib/supabase'
+import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview, dexSwap, getTreasuryBalances, rebalanceStatus, rebalanceSetLive, rebalanceRunDry } from '../lib/supabase'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
 import smallUsdtSrc from '../assets/crypto/small_usdt.svg'
@@ -157,7 +157,6 @@ export default function AdminWallet() {
   const [sweepOv, setSweepOv] = useState(null)
   const [sweepErr, setSweepErr] = useState(false)
   // Sum of all user balances (stars≈RUB) — rebalance reference.
-  const [userBalRub, setUserBalRub] = useState(null)
   // DEX swap (manual). chain: 'ton' (STON.fi) | 'trx' (SunSwap).
   const [swChain, setSwChain] = useState('ton')
   const [swFlip, setSwFlip] = useState(false)
@@ -168,6 +167,11 @@ export default function AdminWallet() {
   const [swMsg, setSwMsg] = useState('')
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
+  // Daily auto-rebalance (server-side: 30/70 surplus + stable floor).
+  const [rbLive, setRbLive] = useState(false)
+  const [rbLast, setRbLast] = useState(null)
+  const [rbBusy, setRbBusy] = useState(false)
+  const [rbMsg, setRbMsg] = useState('')
 
   // Withdraw form — single shared form whose fields are interpreted
   // per the active coin (`wdCoin`). `null` keeps the form hidden;
@@ -215,6 +219,37 @@ export default function AdminWallet() {
 
   useEffect(() => { loadTron() }, [loadTron])
 
+  // ── Daily auto-rebalance status ──
+  const loadRb = useCallback(async () => {
+    if (!user?.id) return
+    const r = await rebalanceStatus(user.id)
+    if (r && r.ok) { setRbLive(!!r.live); setRbLast(r.last || null) }
+  }, [user])
+
+  useEffect(() => { loadRb() }, [loadRb])
+
+  const toggleRbLive = useCallback(async () => {
+    if (!user?.id || rbBusy) return
+    const next = !rbLive
+    if (next && !window.confirm('Включить БОЕВОЙ режим? Ребаланс будет реально свапать монеты каждую ночь в 03:00 МСК.')) return
+    setRbBusy(true); setRbMsg('')
+    haptic('medium')
+    const r = await rebalanceSetLive(user.id, next)
+    if (r && r.ok) { setRbLive(!!r.live); setRbMsg(r.live ? 'Боевой режим ВКЛ' : 'Боевой режим ВЫКЛ') }
+    else setRbMsg(r?.error || 'Ошибка')
+    setRbBusy(false)
+  }, [user, rbLive, rbBusy])
+
+  const runRbDry = useCallback(async () => {
+    if (!user?.id || rbBusy) return
+    setRbBusy(true); setRbMsg('Считаю план…')
+    haptic('light')
+    const r = await rebalanceRunDry(user.id)
+    if (r && r.ok) { setRbLast(r.snap ? { ...r.snap, mode: 'DRY-RUN', results: r.results || [] } : rbLast); setRbMsg('Готово — план в Телеграм') }
+    else setRbMsg(r?.error || 'Ошибка')
+    setRbBusy(false)
+  }, [user, rbBusy, rbLast])
+
   const loadSweep = useCallback(async () => {
     const r = await adminSweepOverview()
     if (r) { setSweepOv(r); setSweepErr(false) }
@@ -226,15 +261,6 @@ export default function AdminWallet() {
     return () => clearInterval(iv)
   }, [loadSweep])
 
-  useEffect(() => {
-    let alive = true
-    getAdminStats().then(s => {
-      if (alive && s && typeof s.total_user_balances === 'number') {
-        setUserBalRub(s.total_user_balances)
-      }
-    })
-    return () => { alive = false }
-  }, [])
 
   const doTron = useCallback(async (action, amount) => {
     if (!user?.id || tronBusy) return
@@ -1114,73 +1140,75 @@ export default function AdminWallet() {
 
       {/* ── Rebalance (alert-only, daily) ── */}
       <div className="admin-tron-stake">
-        <div className="admin-wallet-section-title">Ребаланс · раз в день</div>
-        {(() => {
-          const usdRub = prices?.usdt?.rub
-          if (!usdRub || userBalRub == null || !chainData || !prices) {
-            return <div className="admin-tron-row"><span>Загрузка…</span></div>
-          }
-          const totalUserUsd = userBalRub / usdRub
-          const target = 0.30 * totalUserUsd
-          const A = (id) => (chainData.assets || []).find(x => x.id === id)
-          const f$ = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
-          const fc = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 6 })
+        <div className="admin-wallet-section-title">Ребаланс · 03:00 МСК</div>
+        <div className="admin-tron-note">
+          Каждую ночь: стейбл всегда покрывает обязательства (балансы
+          юзеров + призовой фонд) — это пол. Излишек сверху делится
+          <b> 30% монета / 70% стейбл</b> на каждой сети. BTC и LTC не
+          трогаются. На BNB стейбл всегда <b>USDC</b>. Порог ±5%, мелочь
+          до $25 пропускается.
+        </div>
 
-          const coins = [
-            {
-              sym: 'TON', amt: tonBalance || 0, price: prices.ton.usd,
-              nativeUsd: (tonBalance || 0) * prices.ton.usd,
-              stableUsd: usdtBalance || 0, stable: 'USDT(TON)',
-            },
-            {
-              sym: 'ETH', amt: A('eth')?.amount || 0, price: A('eth')?.priceUsd || 0,
-              nativeUsd: A('eth')?.usd || 0,
-              stableUsd: (A('usdt-erc20')?.usd || 0) + (A('usdc-erc20')?.usd || 0),
-              stable: 'USDT/USDC ERC20',
-            },
-            {
-              sym: 'BNB', amt: A('bnb')?.amount || 0, price: A('bnb')?.priceUsd || 0,
-              nativeUsd: A('bnb')?.usd || 0,
-              stableUsd: (A('usdt-bep20')?.usd || 0) + (A('usdc-bep20')?.usd || 0),
-              stable: 'USDT/USDC BEP20',
-            },
-            {
-              sym: 'TRX', amt: A('trx')?.amount || 0, price: A('trx')?.priceUsd || 0,
-              nativeUsd: A('trx')?.usd || 0,
-              stableUsd: A('usdt-trc20')?.usd || 0, stable: 'USDT-TRC20',
-            },
-          ]
+        <div className="admin-tron-action" style={{ alignItems: 'center', gap: 10 }}>
+          <span className="admin-tron-k" style={{ flex: 1 }}>
+            Режим: <b style={{ color: rbLive ? '#ef4444' : 'var(--text-muted)' }}>
+              {rbLive ? '🔴 БОЕВОЙ (свапает)' : '🟡 DRY-RUN (только отчёт)'}
+            </b>
+          </span>
+          <button
+            type="button"
+            className={'admin-tron-btn' + (rbLive ? ' admin-tron-btn--warn' : '')}
+            disabled={rbBusy}
+            onClick={toggleRbLive}
+          >{rbLive ? 'Выключить' : 'Включить live'}</button>
+        </div>
+        <div className="admin-tron-action">
+          <button
+            type="button"
+            className="admin-tron-btn"
+            style={{ flex: 1 }}
+            disabled={rbBusy}
+            onClick={runRbDry}
+          >{rbBusy ? '…' : 'Прогнать сейчас (dry-run)'}</button>
+        </div>
+        {rbMsg && <div className="admin-tron-note">{rbMsg}</div>}
+
+        {rbLast && (() => {
+          const f$ = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+          const when = rbLast.ts
+            ? new Date(rbLast.ts).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            : '—'
           return (
             <>
-              <div className="admin-tron-note">
-                Цель: в каждой монете ≈ <b>30%</b> от суммы балансов юзеров
-                ({f$(totalUserUsd)}) = <b>{f$(target)}</b>. Остальное — в
-                стейблах. Свапы делаешь вручную/на бирже.
+              <div className="admin-tron-stat">
+                <span className="admin-tron-k">
+                  Последний прогон: {when} · <b>{rbLast.mode || '—'}</b>
+                </span>
+                <span className="admin-tron-k" style={{ marginTop: 4 }}>
+                  Обязательства {f$(rbLast.L)} · казна {f$(rbLast.swapTotal)} ·
+                  цель монет {((rbLast.f || 0) * 100).toFixed(1)}%
+                </span>
               </div>
-              {coins.map(c => {
-                const delta = c.nativeUsd - target
-                const tol = Math.max(1, target * 0.03)
-                let cls = 'is-ok', txt = 'в норме'
-                if (delta > tol) {
-                  cls = 'is-warn'
-                  txt = `Свапнуть ≈ ${f$(delta)} (~${fc(c.price > 0 ? delta / c.price : 0)} ${c.sym}) → ${c.stable}`
-                } else if (delta < -tol) {
-                  cls = 'is-bad'
-                  const need = -delta
-                  txt = `Докупить ≈ ${f$(need)} ${c.sym} из ${c.stable}` +
-                    (c.stableUsd < need ? ` ⚠ не хватает стейбла (есть ${f$(c.stableUsd)})` : '')
-                }
+              {(rbLast.plan || []).map(p => {
+                const r = (rbLast.results || []).find(x => x.chain === p.chain)
+                const cls = p.action === 'sell' ? 'is-warn' : p.action === 'buy' ? 'is-bad' : 'is-ok'
                 return (
-                  <div key={c.sym} className="admin-tron-stat">
+                  <div key={p.chain} className="admin-tron-stat">
                     <span className="admin-tron-k">
-                      {c.sym}: {f$(c.nativeUsd)} ({fc(c.amt)}) · стейбл {f$(c.stableUsd)}
+                      {p.nativeSym}: {(p.curPct * 100).toFixed(0)}% → {(p.targetPct * 100).toFixed(0)}%
                     </span>
                     <span className={'admin-sweep-health ' + cls} style={{ marginTop: 4 }}>
-                      {txt}
+                      {p.note}{r ? ` · ${r.text}` : ''}
                     </span>
                   </div>
                 )
               })}
+              {rbLast.strayBnbUsdt > 1 && (
+                <div className="admin-tron-note">
+                  ⚠ На BNB лежит {f$(rbLast.strayBnbUsdt)} USDT — выводы там
+                  только USDC, перекинь вручную.
+                </div>
+              )}
             </>
           )
         })()}

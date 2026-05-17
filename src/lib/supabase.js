@@ -512,6 +512,30 @@ export async function dexSwap(userId, dir, amount, slippage) {
   return data
 }
 
+// ── Admin: daily auto-rebalance (30/70 surplus, stable floor) ──
+// status → { live, last }; setLive(on); runDry → dry-run plan now.
+export async function rebalanceStatus(userId) {
+  const { data, error } = await supabase.functions.invoke('rebalance', {
+    body: { action: 'status', user_id: userId },
+  })
+  if (error) { console.error('rebalanceStatus error:', error); return null }
+  return data
+}
+export async function rebalanceSetLive(userId, on) {
+  const { data, error } = await supabase.functions.invoke('rebalance', {
+    body: { action: 'set_live', user_id: userId, on },
+  })
+  if (error) { console.error('rebalanceSetLive error:', error); return { error: error.message } }
+  return data
+}
+export async function rebalanceRunDry(userId) {
+  const { data, error } = await supabase.functions.invoke('rebalance', {
+    body: { action: 'run', user_id: userId, dry: true },
+  })
+  if (error) { console.error('rebalanceRunDry error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Admin: cached multi-chain treasury balances (server/NowNodes) ──
 // Same shape as the old client chainBalances: { assets, totalUsd, ok }.
 export async function getTreasuryBalances() {
