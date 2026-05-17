@@ -41,11 +41,10 @@ const TONCENTER_ENDPOINT = 'https://toncenter.com/api/v2/jsonRPC'
 const TRON_API     = 'https://trx.nownodes.io'
 // SunSwap Smart Router (the classic V2 router is deprecated).
 // Overridable via env in case SunSwap rotates it.
-// Current SunSwap Smart Router (mainnet). TCFNp179… and
-// TKzxdSv2… are DEPRECATED — funds sent there do nothing.
-// Overridable via env if SunSwap rotates it again.
-const SUN_ROUTER   = Deno.env.get('SUNSWAP_ROUTER') || 'TQAvWQpT9H916GckwWDJNhYZvQMkuRL7PN'
-const SUN_API      = 'https://rot.endjgfsv.link/swap/router'
+// The LIVE SunSwap V2 router that sunswap.com itself calls
+// (Uniswap-V2 style: swapExactETHForTokens, selector 0x7ff36ab5).
+// Verified from a real on-site swap. Overridable via env.
+const SUN_ROUTER   = Deno.env.get('SUNSWAP_ROUTER') || 'TNJVzGqKBWkJxJB5XYSqGAwUTV15U24pPq'
 const WTRX         = 'TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR'      // Wrapped TRX (native repr in the router API)
 const TRON_USDT    = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'      // USDT-TRC20
 const TRON_FEE_LIMIT = 100_000_000                            // 100 TRX cap
@@ -202,87 +201,44 @@ serve(async (req) => {
 
     const slip = Number(slippage) > 0 ? Number(slippage) : 0.01
 
-    // ── TRON / SunSwap Smart Router (treasury HD-0) ──
+    // ── TRON / SunSwap V2 router (exactly what sunswap.com uses) ──
+    // The live router is the Uniswap-V2-style one (selector
+    // 0x7ff36ab5 = swapExactETHForTokens, WTRX as "ETH"). Quote
+    // via getAmountsOut on the same router; no external API.
     if (TRX_DIRS.includes(dir)) {
       if (!HD_MASTER_MNEMONIC) return json({ error: 'no_hd_master' }, 500)
       const priv = tronPriv0()
       const owner = tronAddr(priv)
       const o20 = tron20(owner)
       const router20 = tron20(SUN_ROUTER)
+      const W = tron20(WTRX), U = tron20(TRON_USDT)
       const deadline = Math.floor(Date.now() / 1000) + 600
-
       const isTrxIn = dir === 'trx_to_usdt'
-      // SunSwap router API validates these as addresses — native
-      // TRX is represented by the WTRX address.
-      const fromToken = isTrxIn ? WTRX : TRON_USDT
-      const toToken   = isTrxIn ? TRON_USDT : WTRX
+      const path = isTrxIn ? [W, U] : [U, W]
 
-      // SunSwap router API wants amountIn in RAW units (it divides
-      // by precision for display). TRX & USDT are both 6-dec.
-      const inUnits = BigInt(Math.round(Number(amount) * 1e6))
-      const qs = new URLSearchParams({
-        fromToken, toToken, amountIn: inUnits.toString(),
-      })
-      const rr = await fetch(`${SUN_API}?${qs.toString()}`)
-      if (!rr.ok) throw new Error(`sun router api ${rr.status}`)
-      const rj = await rr.json()
-      const all: any[] = Array.isArray(rj?.data) ? rj.data
-        : (Array.isArray(rj) ? rj : [])
-      // Prefer a DIRECT pool (2 tokens, 1 hop) — simple & safe
-      // encoding. Multi-hop (esp. v3) is deferred until verified.
-      const direct = all.find(r =>
-        Array.isArray(r?.tokens) && r.tokens.length === 2)
-      if (!direct) {
-        await sb.rpc('admin_log', {
-          p_level: 'warn', p_source: 'edge:dex-swap',
-          p_message: 'tron no direct route',
-          p_details: { dir, amount: String(amount), raw: JSON.stringify(all?.[0] || rj).slice(0, 600) },
-        })
-        return json({
-          error: 'no_direct_route',
-          detail: 'только мультихоп — не отправлено. Сырой маршрут в admin_log.',
-        }, 400)
-      }
-      const route = direct
-      const path20 = route.tokens.map((t: string) => tron20(t))
-      // Use the API's ACTUAL pool data (this direct pair is a v3
-      // pool, fee 3000 — must not be hardcoded to v2).
-      const perHop: string[] = (route.poolVersions || route.poolVersion || ['v2'])
-        .map((v: any) => String(v))
-      // Collapse consecutive equal versions → poolVersion[] +
-      // versionLen[] (token counts; first run hops+1, rest hops).
-      const poolVersion: string[] = []
-      const versionLen: bigint[] = []
-      for (let i = 0; i < perHop.length; i++) {
-        if (i === 0 || perHop[i] !== perHop[i - 1]) {
-          poolVersion.push(perHop[i]); versionLen.push(i === 0 ? 2n : 1n)
-        } else {
-          versionLen[versionLen.length - 1] += 1n
-        }
-      }
-      // fees uint24[] — one per token (API poolFees length == tokens).
-      const pf = (route.poolFees || route.fees || []).map((x: any) => Number(x) || 0)
-      const fees = pf.length === route.tokens.length
-        ? pf : route.tokens.map(() => 0)
+      const inUnits = BigInt(Math.round(Number(amount) * 1e6))  // TRX & USDT 6dec
 
-      // route.amountOut is human ("3.95") with raw amountIn.
-      // Decimal → ×1e6; pure integer → use as-is.
-      const aoStr = String(route.amountOut ?? route.amountout ?? '0')
-      const outUnits = aoStr.includes('.')
-        ? BigInt(Math.round(Number(aoStr) * 1e6))
-        : BigInt(aoStr || '0')
+      // getAmountsOut(amountIn, path) → expected out (last element)
+      const goP = abi.encode(['uint256', 'address[]'], [inUnits, path]).slice(2)
+      const goRes = await tronConst(owner, SUN_ROUTER, 'getAmountsOut(uint256,address[])', goP)
+      if (!goRes) throw new Error('getAmountsOut empty (router/pair?)')
+      const [amounts] = abi.decode(['uint256[]'], '0x' + goRes)
+      const outUnits = BigInt(amounts[amounts.length - 1])
+      if (outUnits <= 0n) return json({ error: 'zero_out' }, 400)
       const minOut = (outUnits * BigInt(Math.floor((1 - slip) * 1e6))) / 1_000_000n
-      if (outUnits <= 0n) {
-        await sb.rpc('admin_log', {
-          p_level: 'warn', p_source: 'edge:dex-swap',
-          p_message: 'tron zero out',
-          p_details: { dir, amount: String(amount), raw: JSON.stringify(route).slice(0, 600) },
-        })
-        return json({ error: 'zero_out', detail: JSON.stringify(route).slice(0, 200) }, 400)
-      }
 
-      // USDT→TRX needs an allowance for the Smart Router.
-      if (!isTrxIn) {
+      let txid = ''
+      if (isTrxIn) {
+        // swapExactETHForTokens(amountOutMin, path, to, deadline) payable
+        const p = abi.encode(
+          ['uint256', 'address[]', 'address', 'uint256'],
+          [minOut, path, o20, BigInt(deadline)],
+        ).slice(2)
+        txid = await tronCall(priv, owner, SUN_ROUTER,
+          'swapExactETHForTokens(uint256,address[],address,uint256)',
+          p, Number(inUnits))
+      } else {
+        // USDT→TRX needs allowance for the router.
         const alP = abi.encode(['address', 'address'], [o20, router20]).slice(2)
         const alRes = await tronConst(owner, TRON_USDT, 'allowance(address,address)', alP)
         const allowance = alRes ? BigInt('0x' + alRes) : 0n
@@ -292,35 +248,29 @@ serve(async (req) => {
           const atx = await tronCall(priv, owner, TRON_USDT, 'approve(address,uint256)', apP, 0)
           await sb.rpc('admin_log', {
             p_level: 'info', p_source: 'edge:dex-swap',
-            p_message: 'tron approved', p_details: { txid: atx },
+            p_message: 'tron approved', p_details: { txid: atx, router: SUN_ROUTER },
           })
           return json({
             ok: true, dir, step: 'approved', txid: atx,
             note: 'USDT разрешён роутеру — повтори свап через ~10 сек',
           })
         }
+        // swapExactTokensForETH(amountIn, amountOutMin, path, to, deadline)
+        const p = abi.encode(
+          ['uint256', 'uint256', 'address[]', 'address', 'uint256'],
+          [inUnits, minOut, path, o20, BigInt(deadline)],
+        ).slice(2)
+        txid = await tronCall(priv, owner, SUN_ROUTER,
+          'swapExactTokensForETH(uint256,uint256,address[],address,uint256)',
+          p, 0)
       }
-
-      // Order per sun-protocol/SmartExchangeRouter:
-      //   path, poolVersion, versionLen, fees, SwapData
-      const SEL = 'swapExactInput(address[],string[],uint256[],uint24[],(uint256,uint256,address,uint256))'
-      const param = abi.encode(
-        ['address[]', 'string[]', 'uint256[]', 'uint24[]', 'tuple(uint256,uint256,address,uint256)'],
-        [path20, poolVersion, versionLen, fees, [inUnits, minOut, o20, BigInt(deadline)]],
-      ).slice(2)
-      const txid = await tronCall(
-        priv, owner, SUN_ROUTER, SEL, param, isTrxIn ? Number(inUnits) : 0,
-      )
 
       await sb.rpc('admin_log', {
         p_level: 'info', p_source: 'edge:dex-swap',
         p_message: 'tron swap',
         p_details: {
           dir, amount: String(amount), slip, txid,
-          exp: outUnits.toString(), min: minOut.toString(),
-          poolVersion, route_tokens: route.tokens,
-          route_raw: JSON.stringify(route).slice(0, 600),
-          router: SUN_ROUTER,
+          exp: outUnits.toString(), min: minOut.toString(), router: SUN_ROUTER,
         },
       })
       return json({
