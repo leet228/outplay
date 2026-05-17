@@ -40,6 +40,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+// Anon key = proven-valid JWT for the Functions gateway (service-
+// role key can be a non-JWT secret → 'invalid JWT'). dex-swap has
+// its own admin gate, so anon here is safe.
+const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY') || ''
 const BOT_TOKEN            = Deno.env.get('TELEGRAM_BOT_TOKEN')!
 const ADMIN_TG_ID          = Deno.env.get('ADMIN_TG_ID') || '945676433'
 const NOWNODES_API_KEY     = Deno.env.get('NOWNODES_API_KEY') || ''
@@ -163,7 +167,8 @@ async function callDexSwap(userId: string, dir: string, amount: number) {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({ user_id: userId, dir, amount, slippage: SLIPPAGE }),
   })

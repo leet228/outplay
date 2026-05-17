@@ -22,6 +22,10 @@ import {
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+// Anon key = proven-valid JWT for the Functions gateway (the
+// service-role key can be a non-JWT secret → 'invalid JWT').
+// dex-swap has its own admin gate, so anon here is safe.
+const SUPABASE_ANON_KEY    = Deno.env.get('SUPABASE_ANON_KEY') || ''
 const HD_MASTER_MNEMONIC   = Deno.env.get('HD_MASTER_MNEMONIC') || ''
 const NOWNODES_API_KEY     = Deno.env.get('NOWNODES_API_KEY') || ''
 const BOT_TOKEN            = Deno.env.get('TELEGRAM_BOT_TOKEN') || ''
@@ -253,7 +257,11 @@ async function adminUserId(): Promise<string | null> {
 async function callDexSwap(userId: string, dir: string, amount: number) {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/dex-swap`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+    headers: {
+      'content-type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
     body: JSON.stringify({ user_id: userId, dir, amount: amount.toFixed(8), slippage: 0.01 }),
   })
   return r.json().catch(() => ({ error: `http_${r.status}` }))

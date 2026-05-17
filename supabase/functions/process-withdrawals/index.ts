@@ -25,6 +25,11 @@ const TIMEOUT = 60 * 60 * 24 // 86400s — must match tonkite defaults for same 
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+// The Functions gateway validates the bearer as a JWT. The anon key
+// is the proven-valid JWT (pg_cron uses it). The service-role key
+// can be a non-JWT secret → 'invalid JWT'. dex-swap enforces its
+// own admin gate by user_id, so the anon key here is safe.
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
 const WALLET_TON_MNEMONIC = Deno.env.get('WALLET_TON_MNEMONIC')!
 const TONCENTER_API_KEY = Deno.env.get('TONCENTER_API_KEY') || undefined
 
@@ -377,7 +382,11 @@ async function callDexSwap(dir: string, amount: number): Promise<any> {
   if (!uid) return { error: 'no_admin_user' }
   const r = await fetch(`${SUPABASE_URL}/functions/v1/dex-swap`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+    headers: {
+      'content-type': 'application/json',
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
     body: JSON.stringify({ user_id: uid, dir, amount: amount.toFixed(6), slippage: 0.01 }),
   })
   return r.json().catch(() => ({ error: `http_${r.status}` }))
