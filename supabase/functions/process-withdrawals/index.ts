@@ -580,11 +580,14 @@ serve(async (req) => {
     const tonOk  = walletBalance >= totalRequired
     const usdtOk = usdtBal >= totalUsdtNeed
     const flag   = await getSwapFlag()
+    const funded = tonOk && usdtOk
 
-    if (flag) {
-      if (tonOk && usdtOk) {
-        await setSwapFlag(null)                 // funded → fall through to send
-      } else if (Date.now() - flag.at > 12 * 60 * 1000) {
+    if (funded) {
+      if (flag) await setSwapFlag(null)         // swap landed → fall through to send
+    } else {
+      // 12-min hard bound on the WHOLE funding attempt (set on the
+      // first try, survives swap retries) → never an infinite pending.
+      if (flag && Date.now() - flag.at > 12 * 60 * 1000) {
         await setSwapFlag(null)
         for (const wd of [...tonWds, ...usdtWds]) {
           await sb.rpc('fail_withdrawal', { p_withdrawal_id: wd.id, p_error: 'Swap funding timeout (12min)' })
@@ -592,58 +595,62 @@ serve(async (req) => {
         }
         await logToAdmin('error', 'TON funding swap timed out', { flag })
         return jsonResponse({ completed: 0, failed: failedIds.length, reason: 'swap_timeout' })
-      } else {
-        await revertPending()                   // still settling — wait
+      }
+      // a swap is already broadcast → just wait for it to land
+      if (flag && flag.txid) {
+        await revertPending()
         return jsonResponse({ completed: 0, failed: 0, reason: 'awaiting_swap', swap: flag.txid })
       }
-    } else if (!tonOk || !usdtOk) {
+
       const tonUsd = await getTonPriceUsd()
       if (!(tonUsd > 0)) {
+        if (!flag) await setSwapFlag({ dir: '', txid: '', at: Date.now() })
         await revertPending()
         return jsonResponse({ completed: 0, failed: 0, reason: 'price_unavailable' })
       }
+
+      // Decide the funding swap (recomputed each attempt from live balances).
       const usdtSurplus = usdtBal - totalUsdtNeed
       const tonSurplus  = walletBalance - totalRequired
-
-      if (!tonOk) {
-        // short of TON → swap spare USDT-TON → TON
+      let dir = ''
+      let amt = 0
+      if (!tonOk && usdtSurplus > 0) {
         const needUsdt = (totalRequired - walletBalance) * tonUsd * SWAP_HEADROOM
-        if (usdtSurplus > 0 && usdtSurplus >= needUsdt) {
-          const sr = await callDexSwap('usdt_to_ton', needUsdt)
-          await revertPending()
-          if (sr?.ok && sr?.step === 'swap') {
-            await setSwapFlag({ dir: 'usdt_to_ton', txid: sr.txid, at: Date.now() })
-            await logToAdmin('info', 'TON funding swap fired', { needUsdt, txid: sr.txid })
-            return jsonResponse({ completed: 0, failed: 0, reason: 'swap_fired', swap: sr.txid })
-          }
-          return jsonResponse({ completed: 0, failed: 0, reason: 'swap_retry', detail: String(sr?.error || '') })
-        }
-      } else {
-        // short of USDT-TON → swap spare TON → USDT-TON
+        if (usdtSurplus >= needUsdt) { dir = 'usdt_to_ton'; amt = needUsdt }
+      } else if (!usdtOk && tonSurplus > 0) {
         const needTon = ((totalUsdtNeed - usdtBal) / tonUsd) * SWAP_HEADROOM + STON_SWAP_GAS
-        if (tonSurplus > 0 && tonSurplus >= needTon) {
-          const sr = await callDexSwap('ton_to_usdt', needTon)
-          await revertPending()
-          if (sr?.ok && sr?.step === 'swap') {
-            await setSwapFlag({ dir: 'ton_to_usdt', txid: sr.txid, at: Date.now() })
-            await logToAdmin('info', 'USDT-TON funding swap fired', { needTon, txid: sr.txid })
-            return jsonResponse({ completed: 0, failed: 0, reason: 'swap_fired', swap: sr.txid })
-          }
-          return jsonResponse({ completed: 0, failed: 0, reason: 'swap_retry', detail: String(sr?.error || '') })
-        }
+        if (tonSurplus >= needTon) { dir = 'ton_to_usdt'; amt = needTon }
       }
 
-      // neither asset can cover → genuine shortfall: fail + refund
-      for (const wd of [...tonWds, ...usdtWds]) {
-        await sb.rpc('fail_withdrawal', {
-          p_withdrawal_id: wd.id,
-          p_error: `Treasury short (TON ${walletBalance.toFixed(3)}/${totalRequired.toFixed(3)}, USDT ${usdtBal.toFixed(2)}/${totalUsdtNeed.toFixed(2)})`,
-        })
-        failedIds.push(wd.id)
+      if (!dir) {
+        // neither asset can cover → genuine shortfall: fail + refund
+        if (flag) await setSwapFlag(null)
+        for (const wd of [...tonWds, ...usdtWds]) {
+          await sb.rpc('fail_withdrawal', {
+            p_withdrawal_id: wd.id,
+            p_error: `Treasury short (TON ${walletBalance.toFixed(3)}/${totalRequired.toFixed(3)}, USDT ${usdtBal.toFixed(2)}/${totalUsdtNeed.toFixed(2)})`,
+          })
+          failedIds.push(wd.id)
+        }
+        await logToAdmin('error', 'TON wallet short, no swap cover',
+          { walletBalance, totalRequired, usdtBal, totalUsdtNeed })
+        return jsonResponse({ completed: 0, failed: failedIds.length, reason: 'wallet_low_balance' })
       }
-      await logToAdmin('error', 'TON wallet short, no swap cover',
-        { walletBalance, totalRequired, usdtBal, totalUsdtNeed })
-      return jsonResponse({ completed: 0, failed: failedIds.length, reason: 'wallet_low_balance' })
+
+      // Start (or keep) the 12-min clock, then attempt the swap.
+      const startedAt = flag?.at ?? Date.now()
+      const sr = await callDexSwap(dir, amt)
+      await revertPending()
+      if (sr?.ok && sr?.step === 'swap') {
+        await setSwapFlag({ dir, txid: sr.txid, at: startedAt })
+        await logToAdmin('info', 'TON funding swap fired', { dir, amt, txid: sr.txid })
+        return jsonResponse({ completed: 0, failed: 0, reason: 'swap_fired', swap: sr.txid })
+      }
+      // swap failed — keep the clock, surface WHY, retry next tick (<12min)
+      await setSwapFlag({ dir, txid: '', at: startedAt })
+      const why = String(sr?.error || sr?.detail || JSON.stringify(sr)).slice(0, 250)
+      await logToAdmin('warn', 'TON funding swap failed — will retry', { dir, amt, why })
+      return jsonResponse({ completed: 0, failed: 0, reason: 'swap_retry', detail: why })
     }
 
     // ── Build batch messages ──
