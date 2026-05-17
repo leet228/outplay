@@ -24,7 +24,7 @@
   transform: translateX(-50%) translateY(100%);
   width: 100%;
   max-width: 430px;
-  max-height: min(80vh, 640px);
+  max-height: min(84vh, 680px);
   overflow-y: auto;
   background:
     radial-gradient(circle at 18% 0%, rgba(251, 191, 36, 0.11), transparent 34%),
