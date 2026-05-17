@@ -128,8 +128,28 @@ async function credit(
   txKey: string,
   cryptoAmt: number,
   rubAmount: number,
-): Promise<'credited' | 'dup' | 'skip' | 'error'> {
-  if (!(rubAmount >= MIN_RUB) || !(cryptoAmt > 0)) return 'skip'
+): Promise<'credited' | 'dup' | 'skip' | 'error' | 'subcredit'> {
+  if (!(cryptoAmt > 0)) return 'skip'
+
+  // Sub-minimum: DON'T credit the user, but still record the tx so
+  // the sweep moves it to the treasury (funds never strand on a
+  // user address). stars=0 → no balance change; the row exists
+  // only for dedup + enqueue_sweep_jobs.
+  if (rubAmount < MIN_RUB) {
+    const { error } = await sb.from('crypto_processed_txs').insert({
+      tx_hash: txKey, chain: chainLabel,
+      crypto_amt: cryptoAmt, rub_amount: rubAmount,
+      stars: 0, user_id: userId,
+    })
+    // 23505 = unique_violation → already recorded (dedup), fine.
+    if (error && error.code !== '23505') {
+      await logToAdmin('warn', 'sub-min record failed: ' + error.message,
+        { txKey, chainLabel })
+      return 'error'
+    }
+    return 'subcredit'
+  }
+
   const stars = Math.round(rubAmount)
   for (let attempt = 0; attempt < 3; attempt++) {
     const { data, error } = await sb.rpc('process_crypto_deposit', {
