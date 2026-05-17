@@ -74,6 +74,46 @@ function evmProvider(n: 'eth' | 'bsc') {
   return new JsonRpcProvider(fr)
 }
 
+// ── EVM nonce manager ──
+// EVM accounts have a sequential `nonce` (the seqno analogue). The
+// queue is already serialized, but we still manage nonce explicitly
+// so two fast consecutive sends can't reuse the same value if the
+// node hasn't yet reflected the first in its 'pending' count.
+//
+// Per invocation, per network: lazily seed from the chain's
+// 'pending' count (the source of truth — already includes any
+// still-mempooled tx from a previous run), then hand out
+// nonce, nonce+1, … incrementing ONLY after a successful
+// broadcast. On any send error we drop the cached value so the
+// next withdrawal re-reads the chain (self-heals if a tx slipped
+// through or got dropped). One Wallet/provider per network, reused.
+class EvmNonce {
+  private wallets = new Map<'eth' | 'bsc', Wallet>()
+  private next = new Map<'eth' | 'bsc', number>()
+
+  wallet(net: 'eth' | 'bsc'): Wallet {
+    let w = this.wallets.get(net)
+    if (!w) {
+      w = new Wallet(evmTreasury().privateKey, evmProvider(net))
+      this.wallets.set(net, w)
+    }
+    return w
+  }
+  async take(net: 'eth' | 'bsc'): Promise<number> {
+    if (!this.next.has(net)) {
+      const n = await this.wallet(net).getNonce('pending')
+      this.next.set(net, n)
+    }
+    return this.next.get(net)!
+  }
+  consumed(net: 'eth' | 'bsc') {
+    this.next.set(net, (this.next.get(net) ?? 0) + 1)
+  }
+  reset(net: 'eth' | 'bsc') {
+    this.next.delete(net)
+  }
+}
+
 // ── TRON (ported from treasury-withdraw) ──
 const TRON_API  = 'https://trx.nownodes.io'
 const TRON_USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
@@ -113,22 +153,32 @@ function toCoin(chain: string, netUsd: number, pEth: number, pTrx: number): numb
 }
 
 async function sendPayout(
-  chain: string, to: string, coin: number,
+  chain: string, to: string, coin: number, nm: EvmNonce,
 ): Promise<string> {
   const amt = coin.toFixed(chain === 'eth' ? 8 : 6)
 
   if (EVM_NET[chain]) {
     if (!isEvmAddr(to)) throw new Error('bad_evm_address')
     const net = EVM_NET[chain]
-    const w = new Wallet(evmTreasury().privateKey, evmProvider(net))
-    if (chain === 'eth') {
-      const tx = await w.sendTransaction({ to, value: parseEther(amt) })
-      return tx.hash
+    const w = nm.wallet(net)
+    const nonce = await nm.take(net)
+    try {
+      let hash: string
+      if (chain === 'eth') {
+        const tx = await w.sendTransaction({ to, value: parseEther(amt), nonce })
+        hash = tx.hash
+      } else {
+        const tk = EVM_TOKEN[chain]
+        const c = new Contract(tk.addr, ERC20, w)
+        const tx = await c.transfer(to, parseUnits(amt, tk.dec), { nonce })
+        hash = tx.hash
+      }
+      nm.consumed(net)          // advance ONLY after a clean broadcast
+      return hash
+    } catch (e) {
+      nm.reset(net)             // re-read chain truth on the next one
+      throw e
     }
-    const tk = EVM_TOKEN[chain]
-    const c = new Contract(tk.addr, ERC20, w)
-    const tx = await c.transfer(to, parseUnits(amt, tk.dec))
-    return tx.hash
   }
 
   if (chain === 'trx' || chain === 'usdt-trc20') {
@@ -187,6 +237,7 @@ serve(async (req) => {
 
     const started = Date.now()
     const done: any[] = []
+    const nm = new EvmNonce()   // one manager per invocation
 
     for (let i = 0; i < MAX_PER_RUN; i++) {
       if (Date.now() - started > WALL_CLOCK_MS) break
@@ -199,7 +250,7 @@ serve(async (req) => {
         const coin = toCoin(row.chain, netUsd, pEth, pTrx)
         if (!(coin > 0)) throw new Error('zero_amount (price feed?)')
 
-        const txid = await sendPayout(row.chain, row.to_address, coin)
+        const txid = await sendPayout(row.chain, row.to_address, coin, nm)
         await sb.rpc('complete_crypto_withdrawal', {
           p_id: row.id, p_tx_hash: txid, p_coin_amount: coin,
         })
