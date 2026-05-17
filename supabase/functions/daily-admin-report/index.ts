@@ -122,7 +122,7 @@ serve(async (_req) => {
   try {
     const [
       ton, ut, ethN, bnbN, eUsdt, eUsdc, bUsdt, bUsdc, trx, tUsdt, btc, ltc,
-      pTon, pEth, pBnb, pTrx, pBtc, pLtc, rate, sweep, statsRes,
+      pTon, pEth, pBnb, pTrx, pBtc, pLtc, _rate, sweep, rbLast, rbLive,
     ] = await Promise.all([
       safe(tonBal(), 0), safe(usdtTonBal(), 0),
       safe(evmNative('eth'), 0), safe(evmNative('bsc'), 0),
@@ -135,7 +135,8 @@ serve(async (_req) => {
       safe(px(2713), 0), safe(px(90), 0), safe(px(1), 0),
       safe(usdRub(), 90),
       safe(sb.rpc('admin_sweep_overview').then(r => r.data), null),
-      safe(sb.rpc('get_admin_stats').then(r => r.data), null),
+      safe(sb.from('app_settings').select('value').eq('key', 'rebalance_last').maybeSingle().then(r => r.data?.value), null),
+      safe(sb.from('app_settings').select('value').eq('key', 'rebalance_live').maybeSingle().then(r => r.data?.value), null),
     ])
 
     const tonU = ton * pTon, ethU = ethN * pEth, bnbU = bnbN * pBnb
@@ -145,14 +146,29 @@ serve(async (_req) => {
     const $ = (n: number) => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 2 })
     const c = (n: number, d = 6) => n.toLocaleString('en-US', { maximumFractionDigits: d })
 
-    const userRub = Number(statsRes?.total_user_balances ?? 0)
-    const userU = rate > 0 ? userRub / rate : 0
-    const tgt = 0.30 * userU
-    const reco = (sym: string, valU: number, price: number, stable: number) => {
-      const d = valU - tgt, tol = Math.max(1, tgt * 0.03)
-      if (d > tol) return `${sym}: ${$(valU)} → свапнуть ${$(d)} (~${c(price > 0 ? d / price : 0)} ${sym}) в стейбл`
-      if (d < -tol) return `${sym}: ${$(valU)} → докупить ${$(-tol > d ? -d : 0)}${stable < -d ? ' ⚠ мало стейбла' : ''}`
-      return `${sym}: ${$(valU)} ✓ в норме`
+    // Rebalance: render exactly what the 03:00 run did (or didn't).
+    const liveOn = rbLive === true || rbLive === 'true' ||
+      (typeof rbLive === 'object' && rbLive?.on === true)
+    let rbBlock: string
+    if (!rbLast || typeof rbLast !== 'object') {
+      rbBlock = `режим: ${liveOn ? '🔴 БОЕВОЙ' : '🟡 DRY-RUN'}\nещё не запускался (нет данных за ночь)`
+    } else {
+      const rt = new Date((rbLast.ts || Date.now()) + 3 * 3600_000)
+      const rts = `${String(rt.getUTCDate()).padStart(2, '0')}.${String(rt.getUTCMonth() + 1).padStart(2, '0')} ${String(rt.getUTCHours()).padStart(2, '0')}:${String(rt.getUTCMinutes()).padStart(2, '0')}`
+      const acted = (rbLast.plan || []).filter((p: any) => p.action !== 'hold')
+      const rows = (rbLast.plan || []).map((p: any) => {
+        const r = (rbLast.results || []).find((x: any) => x.chain === p.chain)
+        const tag = p.action === 'sell' ? '🔻' : p.action === 'buy' ? '🔺' : '✓'
+        return `${tag} ${p.nativeSym} ${Math.round((p.curPct || 0) * 100)}%→${Math.round((p.targetPct || 0) * 100)}% · ${p.note}${r ? `\n   ↳ ${r.text}` : ''}`
+      }).join('\n') || '  —'
+      const stray = (rbLast.strayBnbUsdt || 0) > 1
+        ? `\n⚠ BNB: лежит ${$(rbLast.strayBnbUsdt)} USDT — выводы только USDC, перекинь вручную`
+        : ''
+      rbBlock =
+`прогон ${rts} МСК · <b>${rbLast.mode || (liveOn ? 'LIVE' : 'DRY-RUN')}</b>${liveOn ? '' : ' (свапы выключены)'}
+обязательства ${$(rbLast.L || 0)} · казна ${$(rbLast.swapTotal || 0)} · цель монет ${(((rbLast.f) || 0) * 100).toFixed(1)}%
+свапов: ${acted.length} из 4 сетей
+${rows}${stray}`
     }
 
     const sc = sweep?.counts || {}
@@ -187,12 +203,8 @@ USDT-TRC20: ${$(tUsdt)}
 по сетям:
 ${byChain}
 
-⚖️ <b>Ребаланс</b>
-Баланс юзеров ≈ ${$(userU)} · цель 30%/монета = <b>${$(tgt)}</b>
-${reco('TON', tonU, pTon, ut)}
-${reco('ETH', ethU, pEth, eUsdt + eUsdc)}
-${reco('BNB', bnbU, pBnb, bUsdt + bUsdc)}
-${reco('TRX', trxU, pTrx, tUsdt)}`
+⚖️ <b>Ребаланс</b> (ночной, 03:00)
+${rbBlock}`
 
     const r = await fetch(`${TG}/sendMessage`, {
       method: 'POST',
