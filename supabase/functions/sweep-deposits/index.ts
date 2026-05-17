@@ -167,10 +167,9 @@ const TRON_API   = 'https://api.trongrid.io'
 const TRON_KEY   = Deno.env.get('TRONGRID_API_KEY') || ''
 const TRON_USDT  = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'   // base58
 const SUN        = 1_000_000n
-// USDT transfer with no staked energy burns TRX; top the user
-// address up generously and cap the on-chain fee.
-const TRC20_TOPUP_SUN  = 40n * SUN     // sent to the user addr
-const TRC20_MIN_SUN    = 30n * SUN     // sweep only if addr ≥ this
+// Energy-delegation model: USDT moves on delegated (staked)
+// energy ≈ free. fee_limit is just a hard safety cap; the
+// bandwidth float keeps a little TRX on the user address.
 const TRC20_FEE_LIMIT  = 50_000_000    // 50 TRX hard cap (sun)
 const TRX_BW_RESERVE   = 1_200_000n    // ~1.2 TRX kept for bandwidth
 
@@ -267,6 +266,58 @@ async function tronSendUsdt(fromPriv: string, fromB58: string, toB58: string, am
   return tx.txID
 }
 
+// Account/network energy view.
+async function tronResource(b58: string): Promise<{ avail: number; energyLimit: number; ePerTrx: number }> {
+  const r = await tronRpc('/wallet/getaccountresource', { address: b58, visible: true })
+  const energyLimit = Number(r?.EnergyLimit ?? 0)
+  const energyUsed = Number(r?.EnergyUsed ?? 0)
+  const totalE = Number(r?.TotalEnergyLimit ?? 0)
+  const totalW = Number(r?.TotalEnergyWeight ?? 0)
+  return {
+    avail: Math.max(0, energyLimit - energyUsed),
+    energyLimit,
+    ePerTrx: totalW > 0 ? totalE / totalW : 0,
+  }
+}
+
+// Estimate the energy a USDT transfer (user→to) will consume.
+async function tronEstimateUsdtEnergy(fromB58: string, toB58: string, amount: bigint): Promise<number> {
+  try {
+    const toParam = '0'.repeat(24) +
+      Array.from(tronB58ToBytes21(toB58).slice(1))
+        .map(x => x.toString(16).padStart(2, '0')).join('')
+    const r = await tronRpc('/wallet/triggerconstantcontract', {
+      owner_address: fromB58, contract_address: TRON_USDT,
+      function_selector: 'transfer(address,uint256)',
+      parameter: toParam + amount.toString(16).padStart(64, '0'),
+      visible: true,
+    })
+    const e = Number(r?.energy_used ?? 0)
+    return e > 0 ? Math.ceil(e * 1.3) : 150_000   // 30% headroom
+  } catch { return 150_000 }
+}
+
+async function tronDelegateEnergy(ownerPriv: string, ownerB58: string, toB58: string, balanceSun: bigint): Promise<string> {
+  const built = await tronRpc('/wallet/delegateresource', {
+    owner_address: ownerB58, receiver_address: toB58,
+    balance: Number(balanceSun), resource: 'ENERGY', lock: false, visible: true,
+  })
+  if (!built?.txID) throw new Error('delegateresource failed: ' + JSON.stringify(built).slice(0, 200))
+  const res = await tronRpc('/wallet/broadcasttransaction', signTron(built, ownerPriv))
+  if (res?.result !== true && !res?.txid) throw new Error('broadcast delegate: ' + JSON.stringify(res).slice(0, 200))
+  return built.txID
+}
+
+async function tronUndelegateEnergy(ownerPriv: string, ownerB58: string, toB58: string, balanceSun: bigint): Promise<void> {
+  try {
+    const built = await tronRpc('/wallet/undelegateresource', {
+      owner_address: ownerB58, receiver_address: toB58,
+      balance: Number(balanceSun), resource: 'ENERGY', visible: true,
+    })
+    if (built?.txID) await tronRpc('/wallet/broadcasttransaction', signTron(built, ownerPriv))
+  } catch { /* best-effort; energy reclaimable manually */ }
+}
+
 async function processTronJob(job: any) {
   const treasuryB58 = tronAddrFromPriv(tronPriv(0))
   const userPriv = tronPriv(job.derivation_index)
@@ -293,29 +344,59 @@ async function processTronJob(job: any) {
     return
   }
 
-  // usdt-trc20
+  // ── usdt-trc20 — energy-delegation model (≈0 TRX burned) ──
+  const treasuryPriv = tronPriv(0)
   const usdt = await tronUsdtBalance(userB58)
+
+  // Drained → finish + reclaim any delegated energy.
   if (usdt <= 0n) {
+    const m = /^delegated:(\d+)/.exec(job.last_error || '')
+    if (m) await tronUndelegateEnergy(treasuryPriv, treasuryB58, userB58, BigInt(m[1]))
     await setJob(job.id, 'swept', null, job.sweep_txid ?? null, 'empty')
     return
   }
-  const trx = await tronTrxBalanceSun(userB58)
-  if (trx < TRC20_MIN_SUN) {
-    // Gas top-up from treasury.
-    const treasuryPriv = tronPriv(0)
-    const tBal = await tronTrxBalanceSun(treasuryB58)
-    if (tBal < TRC20_TOPUP_SUN + TRX_BW_RESERVE) {
-      await setJob(job.id, 'needs_gas', null, null, 'treasury_low:trx')
-      await logAdmin('warn', 'treasury TRX low', { need: String(TRC20_TOPUP_SUN) })
-      return
-    }
-    const gtxid = await tronSendTrx(treasuryPriv, treasuryB58, userB58, TRC20_TOPUP_SUN)
-    await setJob(job.id, 'gassing', gtxid, null, null)
+
+  const needEnergy = await tronEstimateUsdtEnergy(userB58, treasuryB58, usdt)
+  const tRes = await tronResource(treasuryB58)
+  if (tRes.ePerTrx <= 0) {
+    await setJob(job.id, 'needs_gas', null, null, 'trongrid_ratio')
     return
   }
-  // Enough TRX → move the whole USDT balance to treasury.
+  if (tRes.avail < needEnergy) {
+    await setJob(job.id, 'needs_gas', null, null, `treasury_energy_low:${needEnergy}`)
+    await logAdmin('warn', 'treasury energy low — run scripts/tron-stake.js',
+      { need: needEnergy, avail: tRes.avail })
+    return
+  }
+  const balSun = BigInt(Math.max(1, Math.ceil(needEnergy / tRes.ePerTrx))) * SUN
+
+  // 1) Bandwidth float: a TRC20 send needs ~345 bandwidth; a never-
+  //    used deposit addr may have none. Keep ~1 TRX there (returned
+  //    later by the native-trx sweep).
+  const userTrx = await tronTrxBalanceSun(userB58)
+  if (userTrx < SUN) {
+    const tBal = await tronTrxBalanceSun(treasuryB58)
+    if (tBal < 4n * SUN) {
+      await setJob(job.id, 'needs_gas', null, null, 'treasury_low:trx_bw')
+      await logAdmin('warn', 'treasury TRX low (bandwidth float)', {})
+      return
+    }
+    const g = await tronSendTrx(treasuryPriv, treasuryB58, userB58, 2n * SUN)
+    await setJob(job.id, 'gassing', g, null, 'bw_float')
+    return
+  }
+
+  // 2) Delegate energy from treasury → user (if not already there).
+  const uRes = await tronResource(userB58)
+  if (uRes.energyLimit < needEnergy) {
+    const dtx = await tronDelegateEnergy(treasuryPriv, treasuryB58, userB58, balSun)
+    await setJob(job.id, 'gassing', dtx, null, `delegated:${balSun}`)
+    return
+  }
+
+  // 3) Have bandwidth + delegated energy → move all USDT to treasury.
   const stxid = await tronSendUsdt(userPriv, userB58, treasuryB58, usdt)
-  await setJob(job.id, 'sweeping', job.gas_txid ?? null, stxid, null)
+  await setJob(job.id, 'sweeping', job.gas_txid ?? null, stxid, `delegated:${balSun}`)
 }
 
 serve(async (_req) => {
