@@ -228,6 +228,23 @@ const cors = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } })
 
+// ── Global treasury lock (shared HD-0; not TON/highload) ──
+// Serializes EVM/TRON sends across dex-swap, the withdrawal
+// processor and treasury-withdraw so nonce never races.
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+async function acquireLock(channel: string, holder: string, ttl = 120, waitMs = 90_000): Promise<string | null> {
+  const deadline = Date.now() + waitMs
+  for (;;) {
+    const { data } = await sb.rpc('acquire_treasury_lock', { p_channel: channel, p_holder: holder, p_ttl: ttl })
+    if (data?.ok) return data.token as string
+    if (Date.now() > deadline) return null
+    await sleep(2_000)
+  }
+}
+async function releaseLock(channel: string, token: string) {
+  try { await sb.rpc('release_treasury_lock', { p_channel: channel, p_token: token }) } catch { /* noop */ }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   try {
@@ -255,6 +272,9 @@ serve(async (req) => {
     // via getAmountsOut on the same router; no external API.
     if (TRX_DIRS.includes(dir)) {
       if (!HD_MASTER_MNEMONIC) return json({ error: 'no_hd_master' }, 500)
+      const lock = await acquireLock('tron', 'dex-swap')
+      if (!lock) return json({ error: 'treasury_busy' }, 503)
+      try {
       const priv = tronPriv0()
       const owner = tronAddr(priv)
       const o20 = tron20(owner)
@@ -326,6 +346,7 @@ serve(async (req) => {
         expected_out: outUnits.toString(), min_out: minOut.toString(),
         out_dec: 6, out_sym: isTrxIn ? 'USDT' : 'TRX',
       })
+      } finally { await releaseLock('tron', lock) }
     }
 
     // ── EVM / Uniswap-V2-fork (ETH→Uniswap, BNB→PancakeSwap) ──
@@ -334,6 +355,10 @@ serve(async (req) => {
       if (!HD_MASTER_MNEMONIC) return json({ error: 'no_hd_master' }, 500)
       const chain = dir.includes('bnb') ? 'bnb' : 'eth'
       const cfg = EVM_CHAIN[chain]
+      const lockCh = chain === 'bnb' ? 'bsc' : 'eth'
+      const lock = await acquireLock(lockCh, 'dex-swap')
+      if (!lock) return json({ error: 'treasury_busy' }, 503)
+      try {
       const w = evmTreasuryWallet(cfg.rpc)
       const me = await w.getAddress()
       const isNativeIn = dir.startsWith(`${chain}_to_`)
@@ -390,6 +415,7 @@ serve(async (req) => {
         out_dec: isNativeIn ? cfg.tokDec : 18,
         out_sym: isNativeIn ? tokSym : cfg.native,
       })
+      } finally { await releaseLock(lockCh, lock) }
     }
 
     // ── TON / STON.fi (Highload wallet) ──

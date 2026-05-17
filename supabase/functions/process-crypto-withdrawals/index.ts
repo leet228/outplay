@@ -36,6 +36,24 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } })
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 const safe = async <T>(p: Promise<T>, d: T): Promise<T> => { try { return await p } catch { return d } }
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// ── Global treasury lock (shared HD-0; serializes vs dex-swap /
+// treasury-withdraw so EVM nonce / TRON never race). ──
+async function acquireLock(channel: string, holder: string, ttl = 120, waitMs = 40_000): Promise<string | null> {
+  const deadline = Date.now() + waitMs
+  for (;;) {
+    const { data } = await sb.rpc('acquire_treasury_lock', { p_channel: channel, p_holder: holder, p_ttl: ttl })
+    if (data?.ok) return data.token as string
+    if (Date.now() > deadline) return null
+    await sleep(2_000)
+  }
+}
+async function releaseLock(channel: string, token: string) {
+  try { await sb.rpc('release_treasury_lock', { p_channel: channel, p_token: token }) } catch { /* noop */ }
+}
+const lockChannel = (chain: string) =>
+  EVM_NET[chain] ? (EVM_NET[chain] === 'bsc' ? 'bsc' : 'eth') : 'tron'
 
 const WALL_CLOCK_MS = 50_000
 const MAX_PER_RUN   = 6
@@ -245,12 +263,29 @@ serve(async (req) => {
       const row = Array.isArray(rows) ? rows[0] : rows
       if (!row?.id) break
 
+      // Take the shared treasury lock for this chain. If it's busy
+      // (dex-swap / treasury-withdraw mid-tx), put the row back to
+      // pending and stop — next cron tick retries cleanly.
+      const ch = lockChannel(row.chain)
+      const lock = await acquireLock(ch, 'crypto-withdraw')
+      if (!lock) {
+        await sb.from('crypto_withdrawals')
+          .update({ status: 'pending' })
+          .eq('id', row.id).eq('status', 'processing')
+        break
+      }
+
       try {
         const netUsd = rate > 0 ? Number(row.net_rub) / rate : 0
         const coin = toCoin(row.chain, netUsd, pEth, pTrx)
         if (!(coin > 0)) throw new Error('zero_amount (price feed?)')
 
-        const txid = await sendPayout(row.chain, row.to_address, coin, nm)
+        let txid = ''
+        try {
+          txid = await sendPayout(row.chain, row.to_address, coin, nm)
+        } finally {
+          await releaseLock(ch, lock)
+        }
         await sb.rpc('complete_crypto_withdrawal', {
           p_id: row.id, p_tx_hash: txid, p_coin_amount: coin,
         })

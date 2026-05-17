@@ -39,6 +39,23 @@ const json = (b: unknown, s = 200) =>
 let sbc: ReturnType<typeof createClient>
 const sb = () => (sbc ??= createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY))
 
+// ── Global treasury lock (shared HD-0; serializes vs dex-swap /
+// process-crypto-withdrawals so EVM nonce / TRON / UTXO never
+// race). TON is not covered (separate Highload wallet). ──
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+async function acquireLock(channel: string, holder: string, ttl = 120, waitMs = 90_000): Promise<string | null> {
+  const deadline = Date.now() + waitMs
+  for (;;) {
+    const { data } = await sb().rpc('acquire_treasury_lock', { p_channel: channel, p_holder: holder, p_ttl: ttl })
+    if ((data as any)?.ok) return (data as any).token as string
+    if (Date.now() > deadline) return null
+    await sleep(2_000)
+  }
+}
+async function releaseLock(channel: string, token: string) {
+  try { await sb().rpc('release_treasury_lock', { p_channel: channel, p_token: token }) } catch { /* noop */ }
+}
+
 // ── EVM ──
 const EVM_NET: Record<string, 'eth' | 'bsc'> = {
   eth: 'eth', 'usdt-erc20': 'eth', 'usdc-erc20': 'eth',
@@ -118,6 +135,15 @@ serve(async (req) => {
     const amt = String(amount)
     let txid = ''
 
+    const lockCh = EVM_NET[chain] ? EVM_NET[chain]
+      : (chain === 'trx' || chain === 'usdt-trc20') ? 'tron'
+      : (chain === 'btc' || chain === 'ltc') ? chain
+      : null
+    if (!lockCh) return json({ error: 'unknown_chain' }, 400)
+    const lock = await acquireLock(lockCh, 'treasury-withdraw')
+    if (!lock) return json({ error: 'treasury_busy' }, 503)
+
+    try {
     // ── EVM ──
     if (EVM_NET[chain]) {
       const net = EVM_NET[chain]
@@ -201,6 +227,7 @@ serve(async (req) => {
       p_message: 'withdraw', p_details: { chain, to, amount: amt, txid },
     })
     return json({ ok: true, txid })
+    } finally { await releaseLock(lockCh as string, lock as string) }
   } catch (e) {
     try {
       await sb().rpc('admin_log', {
