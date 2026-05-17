@@ -301,10 +301,12 @@ serve(async (req) => {
         }
       }
 
-      const SEL = 'swapExactInput(address[],string[],uint24[],uint256[],(uint256,uint256,address,uint256))'
+      // Order per sun-protocol/SmartExchangeRouter:
+      //   path, poolVersion, versionLen, fees, SwapData
+      const SEL = 'swapExactInput(address[],string[],uint256[],uint24[],(uint256,uint256,address,uint256))'
       const param = abi.encode(
-        ['address[]', 'string[]', 'uint24[]', 'uint256[]', 'tuple(uint256,uint256,address,uint256)'],
-        [path20, poolVersion, fees, versionLen, [inUnits, minOut, o20, BigInt(deadline)]],
+        ['address[]', 'string[]', 'uint256[]', 'uint24[]', 'tuple(uint256,uint256,address,uint256)'],
+        [path20, poolVersion, versionLen, fees, [inUnits, minOut, o20, BigInt(deadline)]],
       ).slice(2)
       const txid = await tronCall(
         priv, owner, SUN_ROUTER, SEL, param, isTrxIn ? Number(inUnits) : 0,
@@ -318,6 +320,7 @@ serve(async (req) => {
           exp: outUnits.toString(), min: minOut.toString(),
           poolVersion, route_tokens: route.tokens,
           route_raw: JSON.stringify(route).slice(0, 600),
+          router: SUN_ROUTER,
         },
       })
       return json({
