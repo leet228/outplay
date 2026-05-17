@@ -1,6 +1,8 @@
 -- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -- !!! TODO RUN ON PROD — multi-chain deposit indexer cron.   !!!
--- !!! Invokes check-multichain-deposits every 60s. Mirrors   !!!
+-- !!! Invokes check-multichain-deposits every minute         !!!
+-- !!! ('* * * * *' — pg_cron rejects '60 seconds'; the       !!!
+-- !!! seconds-interval form only accepts 1..59). Mirrors     !!!
 -- !!! migration_check_crypto_deposits_cron.sql (same Vault    !!!
 -- !!! secrets project_url + anon_key, pg_cron + pg_net).      !!!
 -- !!! Deploy the Edge Function FIRST:                          !!!
@@ -18,7 +20,7 @@ END $$;
 
 SELECT cron.schedule(
   'check-multichain-deposits',
-  '60 seconds',
+  '* * * * *',
   $$
   SELECT net.http_post(
     url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'project_url')
