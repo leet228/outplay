@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getAdminStats, adminSearchUser, getBotStarsBalance } from '../lib/supabase'
+import { getAdminStats, adminSearchUser, getBotStarsBalance, getTreasuryBalances } from '../lib/supabase'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { fetchChainBalances } from '../lib/chainBalances'
 
 // ── Blockchain fetchers (same as wallet, but lightweight here) ──
 async function fetchTonBalance(addr) {
@@ -123,7 +122,7 @@ export default function AdminDashboard() {
           fetchUsdtBalance(TON_ADDRESS),
           fetchUsdRubRate(),
           getBotStarsBalance(),
-          fetchChainBalances(),
+          getTreasuryBalances(),
         ])
         if (cancelled) return
         setStats(statsData)

@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview, getAdminStats, dexSwap } from '../lib/supabase'
-import { fetchChainBalances } from '../lib/chainBalances'
+import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview, getAdminStats, dexSwap, getTreasuryBalances } from '../lib/supabase'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
 import smallUsdtSrc from '../assets/crypto/small_usdt.svg'
@@ -188,7 +187,7 @@ export default function AdminWallet() {
         fetchTonBalance(TON_ADDRESS),
         fetchUsdtBalance(TON_ADDRESS),
         fetchPrices(),
-        fetchChainBalances(),
+        getTreasuryBalances(),
       ])
       setPrices(priceData)
       setTonBalance(tonBal)

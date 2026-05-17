@@ -512,6 +512,14 @@ export async function dexSwap(userId, dir, amount, slippage) {
   return data
 }
 
+// ── Admin: cached multi-chain treasury balances (server/NowNodes) ──
+// Same shape as the old client chainBalances: { assets, totalUsd, ok }.
+export async function getTreasuryBalances() {
+  const { data, error } = await supabase.functions.invoke('treasury-balances')
+  if (error) { console.error('getTreasuryBalances error:', error); return null }
+  return data
+}
+
 // ── Admin: sweep monitoring overview ──
 export async function adminSweepOverview() {
   const { data, error } = await supabase.rpc('admin_sweep_overview')
