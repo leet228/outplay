@@ -153,8 +153,10 @@ export default function AdminWallet() {
   const [wcAmt, setWcAmt] = useState('')
   const [wcBusy, setWcBusy] = useState(false)
   const [wcMsg, setWcMsg] = useState('')
-  // Sweep monitoring overview.
+  // Sweep monitoring overview. sweepErr → RPC missing/failed
+  // (e.g. migration not run yet) so we stop the infinite spinner.
   const [sweepOv, setSweepOv] = useState(null)
+  const [sweepErr, setSweepErr] = useState(false)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -206,7 +208,8 @@ export default function AdminWallet() {
 
   const loadSweep = useCallback(async () => {
     const r = await adminSweepOverview()
-    if (r) setSweepOv(r)
+    if (r) { setSweepOv(r); setSweepErr(false) }
+    else setSweepErr(true)
   }, [])
   useEffect(() => {
     loadSweep()
@@ -865,7 +868,15 @@ export default function AdminWallet() {
       {/* ── Sweep monitoring ── */}
       <div className="admin-tron-stake">
         <div className="admin-wallet-section-title">Свип · мониторинг</div>
-        {!sweepOv && <div className="admin-tron-row"><span>Загрузка…</span></div>}
+        {!sweepOv && !sweepErr && (
+          <div className="admin-tron-row"><span>Загрузка…</span></div>
+        )}
+        {!sweepOv && sweepErr && (
+          <div className="admin-sweep-health is-warn">
+            Нет данных. Прогони на проде <b>migration_sweep_monitor.sql</b>
+            {' '}(RPC admin_sweep_overview), и зайди под админ-аккаунтом.
+          </div>
+        )}
         {sweepOv && (() => {
           const c = sweepOv.counts || {}
           const active = (c.pending || 0) + (c.needs_gas || 0) +
