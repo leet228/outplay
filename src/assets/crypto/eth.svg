@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_1" data-name="Слой_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1000 1000">
+  <!-- Generator: Adobe Illustrator 30.2.0, SVG Export Plug-In . SVG Version: 2.1.1 Build 105)  -->
+  <defs>
+    <style>
+      .st0 {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 5px;
+      }
+
+      .st0, .st1 {
+        fill: #fff;
+      }
+
+      .st0, .st2, .st3, .st4 {
+        stroke: #000;
+      }
+
+      .st2 {
+        stroke-width: 10px;
+      }
+
+      .st2, .st4 {
+        fill: #526bdf;
+        stroke-miterlimit: 4;
+      }
+
+      .st3 {
+        fill: #373c66;
+        stroke-width: 10px;
+      }
+
+      .st4 {
+        stroke-width: 7px;
+      }
+    </style>
+  </defs>
+  <g>
+    <circle id="svg_4" class="st1" cx="500" cy="500" r="250"/>
+    <circle id="svg_5" class="st3" cx="500" cy="500" r="200"/>
+    <ellipse id="svg_6" class="st2" cx="488.01" cy="493.41" rx="190" ry="179.69" transform="translate(-165.42 727.17) rotate(-65)"/>
+    <ellipse id="svg_7" class="st4" cx="487.77" cy="495.42" rx="159.35" ry="149.84" transform="translate(-167.38 728.11) rotate(-65)"/>
+  </g>
+  <g id="Ethereum_x2C__crypto_x2C__cryptocurrency">
+    <g>
+      <polygon class="st0" points="510.43 381.54 418.49 488.56 478.67 544.93 555.5 514.76 510.43 381.54"/>
+      <line class="st0" x1="464.38" y1="618.46" x2="474.54" y2="566.18"/>
+      <polygon class="st0" points="464.38 618.46 414.37 509.8 474.54 566.18 551.37 536 464.38 618.46"/>
+      <polygon class="st0" points="493.28 469.77 418.49 488.56 478.67 544.93 555.5 514.76 493.28 469.77"/>
+      <line class="st0" x1="510.43" y1="381.54" x2="478.67" y2="544.93"/>
+      <polygon class="st0" points="510.43 381.54 418.49 488.56 478.67 544.93 555.5 514.76 510.43 381.54"/>
+    </g>
+  </g>
+  <line class="st0" x1="510.43" y1="381.54" x2="478.67" y2="544.93"/>
+</svg>

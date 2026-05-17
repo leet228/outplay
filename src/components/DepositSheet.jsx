@@ -18,7 +18,36 @@ import usdtIconSrc    from '../assets/crypto/usdt.svg'
 import smallTonSrc    from '../assets/crypto/small_ton.svg'
 import smallUsdtSrc   from '../assets/crypto/small_usdt.svg'
 import tonBadgeSrc    from '../assets/crypto/small_ton_for_usdt.svg'
+// Extra crypto icons — visual cards only for now; the per-chain
+// deposit backend isn't wired yet so tapping one shows a soft
+// "coming soon" screen (see the `soon` view below).
+import btcIconSrc     from '../assets/crypto/btc.svg'
+import ethIconSrc     from '../assets/crypto/eth.svg'
+import bnbIconSrc     from '../assets/crypto/bnb.svg'
+import trxIconSrc     from '../assets/crypto/trx.svg'
+import ltcIconSrc     from '../assets/crypto/litecoin.svg'
+import usdcIconSrc    from '../assets/crypto/usdc.svg'
+import trxBadgeSrc    from '../assets/crypto/small_trx_for_usdt.svg'
+import bnbBadgeSrc    from '../assets/crypto/small_bnb_for_usdt.svg'
+import ethBadgeSrc    from '../assets/crypto/small_eth_for_usdt.svg'
 import './DepositSheet.css'
+
+// Extra crypto cards shown after TON / USDT(TON). Order mirrors
+// the reference wallet screenshot. `badge` is the network chip
+// pinned to the card's top-right corner (stablecoins on a chain);
+// plain coins have none. `art` is the big bottom-right disc.
+const SOON_COINS = [
+  { id: 'usdt-trc20', name: 'USDT', net: 'Tron · TRC20',            art: usdtIconSrc, badge: trxBadgeSrc },
+  { id: 'usdt-bep20', name: 'USDT', net: 'BNB Smart Chain · BEP20', art: usdtIconSrc, badge: bnbBadgeSrc },
+  { id: 'trx',        name: 'TRX',  net: 'Tron',                     art: trxIconSrc,  badge: null },
+  { id: 'eth',        name: 'ETH',  net: 'Ethereum',                 art: ethIconSrc,  badge: null },
+  { id: 'btc',        name: 'BTC',  net: 'Bitcoin',                  art: btcIconSrc,  badge: null },
+  { id: 'usdt-erc20', name: 'USDT', net: 'Ethereum · ERC20',         art: usdtIconSrc, badge: ethBadgeSrc },
+  { id: 'usdc-erc20', name: 'USDC', net: 'Ethereum · ERC20',         art: usdcIconSrc, badge: ethBadgeSrc },
+  { id: 'bnb',        name: 'BNB',  net: 'BNB Smart Chain',          art: bnbIconSrc,  badge: null },
+  { id: 'ltc',        name: 'LTC',  net: 'Litecoin',                 art: ltcIconSrc,  badge: null },
+  { id: 'usdc-bep20', name: 'USDC', net: 'BNB Smart Chain · BEP20',  art: usdcIconSrc, badge: bnbBadgeSrc },
+]
 
 const PRESETS = [100, 500, 1000]
 const MIN_STARS = 100
@@ -145,6 +174,8 @@ export default function DepositSheet() {
   const cryptoEnabled = appSettings.crypto_deposits !== false
 
   const [view, setView] = useState('main')
+  // Which extra-crypto card opened the "coming soon" screen.
+  const [soonCoin, setSoonCoin] = useState(null)
   const [selected, setSelected] = useState(100)
   const [custom, setCustom] = useState('')
   const [loading, setLoading] = useState(false)
@@ -249,6 +280,7 @@ export default function DepositSheet() {
     if (!depositOpen) {
       setTimeout(() => {
         setView('main')
+        setSoonCoin(null)
         setCustom('')
         setSelected(100)
         setLoading(false)
@@ -981,6 +1013,37 @@ export default function DepositSheet() {
                       draggable="false"
                     />
                   </button>
+
+                  {/* Extra chains — same card layout as TON/USDT.
+                    * Backend per chain isn't wired yet, so a tap
+                    * routes to the "coming soon" screen. */}
+                  {SOON_COINS.map(coin => (
+                    <button
+                      key={coin.id}
+                      type="button"
+                      className="deposit-coin-card deposit-coin-card--usdt"
+                      onClick={() => { haptic('medium'); setSoonCoin(coin); setView('soon') }}
+                    >
+                      {coin.badge && (
+                        <img
+                          className="deposit-coin-card-net-badge"
+                          src={coin.badge}
+                          alt=""
+                          draggable="false"
+                        />
+                      )}
+                      <div className="deposit-coin-card-text">
+                        <span className="deposit-coin-card-name">{coin.name}</span>
+                        <span className="deposit-coin-card-sub">{coin.net}</span>
+                      </div>
+                      <img
+                        className="deposit-coin-card-art"
+                        src={coin.art}
+                        alt=""
+                        draggable="false"
+                      />
+                    </button>
+                  ))}
                 </div>
               </>
             )}
@@ -1339,6 +1402,52 @@ export default function DepositSheet() {
               <span>
                 {isTonWalletConnected ? t.depositTonTopUpViaWallet : t.depositTonConnect}
               </span>
+            </button>
+          </div>
+        )}
+
+        {/* ── Coming soon (extra chains) ──
+          * Same hero layout as the TON/USDT detail screens, but
+          * no address/QR — the per-chain deposit backend isn't
+          * wired yet. Back arrow (header) returns to the grid. */}
+        {status === 'idle' && view === 'soon' && soonCoin && (
+          <div className="deposit-crypto-detail">
+            <div className="deposit-crypto-hero">
+              <div className="deposit-crypto-hero-icon">
+                <img
+                  src={soonCoin.art}
+                  width={56}
+                  height={56}
+                  alt=""
+                  draggable="false"
+                />
+              </div>
+              <div className="deposit-crypto-hero-text">
+                <span className="deposit-crypto-hero-name">{soonCoin.name}</span>
+                <span className="deposit-crypto-hero-net">{soonCoin.net}</span>
+              </div>
+            </div>
+
+            <div className="deposit-soon-card">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              <span className="deposit-soon-title">
+                {lang === 'ru' ? 'Скоро' : 'Coming soon'}
+              </span>
+              <span className="deposit-soon-text">
+                {lang === 'ru'
+                  ? 'Пополнение по этой сети скоро будет доступно. Пока используйте TON или USDT (TON).'
+                  : 'Deposits on this network are coming soon. For now use TON or USDT (TON).'}
+              </span>
+            </div>
+
+            <button
+              className="deposit-tonconnect-btn"
+              onClick={() => { haptic('light'); goBack() }}
+            >
+              <span>{lang === 'ru' ? 'Назад к выбору' : 'Back to coins'}</span>
             </button>
           </div>
         )}

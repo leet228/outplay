@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_1" data-name="Слой_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 520 520">
+  <!-- Generator: Adobe Illustrator 30.2.0, SVG Export Plug-In . SVG Version: 2.1.1 Build 105)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #f1f6ff;
+      }
+
+      .st1 {
+        fill: #b4b9d9;
+      }
+
+      .st2 {
+        fill: #627cea;
+      }
+
+      .st3 {
+        fill: #fcfafd;
+      }
+
+      .st4 {
+        fill: #b4bce0;
+      }
+
+      .st5 {
+        fill: #e4eaf4;
+      }
+
+      .st6 {
+        fill: #ecf4ff;
+      }
+    </style>
+  </defs>
+  <circle id="svg_7" class="st2" cx="260" cy="260" r="250"/>
+  <g>
+    <polygon class="st5" points="259.96 45.95 257.09 55.7 257.09 338.78 259.96 341.64 391.36 263.97 259.96 45.95"/>
+    <polygon class="st1" points="259.96 45.95 128.56 263.97 259.96 341.65 259.96 204.24 259.96 45.95"/>
+    <polygon class="st6" points="259.96 366.53 258.34 368.49 258.34 469.34 259.96 474.05 391.44 288.89 259.96 366.53"/>
+    <polygon class="st4" points="259.96 474.05 259.96 366.52 128.56 288.89 259.96 474.05"/>
+    <polygon class="st0" points="259.96 341.64 391.36 263.97 259.96 204.24 259.96 341.64"/>
+    <polygon class="st3" points="128.56 263.97 259.96 341.64 259.96 204.24 128.56 263.97"/>
+  </g>
+</svg>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_Слой_1" data-name="Слой_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 1000 1000">
+  <!-- Generator: Adobe Illustrator 30.2.0, SVG Export Plug-In . SVG Version: 2.1.1 Build 105)  -->
+  <defs>
+    <style>
+      .st0 {
+        stroke-width: 10px;
+      }
+
+      .st0, .st1, .st2, .st3 {
+        stroke: #000;
+      }
+
+      .st0, .st3 {
+        fill: #c43127;
+        stroke-miterlimit: 4;
+      }
+
+      .st4, .st2 {
+        fill: #fff;
+      }
+
+      .st1 {
+        fill: #4a1c0d;
+        stroke-width: 10px;
+      }
+
+      .st2 {
+        stroke-miterlimit: 10;
+        stroke-width: 5px;
+      }
+
+      .st3 {
+        stroke-width: 7px;
+      }
+    </style>
+  </defs>
+  <g>
+    <circle id="svg_4" class="st4" cx="500" cy="500" r="250"/>
+    <circle id="svg_5" class="st1" cx="500" cy="500" r="200"/>
+    <ellipse id="svg_6" class="st0" cx="488.01" cy="493.41" rx="190" ry="179.69" transform="translate(-165.42 727.17) rotate(-65)"/>
+    <ellipse id="svg_7" class="st3" cx="487.77" cy="495.42" rx="159.35" ry="149.84" transform="translate(-167.38 728.11) rotate(-65)"/>
+  </g>
+  <g id="tron">
+    <path class="st2" d="M595.67,491.75c-8.51-11.18-20.05-28.01-29.72-40.2l-.59-.59c-.97-1.1-2.12-2.04-3.39-2.76h0c-26.74-10.03-151.08-56.74-153.64-56.88-.72-.03-1.44.11-2.11.4l-.72.4c-.94.66-1.71,1.53-2.26,2.53l-.25.4-.49,2.78c7.37,42.88,41.24,185.02,47.03,217.98.31,2.22.89,6.45,3.26,7.08l.54.1c1.28.23,8.06-6.08,8.06-6.08,0,0,119.18-101.74,131.35-112.67,1.56-1.33,2.99-2.81,4.27-4.42,1-2.74.49-5.8-1.34-8.07ZM509.6,490.87l48.01-27.35,20.59,26.98-68.6.37ZM493.75,485.73l-61.75-71.85,112.93,42.11-51.18,29.74ZM497.53,502.38l75.94,1.12-102.39,86.82,26.45-87.93ZM421.15,418.05l64.55,77.79-27.6,92.26-36.96-170.04Z"/>
+  </g>
+</svg>
