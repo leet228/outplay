@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
 import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-import { adminRequestWithdrawal, adminRequestUsdtWithdrawal } from '../lib/supabase'
+import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury } from '../lib/supabase'
 import { fetchChainBalances } from '../lib/chainBalances'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
@@ -140,6 +140,13 @@ export default function AdminWallet() {
   const [copiedGroup, setCopiedGroup] = useState(null)
   // Live multi-chain balances { assets, totalUsd, ok } | null.
   const [chainData, setChainData] = useState(null)
+  // TRON treasury energy (Stake 2.0).
+  const [tron, setTron] = useState(null)        // info object | null
+  const [tronLoading, setTronLoading] = useState(true)
+  const [tronBusy, setTronBusy] = useState('')  // '', 'stake', 'unstake', 'withdraw'
+  const [tronMsg, setTronMsg] = useState('')
+  const [stakeAmt, setStakeAmt] = useState('')
+  const [unstakeAmt, setUnstakeAmt] = useState('')
   const [lastRefresh, setLastRefresh] = useState(null)
   const [fiatCur, setFiatCur] = useState(localStorage.getItem('admin_fiat') || 'usd')
 
@@ -176,6 +183,35 @@ export default function AdminWallet() {
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
+
+  // ── TRON treasury energy ──
+  const loadTron = useCallback(async () => {
+    if (!user?.id) return
+    setTronLoading(true)
+    const r = await tronTreasury('info', user.id)
+    if (r && r.ok && r.info) setTron(r.info)
+    else if (r && r.error) setTronMsg(r.error)
+    setTronLoading(false)
+  }, [user])
+
+  useEffect(() => { loadTron() }, [loadTron])
+
+  const doTron = useCallback(async (action, amount) => {
+    if (!user?.id || tronBusy) return
+    haptic('medium')
+    setTronBusy(action)
+    setTronMsg('')
+    const r = await tronTreasury(action, user.id, amount)
+    if (r && r.ok) {
+      if (r.info) setTron(r.info)
+      setTronMsg(`✓ ${action}${r.txid ? ' · ' + r.txid.slice(0, 12) + '…' : ''}`)
+      setStakeAmt(''); setUnstakeAmt('')
+    } else {
+      setTronMsg('✗ ' + (r?.error || 'failed') + (r?.detail ? ' · ' + r.detail : ''))
+    }
+    setTronBusy('')
+    setTimeout(loadTron, 4000)  // refresh once the tx settles
+  }, [user, tronBusy, loadTron])
   useEffect(() => {
     const iv = setInterval(fetchAll, 30_000)
     return () => clearInterval(iv)
@@ -653,6 +689,144 @@ export default function AdminWallet() {
           })}
         </div>
       )}
+
+      {/* ── TRON treasury energy (Stake 2.0) ──
+        * Freeze TRX → Energy so sweeps delegate it and move
+        * USDT-TRC20 for ≈0 TRX. Frozen TRX is collateral, not
+        * spent: unstake (14-day unbond) → withdraw. */}
+      <div className="admin-tron-stake">
+        <div className="admin-wallet-section-title">
+          TRON · Энергия (стейкинг)
+        </div>
+
+        {tronLoading && !tron && (
+          <div className="admin-tron-row"><span>Загрузка…</span></div>
+        )}
+
+        {tron && (() => {
+          const ePerTrx = tron.energyPerTrx || 0
+          const usdtPerSweep = 65000          // ~energy a USDT transfer burns
+          const sweepsCovered = usdtPerSweep > 0
+            ? Math.floor(tron.energyAvail / usdtPerSweep) : 0
+          const stakeNum = Number(String(stakeAmt).replace(',', '.'))
+          const stakePreview = stakeNum > 0 && ePerTrx > 0
+            ? Math.floor(stakeNum * ePerTrx) : 0
+          const unstakeNum = Number(String(unstakeAmt).replace(',', '.'))
+          const fmt = (n, d = 2) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: d })
+          return (
+            <>
+              <div className="admin-tron-addr-row">
+                <code className="admin-wallet-addr">{truncAddr(tron.address)}</code>
+                <button
+                  className="admin-copy-btn"
+                  onClick={() => { haptic('light'); copyText(tron.address) }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+              </div>
+
+              <div className="admin-tron-grid">
+                <div className="admin-tron-stat">
+                  <span className="admin-tron-k">Баланс TRX</span>
+                  <span className="admin-tron-v">{fmt(tron.trx, 4)}</span>
+                </div>
+                <div className="admin-tron-stat">
+                  <span className="admin-tron-k">Застейкано (Energy)</span>
+                  <span className="admin-tron-v">{fmt(tron.stakedEnergyTrx, 2)} TRX</span>
+                </div>
+                <div className="admin-tron-stat">
+                  <span className="admin-tron-k">Энергия всего</span>
+                  <span className="admin-tron-v">{fmt(tron.energyTotal, 0)}</span>
+                </div>
+                <div className="admin-tron-stat">
+                  <span className="admin-tron-k">Энергия свободна</span>
+                  <span className="admin-tron-v">{fmt(tron.energyAvail, 0)}</span>
+                </div>
+                <div className="admin-tron-stat">
+                  <span className="admin-tron-k">Делегировано</span>
+                  <span className="admin-tron-v">{fmt(tron.delegatedOutTrx, 2)} TRX</span>
+                </div>
+                <div className="admin-tron-stat">
+                  <span className="admin-tron-k">Курс</span>
+                  <span className="admin-tron-v">{fmt(ePerTrx, 2)} E/TRX</span>
+                </div>
+              </div>
+
+              <div className="admin-tron-note">
+                Хватает на ~<b>{sweepsCovered}</b> USDT-свипов одновременно
+                (≈{fmt(usdtPerSweep, 0)} энергии на перевод; энергия
+                возвращается после каждого свипа).
+              </div>
+
+              {/* Stake */}
+              <div className="admin-tron-action">
+                <input
+                  className="admin-tron-input"
+                  type="number" inputMode="decimal" placeholder="TRX застейкать"
+                  value={stakeAmt}
+                  onChange={e => setStakeAmt(e.target.value)}
+                />
+                <button
+                  className="admin-tron-btn"
+                  disabled={!!tronBusy || !(stakeNum > 0) || stakeNum > tron.trx}
+                  onClick={() => doTron('stake', stakeNum)}
+                >
+                  {tronBusy === 'stake' ? '…' : 'Стейк'}
+                </button>
+              </div>
+              {stakePreview > 0 && (
+                <div className="admin-tron-preview">≈ {fmt(stakePreview, 0)} энергии</div>
+              )}
+
+              {/* Unstake */}
+              <div className="admin-tron-action">
+                <input
+                  className="admin-tron-input"
+                  type="number" inputMode="decimal" placeholder="TRX анстейк"
+                  value={unstakeAmt}
+                  onChange={e => setUnstakeAmt(e.target.value)}
+                />
+                <button
+                  className="admin-tron-btn admin-tron-btn--warn"
+                  disabled={!!tronBusy || !(unstakeNum > 0) || unstakeNum > tron.stakedEnergyTrx}
+                  onClick={() => doTron('unstake', unstakeNum)}
+                >
+                  {tronBusy === 'unstake' ? '…' : 'Анстейк'}
+                </button>
+              </div>
+              <div className="admin-tron-preview admin-tron-preview--muted">
+                Анстейк замораживается на 14 дней, потом «Забрать».
+              </div>
+
+              {/* Unfreezing queue */}
+              {tron.unfreezing && tron.unfreezing.length > 0 && (
+                <div className="admin-tron-unfreeze">
+                  {tron.unfreezing.map((u, i) => (
+                    <div key={i} className="admin-tron-unfreeze-row">
+                      <span>{fmt(u.trx, 2)} TRX</span>
+                      <span>{u.ready
+                        ? 'готово к выводу'
+                        : 'разблок ' + new Date(u.unlockAt).toLocaleDateString('ru-RU')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {tron.withdrawableTrx > 0 && (
+                <button
+                  className="admin-tron-btn admin-tron-btn--wide"
+                  disabled={!!tronBusy}
+                  onClick={() => doTron('withdraw')}
+                >
+                  {tronBusy === 'withdraw' ? '…' : `Забрать ${fmt(tron.withdrawableTrx, 2)} TRX`}
+                </button>
+              )}
+
+              {tronMsg && <div className="admin-tron-msg">{tronMsg}</div>}
+            </>
+          )
+        })()}
+      </div>
     </div>
   )
 }

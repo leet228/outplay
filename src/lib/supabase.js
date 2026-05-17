@@ -491,6 +491,17 @@ export async function adminRequestUsdtWithdrawal(adminUserId, tonAddress, usdtAm
   return data
 }
 
+// ── Admin: TRON treasury energy (Stake 2.0) ──
+// action: 'info' | 'stake' | 'unstake' | 'withdraw' (amount in TRX
+// for stake/unstake). Returns { ok, info, txid? } | { error }.
+export async function tronTreasury(action, userId, amount) {
+  const { data, error } = await supabase.functions.invoke('tron-treasury', {
+    body: { action, user_id: userId, amount },
+  })
+  if (error) { console.error('tronTreasury error:', error); return { error: error.message } }
+  return data
+}
+
 // ── Deposits ──
 
 export async function createStarsInvoice(userId, amount, currencyAmount, currencyCode) {
