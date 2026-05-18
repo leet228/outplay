@@ -155,11 +155,14 @@ serve(async (_req) => {
     } else {
       const rt = new Date((rbLast.ts || Date.now()) + 3 * 3600_000)
       const rts = `${String(rt.getUTCDate()).padStart(2, '0')}.${String(rt.getUTCMonth() + 1).padStart(2, '0')} ${String(rt.getUTCHours()).padStart(2, '0')}:${String(rt.getUTCMinutes()).padStart(2, '0')}`
+      // Escape free-text — Telegram parse_mode=HTML chokes on a
+      // stray '<' (e.g. an old "< $25" note) and drops the message.
+      const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       const acted = (rbLast.plan || []).filter((p: any) => p.action !== 'hold')
       const rows = (rbLast.plan || []).map((p: any) => {
         const r = (rbLast.results || []).find((x: any) => x.chain === p.chain)
         const tag = p.action === 'sell' ? '🔻' : p.action === 'buy' ? '🔺' : '✓'
-        return `${tag} ${p.nativeSym} ${Math.round((p.curPct || 0) * 100)}%→${Math.round((p.targetPct || 0) * 100)}% · ${p.note}${r ? `\n   ↳ ${r.text}` : ''}`
+        return `${tag} ${esc(p.nativeSym)} ${Math.round((p.curPct || 0) * 100)}%→${Math.round((p.targetPct || 0) * 100)}% · ${esc(p.note)}${r ? `\n   ↳ ${esc(r.text)}` : ''}`
       }).join('\n') || '  —'
       const stray = (rbLast.strayBnbUsdt || 0) > 1
         ? `\n⚠ BNB: лежит ${$(rbLast.strayBnbUsdt)} USDT — выводы только USDC, перекинь вручную`

@@ -243,7 +243,7 @@ async function buildSnapshot() {
       let amt = Math.min(dev / c.price, sellable)
       usd = amt * c.price
       if (sellable <= 0) { note = '⚠ только газовый резерв' }
-      else if (usd < MIN_SWAP_USD) { note = `< $${MIN_SWAP_USD} — пропуск` }
+      else if (usd < MIN_SWAP_USD) { note = `менее $${MIN_SWAP_USD} — пропуск` }
       else {
         action = 'sell'; amount = amt; dir = `${c.chain}_to_${c.stableSym.toLowerCase()}`
         note = `продать ${fmt(amt, 6)} ${c.nativeSym} → ${$(usd)} ${c.stableSym}`
@@ -256,7 +256,7 @@ async function buildSnapshot() {
       const hasGas = c.nativeAmt >= (GAS_RESERVE[c.chain] || 0) * 0.5
       if (spendable <= 0) { note = '⚠ нет стейбла для докупки' }
       else if (!hasGas) { note = `⚠ мало ${c.nativeSym} на газ — докупка пропущена` }
-      else if (usd < MIN_SWAP_USD) { note = `< $${MIN_SWAP_USD} — пропуск` }
+      else if (usd < MIN_SWAP_USD) { note = `менее $${MIN_SWAP_USD} — пропуск` }
       else {
         action = 'buy'; amount = usd; dir = `${c.stableSym.toLowerCase()}_to_${c.chain}`
         const capped = usd < want ? ' (ограничено стейблом)' : ''
@@ -289,11 +289,14 @@ function renderReport(snap: any, mode: 'DRY-RUN' | 'LIVE', results: any[]) {
 Обязательства (юзеры+фонд): <b>${$(snap.L)}</b>
 Свап-казна: <b>${$(snap.swapTotal)}</b> · излишек ${$(snap.surplus)}
 Цель монет = <b>${(snap.f * 100).toFixed(1)}%</b> (стейбл пол ${$(snap.L)} ≥ обязательств)`
+  // Telegram parse_mode=HTML: escape free-text so a stray '<' in a
+  // note/result can't blow up the whole message.
+  const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const lines = snap.plan.map((p: any) => {
     const r = results.find(x => x.chain === p.chain)
-    const tail = r ? `\n   ↳ ${r.text}` : ''
+    const tail = r ? `\n   ↳ ${esc(r.text)}` : ''
     const tag = p.action === 'sell' ? '🔻' : p.action === 'buy' ? '🔺' : '✓'
-    return `${tag} <b>${p.nativeSym}</b> ${(p.curPct * 100).toFixed(0)}%→${(p.targetPct * 100).toFixed(0)}% · ${p.note}${tail}`
+    return `${tag} <b>${esc(p.nativeSym)}</b> ${(p.curPct * 100).toFixed(0)}%→${(p.targetPct * 100).toFixed(0)}% · ${esc(p.note)}${tail}`
   }).join('\n')
   const stray = snap.strayBnbUsdt > 1
     ? `\n\n⚠ На BNB лежит ${$(snap.strayBnbUsdt)} USDT — выводы там только USDC, перекинь вручную.`
