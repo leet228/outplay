@@ -29,6 +29,9 @@ const T_TRON20HEX = '87b763889b9edeee35caff2ffc56170fca1d10a0'
 const T_BTC  = 'bc1qprd6zdx8kv73xup6ed9rypnedxcltm89k8pfzk'
 const T_LTC  = 'ltc1qc65xapvmpzqesmvajncddleww3gxuy7z7jku6g'
 const TRON_USDT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'
+// TON treasury (Highload V3) + USDT-on-TON jetton master.
+const T_TON       = 'UQDsqlvskoZupLe-DFTwffYIqMIXxq6ghYSqh_PjIfOHz_bC'
+const USDT_MASTER = 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs'
 
 const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 const cors = {
@@ -103,6 +106,17 @@ async function px(id: number) {
   const p = parseFloat((await r.json())?.[0]?.price_usd)
   return Number.isFinite(p) && p > 0 ? p : null
 }
+async function tonBal() {
+  const r = await tf(`https://toncenter.com/api/v2/getAddressBalance?address=${T_TON}`)
+  return Number((await r.json())?.result || 0) / 1e9
+}
+async function usdtTonBal() {
+  const u = new URL('https://toncenter.com/api/v3/jetton/wallets')
+  u.searchParams.set('owner_address', T_TON)
+  u.searchParams.set('jetton_address', USDT_MASTER)
+  const r = await tf(u.toString())
+  return Number((await r.json())?.jetton_wallets?.[0]?.balance || 0) / 1e6
+}
 
 async function build(prev: any) {
   // last-known value per asset id from the previous cache.
@@ -112,8 +126,8 @@ async function build(prev: any) {
   const P = (id: string) => pa[id]?.priceUsd ?? null
 
   const [
-    ethN, eU, eC, bnbN, bU, bC, trx, tU, btc, ltc,
-    pEth, pBnb, pTrx, pBtc, pLtc,
+    ethN, eU, eC, bnbN, bU, bC, trx, tU, btc, ltc, ton, tonU,
+    pEth, pBnb, pTrx, pBtc, pLtc, pTon,
   ] = await Promise.all([
     keep(() => evmNative('eth'), A('eth')),
     keep(() => evmTok('eth', '0xdac17f958d2ee523a2206206994597c13d831ec7', 6), A('usdt-erc20')),
@@ -125,11 +139,14 @@ async function build(prev: any) {
     keep(() => tronUsdt(), A('usdt-trc20')),
     keep(() => bb('btcbook.nownodes.io', T_BTC), A('btc')),
     keep(() => bb('ltcbook.nownodes.io', T_LTC), A('ltc')),
+    keep(() => tonBal(), A('ton')),
+    keep(() => usdtTonBal(), A('usdt-ton')),
     keep(() => px(80), P('eth')),
     keep(() => px(2710), P('bnb')),
     keep(() => px(2713), P('trx')),
     keep(() => px(90), P('btc')),
     keep(() => px(1), P('ltc')),
+    keep(() => px(54683), P('ton')),
   ])
   const mk = (id: string, symbol: string, network: string, address: string,
               amount: number, priceUsd: number | null) => ({
@@ -138,6 +155,8 @@ async function build(prev: any) {
     usd: priceUsd != null ? amount * priceUsd : null,
   })
   const assets = [
+    mk('ton', 'TON', 'TON', T_TON, ton, pTon),
+    mk('usdt-ton', 'USDT', 'TON · Jetton', T_TON, tonU, 1),
     mk('trx', 'TRX', 'Tron', T_TRON, trx, pTrx),
     mk('usdt-trc20', 'USDT', 'Tron · TRC20', T_TRON, tU, 1),
     mk('eth', 'ETH', 'Ethereum', T_EVM, ethN, pEth),

@@ -1,35 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getAdminStats, adminSearchUser, getBotStarsBalance, getTreasuryBalances } from '../lib/supabase'
-import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
-
-// ── Blockchain fetchers (same as wallet, but lightweight here) ──
-async function fetchTonBalance(addr) {
-  try {
-    const r = await fetch(`https://toncenter.com/api/v2/getAddressBalance?address=${addr}`)
-    if (!r.ok) return 0
-    const d = await r.json()
-    return d.ok ? Number(BigInt(d.result)) / 1e9 : 0
-  } catch { return 0 }
-}
-
-// Our USDT (Toncoin) jetton-wallet balance. v3 endpoint returns
-// balance as raw micro-USDT (6 decimals); we divide to plain
-// USDT. Returns 0 if the jetton-wallet is not yet deployed or
-// TonCenter doesn't index it for us.
-async function fetchUsdtBalance(ownerAddr) {
-  try {
-    const url = new URL('https://toncenter.com/api/v3/jetton/wallets')
-    url.searchParams.set('owner_address', ownerAddr)
-    url.searchParams.set('jetton_address', USDT_MASTER)
-    url.searchParams.set('limit', '1')
-    const r = await fetch(url)
-    if (!r.ok) return 0
-    const d = await r.json()
-    const raw = d?.jetton_wallets?.[0]?.balance
-    if (!raw) return 0
-    return Number(BigInt(raw)) / 1e6
-  } catch { return 0 }
-}
 
 // USD→RUB exchange rate. Pulled out as its own helper because
 // both TON (priced in USD) and USDT (pegged ~$1) need it.
@@ -115,11 +85,9 @@ export default function AdminDashboard() {
     async function load() {
       setLoading(true)
       try {
-        const [statsData, tonBal, tonPriceRub, usdtBal, usdRubRate, realBotStars, chain] = await Promise.all([
+        const [statsData, tonPriceRub, usdRubRate, realBotStars, chain] = await Promise.all([
           getAdminStats(),
-          fetchTonBalance(TON_ADDRESS),
           fetchTonPriceRub(),
-          fetchUsdtBalance(TON_ADDRESS),
           fetchUsdRubRate(),
           getBotStarsBalance(),
           getTreasuryBalances(),
@@ -128,6 +96,12 @@ export default function AdminDashboard() {
         setStats(statsData)
 
         if (statsData) {
+          // TON + USDT-TON now come from the same cached/retried
+          // server snapshot as the other chains (no client
+          // toncenter flakiness → no zeroed TON wallet).
+          const A = (id) => (chain?.assets || []).find(x => x.id === id)
+          const tonBal  = A('ton')?.amount ?? 0
+          const usdtBal = A('usdt-ton')?.amount ?? 0
           const walletRub      = tonBal  * tonPriceRub
           // USDT is ~$1 peg → its RUB value is just usdtBal × USD-RUB.
           const usdtWalletRub  = usdtBal * usdRubRate
@@ -139,9 +113,14 @@ export default function AdminDashboard() {
           // Multi-chain deposit wallets (BTC/LTC/ETH/BNB/TRX +
           // USDT/USDC tokens). Live on-chain USD total → RUB via
           // the same USD-RUB rate. Failed assets contribute 0.
-          const chainUsd       = chain && Number.isFinite(chain.totalUsd) ? chain.totalUsd : 0
+          // Exclude ton/usdt-ton from the chain aggregate — they're
+          // already counted via walletRub / usdtWalletRub above (the
+          // snapshot now carries them, so summing both = double count).
+          const otherAssets    = ((chain && chain.assets) ? chain.assets : [])
+            .filter(a => a.id !== 'ton' && a.id !== 'usdt-ton')
+          const chainUsd       = otherAssets.reduce((s, a) => s + (a.usd || 0), 0)
           const chainWalletRub = chainUsd * usdRubRate
-          const chainAssets    = (chain && chain.assets) ? chain.assets : []
+          const chainAssets    = otherAssets
 
           // Total Assets includes every on-chain wallet: TON
           // native + USDT jetton + all multi-chain wallets. 1 star

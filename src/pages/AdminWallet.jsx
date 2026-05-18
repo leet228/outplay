@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { haptic } from '../lib/telegram'
-import { TON_ADDRESS, USDT_MASTER } from '../lib/addresses'
+import { TON_ADDRESS } from '../lib/addresses'
 import { adminRequestWithdrawal, adminRequestUsdtWithdrawal, tronTreasury, treasuryWithdraw, adminSweepOverview, dexSwap, getTreasuryBalances, rebalanceStatus, rebalanceSetLive, rebalanceRunDry } from '../lib/supabase'
 import useGameStore from '../store/useGameStore'
 import smallTonSrc  from '../assets/crypto/small_ton.svg'
@@ -52,34 +52,6 @@ function UsdtIcon() {
 }
 
 // ── Blockchain API fetchers ──
-async function fetchTonBalance(addr) {
-  try {
-    const r = await fetch(`https://toncenter.com/api/v2/getAddressBalance?address=${addr}`)
-    if (!r.ok) return 0
-    const d = await r.json()
-    return d.ok ? Number(BigInt(d.result)) / 1e9 : 0
-  } catch { return 0 }
-}
-
-// Our USDT jetton-wallet balance. TonCenter v3 returns the
-// balance as a raw integer in micro-USDT (6 decimals). If the
-// jetton-wallet hasn't been deployed yet (no USDT ever received)
-// the array comes back empty → we return 0.
-async function fetchUsdtBalance(ownerAddr) {
-  try {
-    const url = new URL('https://toncenter.com/api/v3/jetton/wallets')
-    url.searchParams.set('owner_address', ownerAddr)
-    url.searchParams.set('jetton_address', USDT_MASTER)
-    url.searchParams.set('limit', '1')
-    const r = await fetch(url)
-    if (!r.ok) return 0
-    const d = await r.json()
-    const raw = d?.jetton_wallets?.[0]?.balance
-    if (!raw) return 0
-    return Number(BigInt(raw)) / 1e6
-  } catch { return 0 }
-}
-
 let _priceCache = null
 async function fetchPrices() {
   try {
@@ -187,15 +159,17 @@ export default function AdminWallet() {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [tonBal, usdtBal, priceData, chain] = await Promise.all([
-        fetchTonBalance(TON_ADDRESS),
-        fetchUsdtBalance(TON_ADDRESS),
+      const [priceData, chain] = await Promise.all([
         fetchPrices(),
         getTreasuryBalances(),
       ])
       setPrices(priceData)
-      setTonBalance(tonBal)
-      setUsdtBalance(usdtBal)
+      // TON + USDT-TON now come from the same cached/retried
+      // server snapshot as the other chains (no client toncenter
+      // flakiness → no more zeroed TON wallet).
+      const A = (id) => (chain?.assets || []).find(x => x.id === id)
+      setTonBalance(A('ton')?.amount ?? null)
+      setUsdtBalance(A('usdt-ton')?.amount ?? null)
       setChainData(chain)
       setLastRefresh(new Date())
     } catch (err) {
