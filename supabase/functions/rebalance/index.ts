@@ -54,6 +54,10 @@ const TARGET_NATIVE = Number(Deno.env.get('REBALANCE_TARGET') || 0.30)
 const BAND          = Number(Deno.env.get('REBALANCE_BAND')   || 0.05)
 const MIN_SWAP_USD  = Number(Deno.env.get('REBALANCE_MIN_USD') || 25)
 const SLIPPAGE      = Number(Deno.env.get('REBALANCE_SLIPPAGE') || 0.01)
+// BSC has NO BNB/USDT-BEP20 withdrawals — only USDC-BEP20. So BNB
+// is purely a GAS float (keep ~this many BNB for USDC withdrawal/
+// swap gas), and any USDT-BEP20 is junk → swept into BNB.
+const BNB_GAS_FLOAT = Number(Deno.env.get('REBALANCE_BNB_GAS_FLOAT') || 0.05)
 // Native units we never swap away (gas for sweeps/withdrawals/swaps).
 const GAS_RESERVE: Record<string, number> = {
   eth: Number(Deno.env.get('REBALANCE_GAS_ETH') || 0.012),
@@ -225,7 +229,53 @@ async function buildSnapshot() {
     : 0
 
   // Per-chain plan.
-  const plan = chains.map(c => {
+  const plan: any[] = []
+  for (const c of chains) {
+    // ── BSC special case ───────────────────────────────────────
+    // No BNB or USDT-BEP20 withdrawals — only USDC-BEP20. So BNB
+    // is NOT a 30/70 value reserve, it's a GAS float: keep
+    // ~BNB_GAS_FLOAT, sell the excess into USDC, top it back up
+    // from USDC if it runs low (so USDC withdrawals never lack
+    // gas). Separately, sweep any USDT-BEP20 → BNB (it's junk:
+    // there are no USDT-BEP20 withdrawals).
+    if (c.chain === 'bnb') {
+      const floatUsd = BNB_GAS_FLOAT * c.price
+      const devGas   = c.nativeUsd - floatUsd        // >0 excess gas
+      let action: 'sell' | 'buy' | 'hold' = 'hold'
+      let amount = 0, usd = 0, dir = '', note = ''
+      if (c.price <= 0) { note = 'нет цены BNB' }
+      else if (devGas >= MIN_SWAP_USD) {
+        const amt = devGas / c.price
+        action = 'sell'; amount = amt; usd = devGas; dir = 'bnb_to_usdc'
+        note = `излишек газа: продать ${fmt(amt, 6)} BNB → ${$(usd)} USDC`
+      } else if (-devGas >= MIN_SWAP_USD) {
+        const need = Math.min(-devGas, Math.max(0, c.stableUsd * 0.99))
+        if (need >= MIN_SWAP_USD) {
+          action = 'buy'; amount = need; usd = need; dir = 'usdc_to_bnb'
+          note = `мало газа: докупить BNB на ${$(need)} USDC`
+        } else { note = '⚠ мало газа BNB, нет USDC на докупку' }
+      } else { note = `газ-флоат BNB в норме (~${fmt(BNB_GAS_FLOAT, 4)})` }
+      plan.push({
+        chain: 'bnb', nativeSym: 'BNB', stableSym: 'USDC',
+        nativeUsd: c.nativeUsd, stableUsd: c.stableUsd, localTotal: c.localTotal,
+        curPct: c.localTotal > 0 ? c.nativeUsd / c.localTotal : 0,
+        targetPct: c.localTotal > 0 ? floatUsd / c.localTotal : 0,
+        action, dir, amount, usd, note,
+      })
+      // USDT-BEP20 → BNB (no USDT-BEP20 withdrawals exist).
+      if (bUsdt >= MIN_SWAP_USD) {
+        plan.push({
+          chain: 'bnb-usdt', nativeSym: 'USDT→BNB', stableSym: 'USDT',
+          nativeUsd: 0, stableUsd: bUsdt, localTotal: bUsdt,
+          curPct: 0, targetPct: 0,
+          action: 'sell', dir: 'usdt_to_bnb', amount: bUsdt, usd: bUsdt,
+          note: `USDT-BEP20 → BNB (нет выводов USDT): ${$(bUsdt)}`,
+        })
+      }
+      continue
+    }
+
+    // ── Generic 30/70 (ton / trx / eth) ────────────────────────
     const target = f * c.localTotal
     const dev    = c.nativeUsd - target            // >0 too much native
     const devPct = c.localTotal > 0 ? Math.abs(dev) / c.localTotal : 0
@@ -240,7 +290,7 @@ async function buildSnapshot() {
     else if (dev > 0) {
       // SELL native → stable. Keep gas reserve.
       const sellable = Math.max(0, c.nativeAmt - (GAS_RESERVE[c.chain] || 0))
-      let amt = Math.min(dev / c.price, sellable)
+      const amt = Math.min(dev / c.price, sellable)
       usd = amt * c.price
       if (sellable <= 0) { note = '⚠ только газовый резерв' }
       else if (usd < MIN_SWAP_USD) { note = `менее $${MIN_SWAP_USD} — пропуск` }
@@ -263,13 +313,13 @@ async function buildSnapshot() {
         note = `докупить на ${$(usd)} ${c.stableSym} → ${c.nativeSym}${capped}`
       }
     }
-    return {
+    plan.push({
       chain: c.chain, nativeSym: c.nativeSym, stableSym: c.stableSym,
       nativeUsd: c.nativeUsd, stableUsd: c.stableUsd, localTotal: c.localTotal,
       curPct: c.localTotal > 0 ? c.nativeUsd / c.localTotal : 0,
       targetPct: f, action, dir, amount, usd, note,
-    }
-  })
+    })
+  }
 
   return {
     ts: Date.now(),
@@ -299,7 +349,7 @@ function renderReport(snap: any, mode: 'DRY-RUN' | 'LIVE', results: any[]) {
     return `${tag} <b>${esc(p.nativeSym)}</b> ${(p.curPct * 100).toFixed(0)}%→${(p.targetPct * 100).toFixed(0)}% · ${esc(p.note)}${tail}`
   }).join('\n')
   const stray = snap.strayBnbUsdt > 1
-    ? `\n\n⚠ На BNB лежит ${$(snap.strayBnbUsdt)} USDT — выводы там только USDC, перекинь вручную.`
+    ? `\n\nℹ️ USDT-BEP20 на BNB: ${$(snap.strayBnbUsdt)} → свопится в BNB автоматически`
     : ''
   return `${head}\n\n${lines}${stray}`
 }

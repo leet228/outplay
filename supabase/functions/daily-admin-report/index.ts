@@ -165,7 +165,7 @@ serve(async (_req) => {
         return `${tag} ${esc(p.nativeSym)} ${Math.round((p.curPct || 0) * 100)}%→${Math.round((p.targetPct || 0) * 100)}% · ${esc(p.note)}${r ? `\n   ↳ ${esc(r.text)}` : ''}`
       }).join('\n') || '  —'
       const stray = (rbLast.strayBnbUsdt || 0) > 1
-        ? `\n⚠ BNB: лежит ${$(rbLast.strayBnbUsdt)} USDT — выводы только USDC, перекинь вручную`
+        ? `\nℹ️ USDT-BEP20 на BNB: ${$(rbLast.strayBnbUsdt)} → свопится в BNB авто`
         : ''
       rbBlock =
 `прогон ${rts} МСК · <b>${rbLast.mode || (liveOn ? 'LIVE' : 'DRY-RUN')}</b>${liveOn ? '' : ' (свапы выключены)'}
