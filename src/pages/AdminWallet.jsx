@@ -403,7 +403,13 @@ export default function AdminWallet() {
   // USD→selected-fiat factor (USDT is the $1 peg, so its `rub`
   // entry IS the live USD-RUB rate). Reused for every chain asset.
   const usdToFiat    = fiatCur === 'usd' ? 1 : (prices ? prices.usdt.rub : 1)
-  const chainFiatVal = chainData ? chainData.totalUsd * usdToFiat : 0
+  // ton/usdt-ton are shown via the dedicated cards (fiatVal /
+  // usdtFiatVal). The snapshot now also carries them, so exclude
+  // them here or the total double-counts TON.
+  const chainAssetsList = (chainData?.assets || [])
+    .filter(a => a.id !== 'ton' && a.id !== 'usdt-ton')
+  const chainUsdSum  = chainAssetsList.reduce((s, a) => s + (a.usd || 0), 0)
+  const chainFiatVal = chainUsdSum * usdToFiat
   const totalFiatVal = fiatVal + usdtFiatVal + chainFiatVal
   const amountNum    = parseFloat(wdAmount) || 0
   // Fiat preview tracks whichever coin's form is currently open.
@@ -683,7 +689,7 @@ export default function AdminWallet() {
       {chainData && chainData.assets && (
         <div className="admin-wallet-list">
           <div className="admin-wallet-section-title">Кошельки пополнения</div>
-          {chainData.assets.map((a) => {
+          {chainAssetsList.map((a) => {
             const fiat = a.usd != null ? a.usd * usdToFiat : null
             return (
               <div key={a.id} className="admin-wallet-card">
