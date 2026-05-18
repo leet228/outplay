@@ -2,15 +2,16 @@
 // ║  treasury-balances — server-side, cached, NowNodes-backed    ║
 // ╚══════════════════════════════════════════════════════════════╝
 //
-// The admin Wallet/Dashboard used to fetch every chain balance
-// straight from the browser against FREE public APIs (trongrid /
-// blockstream / publicnode / coinlore) on every load + 30s poll →
-// HTTP 429 and totals that jump because failed assets fell back
-// to 0. This moves it server-side over the PAID NowNodes key and
-// caches the whole snapshot for 60s in app_settings, so any
-// number of reloads/polls return one consistent set with zero
-// upstream hammering. Read-only. Returns the SAME shape the old
-// chainBalances.js produced: { assets, totalUsd, ok }.
+// Admin Wallet/Dashboard read every HD-0 treasury balance from
+// here. Server-side over the PAID NowNodes key, cached 60s in
+// app_settings so reloads/polls don't hammer upstream. Read-only.
+// Shape: { assets, totalUsd, ok, ts }.
+//
+// Robustness (why balances no longer drop to 0): every upstream
+// call has a timeout + one retry, and if it still fails the asset
+// keeps its LAST KNOWN value from the previous cache instead of
+// falling to 0 — so a transient NowNodes hiccup can't zero a
+// wallet or poison the 60s cache.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -21,7 +22,6 @@ const NOWNODES_API_KEY     = Deno.env.get('NOWNODES_API_KEY') || ''
 const CACHE_KEY  = 'mc_bal_cache'
 const CACHE_TTL  = 60_000  // ms
 
-// HD-0 treasury (public addresses).
 const T_EVM  = '0x71740514b90aC31d0Ba0fF772107Ab5bA8496Ac2'
 const T_EVM_LC = T_EVM.toLowerCase().slice(2)
 const T_TRON = 'TNLov2u5DuHKiSJpQHziqb8Gcov2GQWZw4'
@@ -37,11 +37,29 @@ const cors = {
 }
 const j = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...cors, 'Content-Type': 'application/json' } })
-const safe = async <T>(p: Promise<T>, d: T): Promise<T> => { try { return await p } catch { return d } }
 const num = (h: string) => { try { return Number(BigInt(h)) } catch { return 0 } }
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+// fetch with an 8s timeout (a hung upstream must not stall the run).
+async function tf(url: string, opts: RequestInit = {}, ms = 8000) {
+  const ac = new AbortController()
+  const t = setTimeout(() => ac.abort(), ms)
+  try { return await fetch(url, { ...opts, signal: ac.signal }) }
+  finally { clearTimeout(t) }
+}
+// run fn, retry once on any failure, then propagate.
+async function retry<T>(fn: () => Promise<T>): Promise<T> {
+  try { return await fn() }
+  catch { await sleep(500); return await fn() }
+}
+// retry + on total failure return the previous-known value (fb)
+// instead of throwing/zeroing.
+async function keep<T>(fn: () => Promise<T>, fb: T): Promise<T> {
+  try { return await retry(fn) } catch { return fb }
+}
 
 async function rpcEvm(net: 'eth' | 'bsc', method: string, params: unknown[]) {
-  const r = await fetch(`https://${net}.nownodes.io`, {
+  const r = await tf(`https://${net}.nownodes.io`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'api-key': NOWNODES_API_KEY },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
@@ -56,14 +74,14 @@ const evmTok = async (n: 'eth' | 'bsc', c: string, dec: number) =>
   num(await rpcEvm(n, 'eth_call', [{ to: c, data: '0x70a08231' + '0'.repeat(24) + T_EVM_LC }, 'latest'])) / 10 ** dec
 
 async function tronTrx() {
-  const r = await fetch('https://trx.nownodes.io/wallet/getaccount', {
+  const r = await tf('https://trx.nownodes.io/wallet/getaccount', {
     method: 'POST', headers: { 'content-type': 'application/json', 'api-key': NOWNODES_API_KEY },
     body: JSON.stringify({ address: T_TRON, visible: true }),
   })
   return Number((await r.json())?.balance || 0) / 1e6
 }
 async function tronUsdt() {
-  const r = await fetch('https://trx.nownodes.io/wallet/triggerconstantcontract', {
+  const r = await tf('https://trx.nownodes.io/wallet/triggerconstantcontract', {
     method: 'POST', headers: { 'content-type': 'application/json', 'api-key': NOWNODES_API_KEY },
     body: JSON.stringify({
       owner_address: T_TRON, contract_address: TRON_USDT,
@@ -75,33 +93,43 @@ async function tronUsdt() {
   return h ? num('0x' + h) / 1e6 : 0
 }
 async function bb(host: string, addr: string) {
-  const r = await fetch(`https://${host}/api/v2/address/${addr}`, {
+  const r = await tf(`https://${host}/api/v2/address/${addr}`, {
     headers: { 'api-key': NOWNODES_API_KEY },
   })
   return Number((await r.json())?.balance || 0) / 1e8
 }
 async function px(id: number) {
-  const r = await fetch(`https://api.coinlore.net/api/ticker/?id=${id}`)
+  const r = await tf(`https://api.coinlore.net/api/ticker/?id=${id}`)
   const p = parseFloat((await r.json())?.[0]?.price_usd)
   return Number.isFinite(p) && p > 0 ? p : null
 }
 
-async function build() {
+async function build(prev: any) {
+  // last-known value per asset id from the previous cache.
+  const pa: Record<string, { amount: number; priceUsd: number | null }> = {}
+  for (const a of (prev?.assets || [])) pa[a.id] = { amount: Number(a.amount) || 0, priceUsd: a.priceUsd ?? null }
+  const A = (id: string) => pa[id]?.amount ?? 0
+  const P = (id: string) => pa[id]?.priceUsd ?? null
+
   const [
     ethN, eU, eC, bnbN, bU, bC, trx, tU, btc, ltc,
     pEth, pBnb, pTrx, pBtc, pLtc,
   ] = await Promise.all([
-    safe(evmNative('eth'), 0),
-    safe(evmTok('eth', '0xdac17f958d2ee523a2206206994597c13d831ec7', 6), 0),
-    safe(evmTok('eth', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', 6), 0),
-    safe(evmNative('bsc'), 0),
-    safe(evmTok('bsc', '0x55d398326f99059ff775485246999027b3197955', 18), 0),
-    safe(evmTok('bsc', '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', 18), 0),
-    safe(tronTrx(), 0), safe(tronUsdt(), 0),
-    safe(bb('btcbook.nownodes.io', T_BTC), 0),
-    safe(bb('ltcbook.nownodes.io', T_LTC), 0),
-    safe(px(80), null), safe(px(2710), null), safe(px(2713), null),
-    safe(px(90), null), safe(px(1), null),
+    keep(() => evmNative('eth'), A('eth')),
+    keep(() => evmTok('eth', '0xdac17f958d2ee523a2206206994597c13d831ec7', 6), A('usdt-erc20')),
+    keep(() => evmTok('eth', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', 6), A('usdc-erc20')),
+    keep(() => evmNative('bsc'), A('bnb')),
+    keep(() => evmTok('bsc', '0x55d398326f99059ff775485246999027b3197955', 18), A('usdt-bep20')),
+    keep(() => evmTok('bsc', '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d', 18), A('usdc-bep20')),
+    keep(() => tronTrx(), A('trx')),
+    keep(() => tronUsdt(), A('usdt-trc20')),
+    keep(() => bb('btcbook.nownodes.io', T_BTC), A('btc')),
+    keep(() => bb('ltcbook.nownodes.io', T_LTC), A('ltc')),
+    keep(() => px(80), P('eth')),
+    keep(() => px(2710), P('bnb')),
+    keep(() => px(2713), P('trx')),
+    keep(() => px(90), P('btc')),
+    keep(() => px(1), P('ltc')),
   ])
   const mk = (id: string, symbol: string, network: string, address: string,
               amount: number, priceUsd: number | null) => ({
@@ -127,22 +155,27 @@ async function build() {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  let cached: any = null
   try {
-    // Serve fresh cache if young enough.
     const { data: row } = await sb.from('app_settings')
       .select('value').eq('key', CACHE_KEY).maybeSingle()
-    const cached = row?.value
+    cached = row?.value
     if (cached && typeof cached === 'object' && cached.ts &&
         Date.now() - cached.ts < CACHE_TTL) {
       return j({ ...cached, cached: true })
     }
-    const fresh = await build()
+    // Build fresh; failed assets fall back to the previous cache.
+    const fresh = await build(cached)
     await sb.from('app_settings').upsert(
       { key: CACHE_KEY, value: fresh, updated_at: new Date().toISOString() },
       { onConflict: 'key' },
     )
     return j({ ...fresh, cached: false })
   } catch (e) {
+    // Total failure → serve the last good snapshot rather than 0s.
+    if (cached && typeof cached === 'object' && cached.assets) {
+      return j({ ...cached, cached: true, stale: true })
+    }
     return j({ error: String(e).slice(0, 200), ok: false }, 500)
   }
 })
