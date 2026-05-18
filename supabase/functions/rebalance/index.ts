@@ -302,10 +302,9 @@ function renderReport(snap: any, mode: 'DRY-RUN' | 'LIVE', results: any[]) {
 }
 
 async function tg(text: string) {
-  await safe(fetch(`${TG}/sendMessage`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ chat_id: ADMIN_TG_ID, text, parse_mode: 'HTML', disable_web_page_preview: true }),
-  }).then(() => true), false)
+  // Proven pg_net + vault path (same as admin_log notifications),
+  // not a Deno env token that may be unset in the function.
+  await safe(sb.rpc('send_admin_telegram', { p_text: text }).then(() => true), false)
 }
 
 async function runRebalance(live: boolean) {

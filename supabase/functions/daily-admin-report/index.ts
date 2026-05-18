@@ -206,16 +206,10 @@ ${byChain}
 ⚖️ <b>Ребаланс</b> (ночной, 03:00)
 ${rbBlock}`
 
-    const r = await fetch(`${TG}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: ADMIN_TG_ID, text,
-        parse_mode: 'HTML', disable_web_page_preview: true,
-      }),
-    })
-    const ok = (await r.json())?.ok === true
-    return new Response(JSON.stringify({ ok, total_usd: Math.round(totalU) }), {
+    // Send via the proven pg_net + vault path (same as admin_log
+    // notifications) — not a Deno env token that may be unset.
+    const { data: sent } = await sb.rpc('send_admin_telegram', { p_text: text })
+    return new Response(JSON.stringify({ ok: sent === true, total_usd: Math.round(totalU) }), {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (e) {
