@@ -50,9 +50,27 @@ const NOWNODES_API_KEY     = Deno.env.get('NOWNODES_API_KEY') || ''
 const TG = `https://api.telegram.org/bot${BOT_TOKEN}`
 
 // Tunables (env-overridable).
-const TARGET_NATIVE = Number(Deno.env.get('REBALANCE_TARGET') || 0.30)
 const BAND          = Number(Deno.env.get('REBALANCE_BAND')   || 0.05)
 const MIN_SWAP_USD  = Number(Deno.env.get('REBALANCE_MIN_USD') || 25)
+// Per-chain LOCAL allocation targets (% of chain USD total).
+// Sum per chain ≈ 1.0. BNB is special-cased (gas-float).
+const TARGETS: Record<string, Record<string, number>> = {
+  ton: { ton: 0.30, 'usdt-ton': 0.70 },
+  trx: { trx: 0.30, 'usdt-trc20': 0.70 },
+  eth: { eth: 0.30, 'usdt-erc20': 0.35, 'usdc-erc20': 0.35 },
+}
+// Asset metadata: display sym + dex-swap dirs relative to chain
+// native. dirSell = native→stable (amount in native units).
+// dirBuy = stable→native (amount in stable USD).
+const ASSET: Record<string, { sym: string; isNative: boolean; dirSell?: string; dirBuy?: string }> = {
+  ton:           { sym: 'TON',  isNative: true },
+  'usdt-ton':    { sym: 'USDT', isNative: false, dirSell: 'ton_to_usdt', dirBuy: 'usdt_to_ton' },
+  trx:           { sym: 'TRX',  isNative: true },
+  'usdt-trc20':  { sym: 'USDT', isNative: false, dirSell: 'trx_to_usdt', dirBuy: 'usdt_to_trx' },
+  eth:           { sym: 'ETH',  isNative: true },
+  'usdt-erc20':  { sym: 'USDT', isNative: false, dirSell: 'eth_to_usdt', dirBuy: 'usdt_to_eth' },
+  'usdc-erc20':  { sym: 'USDC', isNative: false, dirSell: 'eth_to_usdc', dirBuy: 'usdc_to_eth' },
+}
 const SLIPPAGE      = Number(Deno.env.get('REBALANCE_SLIPPAGE') || 0.01)
 // BSC has NO BNB/USDT-BEP20 withdrawals — only USDC-BEP20. So BNB
 // is purely a GAS float (keep ~this many BNB for USDC withdrawal/
@@ -179,17 +197,6 @@ async function callDexSwap(userId: string, dir: string, amount: number) {
   return r.json().catch(() => ({ error: `http_${r.status}` }))
 }
 
-interface ChainState {
-  chain: string                 // ton | trx | eth | bnb
-  nativeSym: string
-  stableSym: string             // USDT | USDC
-  nativeAmt: number             // native units
-  nativeUsd: number
-  stableUsd: number             // managed stable on this chain
-  price: number
-  localTotal: number
-}
-
 function fmt(n: number, d = 2) {
   return n.toLocaleString('en-US', { maximumFractionDigits: d })
 }
@@ -214,118 +221,154 @@ async function buildSnapshot() {
   const prizeRub = Number(statsRes?.guild_prize_pool ?? 0)
   const L = rate > 0 ? (userRub + prizeRub) / rate : 0
 
-  const chains: ChainState[] = [
-    { chain: 'ton', nativeSym: 'TON', stableSym: 'USDT', nativeAmt: ton,  nativeUsd: ton * pTon,  stableUsd: ut,            price: pTon, localTotal: 0 },
-    { chain: 'trx', nativeSym: 'TRX', stableSym: 'USDT', nativeAmt: trx,  nativeUsd: trx * pTrx,  stableUsd: tUsdt,         price: pTrx, localTotal: 0 },
-    { chain: 'eth', nativeSym: 'ETH', stableSym: 'USDT', nativeAmt: ethN, nativeUsd: ethN * pEth, stableUsd: eUsdt + eUsdc, price: pEth, localTotal: 0 },
-    { chain: 'bnb', nativeSym: 'BNB', stableSym: 'USDC', nativeAmt: bnbN, nativeUsd: bnbN * pBnb, stableUsd: bUsdc,         price: pBnb, localTotal: 0 },
-  ]
-  for (const c of chains) c.localTotal = c.nativeUsd + c.stableUsd
-
-  const swapTotal = chains.reduce((s, c) => s + c.localTotal, 0)
-  const surplus   = Math.max(0, swapTotal - L)
-  const f = swapTotal > 0
-    ? Math.max(0, Math.min(TARGET_NATIVE, TARGET_NATIVE * surplus / swapTotal))
-    : 0
-
-  // Per-chain plan.
-  const plan: any[] = []
-  for (const c of chains) {
-    // ── BSC special case ───────────────────────────────────────
-    // No BNB or USDT-BEP20 withdrawals — only USDC-BEP20. So BNB
-    // is NOT a 30/70 value reserve, it's a GAS float: keep
-    // ~BNB_GAS_FLOAT, sell the excess into USDC, top it back up
-    // from USDC if it runs low (so USDC withdrawals never lack
-    // gas). Separately, sweep any USDT-BEP20 → BNB (it's junk:
-    // there are no USDT-BEP20 withdrawals).
-    if (c.chain === 'bnb') {
-      const floatUsd = BNB_GAS_FLOAT * c.price
-      const devGas   = c.nativeUsd - floatUsd        // >0 excess gas
-      let action: 'sell' | 'buy' | 'hold' = 'hold'
-      let amount = 0, usd = 0, dir = '', note = ''
-      if (c.price <= 0) { note = 'нет цены BNB' }
-      else if (devGas >= MIN_SWAP_USD) {
-        const amt = devGas / c.price
-        action = 'sell'; amount = amt; usd = devGas; dir = 'bnb_to_usdc'
-        note = `излишек газа: продать ${fmt(amt, 6)} BNB → ${$(usd)} USDC`
-      } else if (-devGas >= MIN_SWAP_USD) {
-        const need = Math.min(-devGas, Math.max(0, c.stableUsd * 0.99))
-        if (need >= MIN_SWAP_USD) {
-          action = 'buy'; amount = need; usd = need; dir = 'usdc_to_bnb'
-          note = `мало газа: докупить BNB на ${$(need)} USDC`
-        } else { note = '⚠ мало газа BNB, нет USDC на докупку' }
-      } else { note = `газ-флоат BNB в норме (~${fmt(BNB_GAS_FLOAT, 4)})` }
-      plan.push({
-        chain: 'bnb', nativeSym: 'BNB', stableSym: 'USDC',
-        nativeUsd: c.nativeUsd, stableUsd: c.stableUsd, localTotal: c.localTotal,
-        curPct: c.localTotal > 0 ? c.nativeUsd / c.localTotal : 0,
-        targetPct: c.localTotal > 0 ? floatUsd / c.localTotal : 0,
-        action, dir, amount, usd, note,
-      })
-      // USDT-BEP20 → BNB (no USDT-BEP20 withdrawals exist).
-      if (bUsdt >= MIN_SWAP_USD) {
-        plan.push({
-          chain: 'bnb-usdt', nativeSym: 'USDT→BNB', stableSym: 'USDT',
-          nativeUsd: 0, stableUsd: bUsdt, localTotal: bUsdt,
-          curPct: 0, targetPct: 0,
-          action: 'sell', dir: 'usdt_to_bnb', amount: bUsdt, usd: bUsdt,
-          note: `USDT-BEP20 → BNB (нет выводов USDT): ${$(bUsdt)}`,
-        })
-      }
-      continue
-    }
-
-    // ── Generic 30/70 (ton / trx / eth) ────────────────────────
-    const target = f * c.localTotal
-    const dev    = c.nativeUsd - target            // >0 too much native
-    const devPct = c.localTotal > 0 ? Math.abs(dev) / c.localTotal : 0
-    let action: 'sell' | 'buy' | 'hold' = 'hold'
-    let amount = 0          // input units for dex-swap
-    let usd = 0
-    let dir = ''
-    let note = ''
-
-    if (c.localTotal <= 0) { note = 'пусто'; }
-    else if (devPct < BAND) { note = `в норме (±${(BAND * 100)}%)` }
-    else if (dev > 0) {
-      // SELL native → stable. Keep gas reserve.
-      const sellable = Math.max(0, c.nativeAmt - (GAS_RESERVE[c.chain] || 0))
-      const amt = Math.min(dev / c.price, sellable)
-      usd = amt * c.price
-      if (sellable <= 0) { note = '⚠ только газовый резерв' }
-      else if (usd < MIN_SWAP_USD) { note = `менее $${MIN_SWAP_USD} — пропуск` }
-      else {
-        action = 'sell'; amount = amt; dir = `${c.chain}_to_${c.stableSym.toLowerCase()}`
-        note = `продать ${fmt(amt, 6)} ${c.nativeSym} → ${$(usd)} ${c.stableSym}`
-      }
-    } else {
-      // BUY native ← stable. Need stable on this chain + gas to swap.
-      const want = -dev
-      const spendable = Math.max(0, c.stableUsd * 0.99)   // keep tiny buffer
-      usd = Math.min(want, spendable)
-      const hasGas = c.nativeAmt >= (GAS_RESERVE[c.chain] || 0) * 0.5
-      if (spendable <= 0) { note = '⚠ нет стейбла для докупки' }
-      else if (!hasGas) { note = `⚠ мало ${c.nativeSym} на газ — докупка пропущена` }
-      else if (usd < MIN_SWAP_USD) { note = `менее $${MIN_SWAP_USD} — пропуск` }
-      else {
-        action = 'buy'; amount = usd; dir = `${c.stableSym.toLowerCase()}_to_${c.chain}`
-        const capped = usd < want ? ' (ограничено стейблом)' : ''
-        note = `докупить на ${$(usd)} ${c.stableSym} → ${c.nativeSym}${capped}`
-      }
-    }
-    plan.push({
-      chain: c.chain, nativeSym: c.nativeSym, stableSym: c.stableSym,
-      nativeUsd: c.nativeUsd, stableUsd: c.stableUsd, localTotal: c.localTotal,
-      curPct: c.localTotal > 0 ? c.nativeUsd / c.localTotal : 0,
-      targetPct: f, action, dir, amount, usd, note,
-    })
+  // Per-chain slot table (USD share vs the chain's target weights).
+  type Slot = { key: string; sym: string; usd: number; amt: number; price: number; target: number; dev: number; isNative: boolean }
+  const slotsFor = (chain: 'ton' | 'trx' | 'eth'): Slot[] => {
+    const raw: Omit<Slot, 'target' | 'dev'>[] =
+      chain === 'ton' ? [
+        { key: 'ton',         sym: 'TON',  usd: ton * pTon,  amt: ton,   price: pTon, isNative: true  },
+        { key: 'usdt-ton',    sym: 'USDT', usd: ut,           amt: ut,    price: 1,    isNative: false },
+      ] :
+      chain === 'trx' ? [
+        { key: 'trx',         sym: 'TRX',  usd: trx * pTrx,  amt: trx,   price: pTrx, isNative: true  },
+        { key: 'usdt-trc20',  sym: 'USDT', usd: tUsdt,        amt: tUsdt, price: 1,    isNative: false },
+      ] :
+      [
+        { key: 'eth',         sym: 'ETH',  usd: ethN * pEth, amt: ethN,  price: pEth, isNative: true  },
+        { key: 'usdt-erc20',  sym: 'USDT', usd: eUsdt,        amt: eUsdt, price: 1,    isNative: false },
+        { key: 'usdc-erc20',  sym: 'USDC', usd: eUsdc,        amt: eUsdc, price: 1,    isNative: false },
+      ]
+    const total = raw.reduce((s, x) => s + x.usd, 0)
+    const w = TARGETS[chain]
+    return raw.map(r => ({ ...r, target: total * (w[r.key] || 0), dev: r.usd - total * (w[r.key] || 0) }))
   }
+
+  // Compute one swap row per (non-BNB) chain: pair biggest excess
+  // with biggest deficit; if both ends are stables, bridge via the
+  // native pivot (2-tick converge). One swap per chain per run
+  // keeps gas-burn low — exactly what we want at <= MIN_SWAP_USD
+  // tolerance.
+  function planFor(chain: 'ton' | 'trx' | 'eth'): any {
+    const slots = slotsFor(chain)
+    const total = slots.reduce((s, x) => s + x.usd, 0)
+    const native = slots.find(s => s.isNative)!
+    const head = {
+      chain, nativeSym: native.sym, stableSym: '—',
+      nativeUsd: native.usd, stableUsd: total - native.usd, localTotal: total,
+      curPct: total > 0 ? native.usd / total : 0,
+      targetPct: TARGETS[chain][native.key],
+      action: 'hold' as 'hold' | 'sell' | 'buy', dir: '', amount: 0, usd: 0,
+      note: total <= 0 ? 'пусто' : `в норме (∆ < $${MIN_SWAP_USD})`,
+    }
+    if (total <= 0) return head
+
+    const excesses = slots.filter(s => s.dev > 0).sort((a, b) => b.dev - a.dev)
+    const deficits = slots.filter(s => s.dev < 0).sort((a, b) => a.dev - b.dev)
+    const E = excesses[0]; const D = deficits[0]
+    if (!E || !D) return head
+    const swapUsd = Math.min(E.dev, -D.dev)
+    if (swapUsd < MIN_SWAP_USD) return head
+
+    const gasReserve = GAS_RESERVE[chain] || 0
+    const hasGas = native.amt >= gasReserve * 0.5
+
+    // (1) Excess native → most-deficit stable.
+    if (E.isNative) {
+      const sellable = Math.max(0, native.amt - gasReserve)
+      const amt = Math.min(swapUsd / native.price, sellable)
+      const usd = amt * native.price
+      if (sellable <= 0) return { ...head, note: '⚠ только газовый резерв' }
+      if (usd < MIN_SWAP_USD)  return { ...head, note: `менее $${MIN_SWAP_USD} — пропуск` }
+      return {
+        ...head, nativeSym: native.sym, stableSym: D.sym,
+        curPct: total > 0 ? native.usd / total : 0, targetPct: TARGETS[chain][native.key],
+        action: 'sell', dir: ASSET[D.key].dirSell!, amount: amt, usd,
+        note: `продать ${fmt(amt, 6)} ${native.sym} → ${$(usd)} ${D.sym}`,
+      }
+    }
+    // (2) Excess stable → native (native is the most-deficit side).
+    if (D.isNative) {
+      const spend = Math.min(swapUsd, Math.max(0, E.usd * 0.99))
+      if (spend < MIN_SWAP_USD) return { ...head, note: `менее $${MIN_SWAP_USD} — пропуск` }
+      if (!hasGas) return { ...head, note: `⚠ мало ${native.sym} на газ — докупка пропущена` }
+      return {
+        ...head, nativeSym: E.sym, stableSym: native.sym,
+        curPct: total > 0 ? E.usd / total : 0, targetPct: TARGETS[chain][E.key],
+        action: 'buy', dir: ASSET[E.key].dirBuy!, amount: spend, usd: spend,
+        note: `докупить на ${$(spend)} ${E.sym} → ${native.sym}`,
+      }
+    }
+    // (3) Stable ↔ stable: bridge via native this tick (excess
+    // stable → native), next tick will push native → deficit stable.
+    const spend = Math.min(swapUsd, Math.max(0, E.usd * 0.99))
+    if (spend < MIN_SWAP_USD) return { ...head, note: `менее $${MIN_SWAP_USD} — пропуск` }
+    if (!hasGas) return { ...head, note: `⚠ мало ${native.sym} на газ — мост пропущен` }
+    return {
+      ...head, nativeSym: E.sym, stableSym: D.sym,
+      curPct: total > 0 ? E.usd / total : 0, targetPct: TARGETS[chain][E.key],
+      action: 'sell', dir: ASSET[E.key].dirBuy!, amount: spend, usd: spend,
+      note: `${E.sym} → ${native.sym} (мост к ${D.sym}, 2 такта)`,
+    }
+  }
+
+  const bnbUsd   = bnbN * pBnb
+  const bnbLocal = bnbUsd + bUsdc
+  const plan: any[] = [planFor('ton'), planFor('trx'), planFor('eth')]
+
+  // ── BSC: BNB = gas float, USDT-BEP20 → BNB ───────────────────
+  // No BNB/USDT-BEP20 withdrawals (only USDC-BEP20), so BNB is
+  // purely gas: keep ~BNB_GAS_FLOAT, sell excess to USDC, top up
+  // from USDC if low. Any USDT-BEP20 is swept into BNB (no use).
+  {
+    const floatUsd = BNB_GAS_FLOAT * pBnb
+    const devGas   = bnbUsd - floatUsd
+    let action: 'sell' | 'buy' | 'hold' = 'hold'
+    let amount = 0, usd = 0, dir = '', note = ''
+    if (pBnb <= 0) { note = 'нет цены BNB' }
+    else if (devGas >= MIN_SWAP_USD) {
+      const amt = devGas / pBnb
+      action = 'sell'; amount = amt; usd = devGas; dir = 'bnb_to_usdc'
+      note = `излишек газа: продать ${fmt(amt, 6)} BNB → ${$(usd)} USDC`
+    } else if (-devGas >= MIN_SWAP_USD) {
+      const need = Math.min(-devGas, Math.max(0, bUsdc * 0.99))
+      if (need >= MIN_SWAP_USD) {
+        action = 'buy'; amount = need; usd = need; dir = 'usdc_to_bnb'
+        note = `мало газа: докупить BNB на ${$(need)} USDC`
+      } else { note = '⚠ мало газа BNB, нет USDC на докупку' }
+    } else { note = `газ-флоат BNB в норме (~${fmt(BNB_GAS_FLOAT, 4)})` }
+    plan.push({
+      chain: 'bnb', nativeSym: 'BNB', stableSym: 'USDC',
+      nativeUsd: bnbUsd, stableUsd: bUsdc, localTotal: bnbLocal,
+      curPct: bnbLocal > 0 ? bnbUsd / bnbLocal : 0,
+      targetPct: bnbLocal > 0 ? floatUsd / bnbLocal : 0,
+      action, dir, amount, usd, note,
+    })
+    if (bUsdt >= MIN_SWAP_USD) {
+      plan.push({
+        chain: 'bnb-usdt', nativeSym: 'USDT→BNB', stableSym: 'USDT',
+        nativeUsd: 0, stableUsd: bUsdt, localTotal: bUsdt,
+        curPct: 0, targetPct: 0,
+        action: 'sell', dir: 'usdt_to_bnb', amount: bUsdt, usd: bUsdt,
+        note: `USDT-BEP20 → BNB (нет выводов USDT): ${$(bUsdt)}`,
+      })
+    }
+  }
+
+  const swapTotal = (ton * pTon + ut)
+    + (trx * pTrx + tUsdt)
+    + (ethN * pEth + eUsdt + eUsdc)
+    + (bnbUsd + bUsdc)
 
   return {
     ts: Date.now(),
-    L, userRub, prizeRub, rate, swapTotal, surplus, f,
+    L, userRub, prizeRub, rate, swapTotal, surplus: Math.max(0, swapTotal - L),
     strayBnbUsdt: bUsdt,
-    chains: chains.map(c => ({ chain: c.chain, nativeUsd: c.nativeUsd, stableUsd: c.stableUsd })),
+    chains: [
+      { chain: 'ton', nativeUsd: ton * pTon,  stableUsd: ut },
+      { chain: 'trx', nativeUsd: trx * pTrx,  stableUsd: tUsdt },
+      { chain: 'eth', nativeUsd: ethN * pEth, stableUsd: eUsdt + eUsdc },
+      { chain: 'bnb', nativeUsd: bnbUsd,       stableUsd: bUsdc },
+    ],
     plan,
   }
 }
@@ -337,8 +380,8 @@ function renderReport(snap: any, mode: 'DRY-RUN' | 'LIVE', results: any[]) {
 `⚖️ <b>Ребаланс</b> · ${ts}  ·  <b>${mode}</b>
 
 Обязательства (юзеры+фонд): <b>${$(snap.L)}</b>
-Свап-казна: <b>${$(snap.swapTotal)}</b> · излишек ${$(snap.surplus)}
-Цель монет = <b>${(snap.f * 100).toFixed(1)}%</b> (стейбл пол ${$(snap.L)} ≥ обязательств)`
+Свап-казна: <b>${$(snap.swapTotal)}</b>
+Цели по сетям: TON 30/70 · TRX 30/70 · ETH 30/35/35 · BNB газ-флоат`
   // Telegram parse_mode=HTML: escape free-text so a stray '<' in a
   // note/result can't blow up the whole message.
   const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

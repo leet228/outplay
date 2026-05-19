@@ -1122,11 +1122,12 @@ export default function AdminWallet() {
       <div className="admin-tron-stake">
         <div className="admin-wallet-section-title">Ребаланс · 03:00 МСК</div>
         <div className="admin-tron-note">
-          Каждую ночь: стейбл всегда покрывает обязательства (балансы
-          юзеров + призовой фонд) — это пол. Излишек сверху делится
-          <b> 30% монета / 70% стейбл</b> на каждой сети. BTC и LTC не
-          трогаются. На BNB стейбл всегда <b>USDC</b>. Порог ±5%, мелочь
-          до $25 пропускается.
+          Каждую ночь по сетям к фиксированной аллокации:
+          <b> TON 30/70</b> (TON/USDT-TON), <b>TRX 30/70</b> (TRX/USDT-TRC20),
+          <b> ETH 30/35/35</b> (ETH/USDT/USDC), <b>BNB</b> — газ-флоат,
+          излишки в <b>USDC-BEP20</b>, USDT-BEP20 свопится в BNB.
+          BTC и LTC не трогаются. Мелочь до $25 пропускается, чтобы газ
+          не сожрал.
         </div>
 
         <div className="admin-tron-action" style={{ alignItems: 'center', gap: 10 }}>
@@ -1165,8 +1166,10 @@ export default function AdminWallet() {
                   Последний прогон: {when} · <b>{rbLast.mode || '—'}</b>
                 </span>
                 <span className="admin-tron-k" style={{ marginTop: 4 }}>
-                  Обязательства {f$(rbLast.L)} · казна {f$(rbLast.swapTotal)} ·
-                  цель монет {((rbLast.f || 0) * 100).toFixed(1)}%
+                  Обязательства {f$(rbLast.L)} · казна {f$(rbLast.swapTotal)}
+                </span>
+                <span className="admin-tron-k" style={{ marginTop: 2, opacity: 0.7, fontSize: '0.85em' }}>
+                  Цели: TON 30/70 · TRX 30/70 · ETH 30/35/35 · BNB газ-флоат
                 </span>
               </div>
               {(rbLast.plan || []).map(p => {

@@ -169,8 +169,8 @@ serve(async (_req) => {
         : ''
       rbBlock =
 `прогон ${rts} МСК · <b>${rbLast.mode || (liveOn ? 'LIVE' : 'DRY-RUN')}</b>${liveOn ? '' : ' (свапы выключены)'}
-обязательства ${$(rbLast.L || 0)} · казна ${$(rbLast.swapTotal || 0)} · цель монет ${(((rbLast.f) || 0) * 100).toFixed(1)}%
-свапов: ${acted.length} из 4 сетей
+обязательства ${$(rbLast.L || 0)} · казна ${$(rbLast.swapTotal || 0)}
+свапов: ${acted.length}
 ${rows}${stray}`
     }
 
